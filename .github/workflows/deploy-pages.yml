@@ -38,6 +38,23 @@ jobs:
           npm test
           npm run build
 
+      # A work-in-progress UI on the `redesign` branch is published beside production at /prototype/
+      # so both versions can be compared against the same browser inventory. Skipped when the branch is gone.
+      - name: Build redesign prototype
+        run: |
+          if ! git ls-remote --exit-code --heads origin redesign > /dev/null; then
+            echo "No redesign branch; skipping the prototype."
+            exit 0
+          fi
+          git fetch --depth 1 origin redesign
+          git worktree add "$RUNNER_TEMP/prototype" FETCH_HEAD
+          cd "$RUNNER_TEMP/prototype/web"
+          npm ci
+          npm test
+          npm run build
+          mkdir -p "$GITHUB_WORKSPACE/web/dist/prototype"
+          cp -R dist/. "$GITHUB_WORKSPACE/web/dist/prototype/"
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
