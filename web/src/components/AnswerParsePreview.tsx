@@ -5,7 +5,7 @@ import {
   whitespaceParts,
 } from "../study/logic";
 import { analyzeNounInput, choosePreviewAttempt } from "../study/nounSyntax";
-import type { AnswerKeywords } from "./StudyOptions";
+import type { AnswerKeywords } from "../study/setup";
 
 type ParsePiece = {
   label: string;
@@ -149,27 +149,31 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
   };
 }
 
+const statusLabels: Record<AnswerSyntaxStatus, string> = {
+  empty: "Waiting",
+  partial: "In progress",
+  complete: "Ready to check",
+  invalid: "Not recognized",
+};
+
 export function AnswerParsePreview({ card, value, keywords, morphology }: { card: Flashcard; value: string; keywords: AnswerKeywords; morphology: NounMorphology }) {
   const preview = analyzeAnswerSyntax(card, value, keywords, morphology);
-  const heading = preview.status === "invalid"
-    ? "Invalid"
-    : preview.status === "complete" ? "Complete" : "In progress";
+  if (preview.status === "empty") return <div className="parse-preview syntax-empty" aria-live="polite"><p className="parse-hint">Type the Italian. The fields Parola recognizes will appear here.</p></div>;
   return (
-    <div className={`answer-parse-preview parsed-${card.type} syntax-${preview.status}`}>
-      <div className="answer-parse-heading">
-        <span>Parola reads this as</span>
-        <strong>{heading}</strong>
-      </div>
-      {preview.syntaxName && <p className="answer-parse-message"><strong>Syntax:</strong> {preview.syntaxName}</p>}
-      <p className="answer-parse-message">{preview.message}</p>
-      {preview.pieces.length > 0 && <div className="answer-parse-pieces">
-        {preview.pieces.map((piece, index) => <div className="answer-parse-piece" key={`${piece.label}:${index}`}>
-          <span>{piece.label}</span>
+    <div className={`parse-preview syntax-${preview.status}`} aria-live="polite">
+      {preview.pieces.length > 0 && <div className="parse-tokens">
+        {preview.pieces.map((piece, index) => <span className="parse-token answer-parse-piece" key={`${piece.label}:${index}`}>
+          <small>{piece.label}</small>
           <code>{piece.value}</code>
-        </div>)}
+        </span>)}
       </div>}
-      {preview.candidateNames.length > 0 && <p className="answer-parse-message"><strong>Possible declensions:</strong> {preview.candidateNames.join(" · ")}</p>}
-      {preview.missing.length > 0 && <p className="answer-parse-message"><strong>Still needed:</strong> {preview.missing.join(" · ")}</p>}
+      <p className="parse-status">
+        <span className="parse-status-label"><i aria-hidden="true" />{statusLabels[preview.status]}</span>
+        {preview.syntaxName && <span className="parse-syntax">{preview.syntaxName}</span>}
+      </p>
+      {preview.status === "invalid" && <p className="parse-line answer-parse-message">{preview.message}</p>}
+      {preview.missing.length > 0 && <p className="parse-line answer-parse-message"><strong>Still needed:</strong> {preview.missing.join(" · ")}</p>}
+      {preview.candidateNames.length > 0 && <p className="parse-line answer-parse-message"><strong>Possible declensions:</strong> {preview.candidateNames.join(" · ")}</p>}
     </div>
   );
 }

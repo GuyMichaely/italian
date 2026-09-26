@@ -8,33 +8,46 @@ import {
   clearBatchDraft,
   emptyAdjectiveBatchRow,
   emptyAdverbBatchRow,
-  emptyBatchRow,
+  emptyNounBatchRow,
   emptyVerbBatchRow,
   newRowId,
-  normalizeNounRow,
-  nounCard,
-  nounFormsError,
   parseTags,
   readBatchDraft,
   readCardAdderType,
   type AdjectiveBatchRow,
   type AdverbBatchRow,
   type BatchDraft,
-  type BatchRow,
+  type NounBatchRow,
   type VerbBatchRow,
-  updateNounRow,
   verbCard,
   writeBatchDraft,
   writeCardAdderType,
 } from "../cards/editorModel";
+import { nounCardFromDraft, suggestedPlural, type NounDraft } from "../cards/nounDraft";
 import {
   AdjectiveRowCells,
   AdverbRowCells,
-  NounRowCells,
+  NounBatchRowCells,
   SetField,
   TagsField,
   VerbRowCells,
 } from "./CardEditorFields";
+import { Icon } from "./Icons";
+import { Sheet } from "./Sheet";
+
+function updateNounBatchRow<K extends keyof NounDraft>(row: NounBatchRow, field: K, value: NounDraft[K], morphology: NounMorphology): NounBatchRow {
+  const next = { ...row, [field]: value } as NounBatchRow;
+  if (field === "plural") return { ...next, pluralSuggested: false };
+  if (field === "singular" && (row.pluralSuggested || !row.plural.trim())) {
+    const plural = suggestedPlural(String(value), morphology);
+    return { ...next, plural, pluralSuggested: Boolean(plural) };
+  }
+  return next;
+}
+
+function nounRowUsed(row: NounBatchRow) {
+  return Boolean(row.english.trim() || row.singular.trim() || (!row.pluralSuggested && row.plural.trim()));
+}
 
 export function BatchNouns({
   knownSets,
@@ -51,9 +64,9 @@ export function BatchNouns({
   onSave: (cards: Flashcard[]) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [draft, setDraft] = useState<BatchDraft<BatchRow>>(() => {
-    const stored = readBatchDraft("noun", () => Array.from({ length: 3 }, (_, index) => emptyBatchRow(String(index + 1))));
-    return { ...stored, rows: stored.rows.map(normalizeNounRow) };
+  const [draft, setDraft] = useState<BatchDraft<NounBatchRow>>(() => {
+    const stored = readBatchDraft("noun", () => Array.from({ length: 3 }, (_, index) => emptyNounBatchRow(String(index + 1))));
+    return { ...stored, rows: stored.rows.map((row) => ({ ...emptyNounBatchRow(row.id), ...row })) };
   });
   const [localError, setLocalError] = useState("");
   const rows = draft.rows;
@@ -62,13 +75,11 @@ export function BatchNouns({
     writeBatchDraft("noun", draft);
   }, [draft]);
 
-  function updateRow<K extends keyof BatchRow>(id: string, field: K, value: BatchRow[K]) {
+  function updateRow<K extends keyof NounDraft>(id: string, field: K, value: NounDraft[K]) {
     setDraft((currentDraft) => {
-      const updated = currentDraft.rows.map((row) => row.id === id ? updateNounRow(row, field, value) : row);
+      const updated = currentDraft.rows.map((row) => row.id === id ? updateNounBatchRow(row, field, value, morphology) : row);
       const last = updated.at(-1);
-      const nextRows = last && (last.english.trim() || last.singular.trim() || last.plural.trim())
-        ? [...updated, emptyBatchRow(newRowId())]
-        : updated;
+      const nextRows = last && nounRowUsed(last) ? [...updated, emptyNounBatchRow(newRowId())] : updated;
       return { ...currentDraft, rows: nextRows };
     });
   }
@@ -81,58 +92,52 @@ export function BatchNouns({
     event.preventDefault();
     const setName = draft.setName.trim() || null;
     const tags = parseTags(draft.tags);
-    const used = rows.filter((row) => row.english.trim() || row.singular.trim() || row.plural.trim());
+    const used = rows.filter(nounRowUsed);
     if (!used.length) {
       setLocalError("Enter at least one noun.");
       return;
     }
-    if (used.some((row) => !row.english.trim())) {
-      setLocalError("Each used row needs an English prompt.");
-      return;
-    }
-    const formsError = used.map(nounFormsError).find(Boolean);
-    if (formsError) {
-      setLocalError(formsError);
+    let cards: Flashcard[];
+    try {
+      cards = used.map((row, index) => nounCardFromDraft(row, { id: Date.now() + index, setName, tags }, morphology));
+    } catch (caught) {
+      setLocalError(caught instanceof Error ? caught.message : "The noun rows do not match the configured morphology.");
       return;
     }
     setLocalError("");
-    try {
-      await onSave(used.map((row, index) => nounCard({
-        ...row,
-        id: Date.now() + index,
-        english: row.english.trim(),
-        singular: row.singular.trim(),
-        plural: row.plural.trim(),
-        setName,
-        tags,
-      }, morphology)));
-    } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "The noun rows do not match the configured morphology.");
-    }
+    await onSave(cards);
   }
 
   return (
-    <form onSubmit={submit}>
-      <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
-      <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
-      <p className="batch-help">One noun per row. Articles are suggested from gender and spelling, including lo / gli / uno forms, and remain editable. Choose None when a stored form takes no article. Progress saves automatically on this device.</p>
+    <form onSubmit={submit} className="batch-form">
+      <div className="batch-meta-fields">
+        <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
+        <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
+      </div>
+      <p className="batch-help">Type the singular and Parola suggests the plural, the declension rule, and every article. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
       <div className="batch-table-wrap">
-        <table className="batch-table">
-          <thead><tr><th>English</th><th>Gender</th><th>Singular</th><th>Plural</th><th>Def. sg.</th><th>Def. pl.</th><th>Indef.</th><th><span className="sr-only">Actions</span></th></tr></thead>
+        <table className="batch-table noun-batch-table">
+          <thead><tr><th>English</th><th>Singular</th><th>Plural</th><th>Gender</th><th>Articles</th><th>Rule</th><th>Forms</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {rows.map((row, index) => <tr key={row.id}>
-              <NounRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
+              <NounBatchRowCells row={row} index={index} morphology={morphology} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
             </tr>)}
           </tbody>
         </table>
       </div>
-      {(localError || error) && <p className="form-error" role="alert">{localError || error}</p>}
-      <footer className="modal-actions">
-        <button type="button" className="text-button" onClick={onCancel} disabled={saving}>Cancel</button>
-        <button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Add batch"}</button>
-      </footer>
+      <BatchFooter error={localError || error} saving={saving} label="Add nouns" onCancel={onCancel} />
     </form>
   );
+}
+
+function BatchFooter({ error, saving, label, onCancel }: { error: string; saving: boolean; label: string; onCancel: () => void }) {
+  return <>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <footer className="sheet-actions">
+      <button type="button" className="text-button" onClick={onCancel} disabled={saving}>Cancel</button>
+      <button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : label}</button>
+    </footer>
+  </>;
 }
 
 export function BatchVerbs({
@@ -201,9 +206,11 @@ export function BatchVerbs({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="batch-form">
+      <div className="batch-meta-fields">
       <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
       <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
+      </div>
       <p className="batch-help">One verb per row. A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table verb-batch-table">
@@ -215,11 +222,7 @@ export function BatchVerbs({
           </tbody>
         </table>
       </div>
-      {(localError || error) && <p className="form-error" role="alert">{localError || error}</p>}
-      <footer className="modal-actions">
-        <button type="button" className="text-button" onClick={onCancel} disabled={saving}>Cancel</button>
-        <button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Add verbs"}</button>
-      </footer>
+      <BatchFooter error={localError || error} saving={saving} label="Add verbs" onCancel={onCancel} />
     </form>
   );
 }
@@ -288,9 +291,11 @@ export function BatchAdjectives({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="batch-form">
+      <div className="batch-meta-fields">
       <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
       <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
+      </div>
       <p className="batch-help">One adjective per row. A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table adjective-batch-table">
@@ -302,11 +307,7 @@ export function BatchAdjectives({
           </tbody>
         </table>
       </div>
-      {(localError || error) && <p className="form-error" role="alert">{localError || error}</p>}
-      <footer className="modal-actions">
-        <button type="button" className="text-button" onClick={onCancel} disabled={saving}>Cancel</button>
-        <button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Add adjectives"}</button>
-      </footer>
+      <BatchFooter error={localError || error} saving={saving} label="Add adjectives" onCancel={onCancel} />
     </form>
   );
 }
@@ -341,19 +342,20 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
     await onSave(used.map((row, index) => adverbCard({ id: Date.now() + index, english: row.english.trim(), form: row.form.trim(), setName, tags })));
   }
 
-  return <form onSubmit={submit}>
+  return <form onSubmit={submit} className="batch-form">
+    <div className="batch-meta-fields">
     <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
     <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
+    </div>
     <p className="batch-help">One invariant adverb per row. A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
     <div className="batch-table-wrap"><table className="batch-table adverb-batch-table"><thead><tr><th>English</th><th>Italian adverb</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
       {rows.map((row, index) => <tr key={row.id}><AdverbRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} /></tr>)}
     </tbody></table></div>
-    {(localError || error) && <p className="form-error" role="alert">{localError || error}</p>}
-    <footer className="modal-actions"><button type="button" className="text-button" onClick={onCancel} disabled={saving}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Add adverbs"}</button></footer>
+    <BatchFooter error={localError || error} saving={saving} label="Add adverbs" onCancel={onCancel} />
   </form>;
 }
 
-export function AddCardModal({
+export function AddWordsSheet({
   knownSets,
   morphology,
   onClose,
@@ -379,31 +381,23 @@ export function AddCardModal({
       await onBatch(cards);
       if (cards[0]) clearBatchDraft(cards[0].type);
       onClose();
-    } catch {
+    } catch (caught) {
       setSaving(false);
-      setError("The batch could not be saved. Try again.");
+      setError(caught instanceof Error ? caught.message : "The batch could not be saved. Try again.");
     }
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <section className="modal batch-modal" role="dialog" aria-modal="true" aria-labelledby="add-card-title" onMouseDown={(event) => event.stopPropagation()}>
-        <header className="modal-header">
-          <h2 id="add-card-title">Add cards</h2>
-          <button className="icon-button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
-        <div className="mode-tabs" aria-label="Card type">
-          {cardTypes.map((item) => (
-            <button key={item} className={type === item ? "active" : ""} onClick={() => { setType(item); setError(""); }}>{typeLabels[item]}s</button>
-          ))}
-        </div>
-
-        {type === "noun" && <BatchNouns knownSets={knownSets} morphology={morphology} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
-        {type === "verb" && <BatchVerbs knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
-        {type === "adjective" && <BatchAdjectives knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
-        {type === "adverb" && <BatchAdverbs knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
-      </section>
-    </div>
+    <Sheet title="Add words" size="wide" onClose={onClose} closeDisabled={saving} icon={<Icon name="plus" />}>
+      <div className="segmented type-segmented" role="tablist" aria-label="Word type">
+        {cardTypes.map((item) => (
+          <button type="button" role="tab" aria-selected={type === item} key={item} className={`${item} ${type === item ? "active" : ""}`} onClick={() => { setType(item); setError(""); }}>{typeLabels[item]}s</button>
+        ))}
+      </div>
+      {type === "noun" && <BatchNouns knownSets={knownSets} morphology={morphology} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
+      {type === "verb" && <BatchVerbs knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
+      {type === "adjective" && <BatchAdjectives knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
+      {type === "adverb" && <BatchAdverbs knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
+    </Sheet>
   );
 }

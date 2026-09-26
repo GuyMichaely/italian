@@ -48,15 +48,27 @@ function newSyntax(inferenceSet: string, existing: NounSyntaxRule[]): NounSyntax
   };
 }
 
-function syntaxDescription(syntax: NounSyntaxRule) {
-  const markers = syntax.markers.map((marker) => marker.kind === "gender"
-    ? marker.required ? "<gender>" : "[gender]"
-    : marker.required ? `<${marker.value}-only>` : `[${marker.value}-only]`);
-  const fields = syntax.fields.map((field) => field.kind === "noun"
-    ? `<${field.number} noun>`
-    : `<${field.definiteness} ${field.number} article>`);
-  return [...markers, ...fields].join(" ");
+function syntaxTokens(syntax: NounSyntaxRule) {
+  const markers = syntax.markers.map((marker) => ({
+    kind: "marker",
+    optional: !marker.required,
+    label: marker.kind === "gender" ? "gender" : `${marker.value}-only`,
+  }));
+  const fields = syntax.fields.map((field) => ({
+    kind: field.kind,
+    optional: false,
+    label: field.kind === "noun" ? `${field.number} noun` : `${field.definiteness === "definite" ? "def." : "indef."} ${field.number === "singular" ? "sg." : "pl."} article`,
+  }));
+  return [...markers, ...fields];
 }
+
+function SyntaxPipeline({ syntax }: { syntax: NounSyntaxRule }) {
+  return <div className="syntax-pipeline" aria-label="Accepted input shape">
+    {syntaxTokens(syntax).map((token, index) => <span key={index} className={`syntax-token ${token.kind}${token.optional ? " optional" : ""}`}>{token.label}{token.optional ? "?" : ""}</span>)}
+  </div>;
+}
+
+type MorphologyTab = "declensions" | "inference" | "syntax";
 
 function syntaxFieldValue(field: NounSyntaxField) {
   if (field.kind === "noun") return `noun:${field.number}`;
@@ -100,6 +112,7 @@ export function NounMorphologyPanel({
   const [sourceChanged, setSourceChanged] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<MorphologyTab>("declensions");
   const appliedSourceRef = useRef(nounSourceFingerprint(cards, morphology));
 
   useEffect(() => {
@@ -369,21 +382,24 @@ export function NounMorphologyPanel({
     }
   }
 
-  return <section className="noun-patterns-panel" aria-labelledby="noun-morphology-heading">
-    <header className="noun-patterns-header">
-      <div>
-        <h2 id="noun-morphology-heading">Noun morphology & syntax</h2>
-        <p>Define reusable declension rules, decide which rules each shorthand may infer, and configure the accepted noun-answer syntaxes. Names are the references, so renaming a rule or inference set updates its references with it.</p>
-      </div>
-    </header>
+  const tabs: { value: MorphologyTab; label: string; count: number }[] = [
+    { value: "declensions", label: "Declensions", count: draft.declensionRules.length },
+    { value: "inference", label: "Inference sets", count: draft.inferenceSets.length },
+    { value: "syntax", label: "Answer syntax", count: draft.syntaxRules.length },
+  ];
+
+  return <section className="noun-patterns-panel" aria-label="Noun morphology">
+    <div className="segmented tab-segmented" role="tablist" aria-label="Grammar section">
+      {tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.value} key={item.value} className={tab === item.value ? "active" : ""} onClick={() => setTab(item.value)}>{item.label} <span className="tab-count">{item.count}</span></button>)}
+    </div>
     <div className="noun-patterns-body">
       {sourceChanged && <div className="sync-warning" role="alert">
         <p>The noun inventory changed while this morphology draft had unsaved edits. The draft was preserved, but it cannot be saved over the newer inventory.</p>
         <button type="button" className="neutral-button" onClick={reloadCurrentSource}>Discard draft and reload current inventory</button>
       </div>}
 
-      <h3>Declension rules</h3>
-      <p>A rule describes how a stored base produces singular and/or plural forms. Which form entries exist also defines whether the rule is singular-only, plural-only, or supports both numbers.</p>
+      {tab === "declensions" && <>
+      <p className="section-intro">A rule turns a stored base into singular and/or plural forms. Leaving a form unsupported makes the rule singular-only or plural-only. Renaming a rule updates every noun and inference set that uses it.</p>
       <div className="noun-patterns-table-wrap">
         <table className="noun-patterns-table declension-rules-table">
           <thead><tr><th>Name</th><th>Singular form</th><th>Plural form</th><th /></tr></thead>
@@ -396,9 +412,10 @@ export function NounMorphologyPanel({
         </table>
       </div>
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, declensionRules: [...current.declensionRules, newRule(current.declensionRules)] }))}>Add rule</button></div>
+      </>}
 
-      <h3>Inference sets</h3>
-      <p>Inference sets are learning-policy groups. A syntax can infer only the declension rules in its selected set.</p>
+      {tab === "inference" && <>
+      <p className="section-intro">Inference sets decide which declensions a shorthand answer may assume. Leave a rule out of <em>Learned shorthand</em> until you know it, and Parola will insist on the full form for those nouns.</p>
       {draft.inferenceSets.map((set, setIndex) => <div className="morphology-inference-set" key={`set:${setIndex}`}>
         <div className="noun-pattern-actions">
           <input value={set.name} onChange={(event) => renameInferenceSet(setIndex, event.target.value)} aria-label="Inference set name" />
@@ -410,9 +427,10 @@ export function NounMorphologyPanel({
         </label>)}</div>
       </div>)}
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, inferenceSets: [...current.inferenceSets, newInferenceSet(current.inferenceSets)] }))}>Add inference set</button></div>
+      </>}
 
-      <h3>Syntax rules</h3>
-      <p>Syntax rules describe the learner's input structure. Article fields assert the corresponding article capability; a syntax with no article fields asserts an articleless noun. Tantum markers constrain the inferred declension to singular-only or plural-only.</p>
+      {tab === "syntax" && <>
+      <p className="section-intro">Each syntax is one accepted shape for a typed noun answer. Article fields require the noun to take that article; a syntax without articles is for articleless nouns and needs explicit gender and singular/plural-only markers.</p>
       {draft.syntaxRules.map((syntax, syntaxIndex) => {
         const genderMarker = syntax.markers.find((marker) => marker.kind === "gender");
         const tantumMarker = syntax.markers.find((marker) => marker.kind === "tantum");
@@ -420,7 +438,7 @@ export function NounMorphologyPanel({
         return <div className="morphology-inference-set" key={`syntax:${syntaxIndex}`}>
           <div className="noun-pattern-actions">
             <input value={syntax.name} onChange={(event) => renameSyntax(syntaxIndex, event.target.value)} aria-label="Syntax name" />
-            <code>{syntaxDescription(syntax)}</code>
+            <SyntaxPipeline syntax={syntax} />
             <button type="button" className="row-remove" onClick={() => removeSyntax(syntaxIndex)} aria-label={`Remove syntax ${syntax.name}`}>×</button>
           </div>
           <div className="noun-patterns-table-wrap">
@@ -457,10 +475,12 @@ export function NounMorphologyPanel({
         </div>;
       })}
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={addSyntax}>Add syntax rule</button></div>
-
-      {message && <p className="inventory-transfer-message" role="status">{message}</p>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="noun-pattern-actions morphology-save-actions"><button type="button" className="primary-button" onClick={() => void save()} disabled={saving || sourceChanged}>{saving ? "Saving…" : "Save morphology"}</button></div>
+      </>}
     </div>
+    {(dirty || message || error) && <div className="grid-save-bar" role="region" aria-label="Grammar changes">
+      {error ? <p className="form-error" role="alert">{error}</p> : message ? <p className="success-message" role="status">{message}</p> : <p>Unsaved grammar changes</p>}
+      {dirty && <button type="button" className="text-button" onClick={reloadCurrentSource} disabled={saving}>Discard</button>}
+      {dirty && <button type="button" className="primary-button" onClick={() => void save()} disabled={saving || sourceChanged}>{saving ? "Saving…" : "Save grammar"}</button>}
+    </div>}
   </section>;
 }

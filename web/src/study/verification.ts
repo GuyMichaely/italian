@@ -1,6 +1,6 @@
 import type { Flashcard } from "../cards/types";
 import { resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
-import type { AnswerKeywords } from "../components/StudyOptions";
+import type { AnswerKeywords } from "./setup";
 import { evaluateNounAnswer } from "./nounSyntax";
 
 export type VerificationField = {

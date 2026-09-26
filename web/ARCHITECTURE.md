@@ -20,41 +20,41 @@ The main source boundaries are:
 
 ```text
 src/
-├── App.tsx                         application, inventory, study, external-import orchestration
+├── App.tsx                         application state, inventory mutations, study session, external import
+├── app/useHashRoute.ts             hash routes: #/study, #/words, #/grammar, #/settings
 ├── cardTypes.ts                   shared card-type labels and ordering
 ├── extensionImport.ts             external import envelope and canonical-card validation
 ├── cards/
 │   ├── types.ts                   discriminated Flashcard union and typed detail schemas
-│   ├── editorModel.ts             card editor rows, validation, conversion, drafts
+│   ├── editorModel.ts             batch-entry rows, drafts, and card construction
+│   ├── nounDraft.ts               the one noun-entry model: surface forms → rule, base, articles
 │   └── nounMorphology.ts          noun rules, syntax rules, inference sets, generation
-├── storage/
-│   ├── types.ts                   inventory storage contract
-│   ├── browser.ts                 local snapshot persistence
-│   ├── remote.ts                  HTTP snapshot client
-│   ├── sync.ts                    local/remote last-write-wins synchronization
-│   ├── cardCodec.ts               canonical card normalization/validation
-│   ├── inventoryState.ts          cross-card/morphology inventory invariants
-│   ├── inventoryTransfer.ts       inventory JSON import/export
-│   ├── settings.ts                sync settings
-│   └── index.ts                   storage factory and public exports
+├── storage/                       inventory persistence, sync, import/export (unchanged by the UI)
 ├── study/
+│   ├── setup.ts                   study setup, scope filtering, answer keywords, persistence
 │   ├── order.ts                   study-item ordering/shuffling
 │   ├── nounSyntax.ts              candidate-based noun syntax evaluation
 │   ├── verification.ts            answer verification for all card types
 │   └── logic.ts                   study-module public exports
+├── views/
+│   ├── StudyView.tsx               setup panel, flip/typed cards, progress, session summary
+│   ├── WordsView.tsx               filterable word list, bulk actions, grid-editing mode
+│   ├── GrammarView.tsx             noun morphology page
+│   └── SettingsView.tsx            sync, backup/restore, answer keywords
 └── components/
-    ├── AddCardModal.tsx            batch card creation
+    ├── AppShell.tsx                top navigation (desktop) and bottom tab bar (phone)
+    ├── Sheet.tsx                   modal sheet / side drawer / phone bottom sheet
+    ├── AddWordsSheet.tsx           batch word creation
+    ├── WordDrawer.tsx              single-word editing
+    ├── InventoryCardsEditor.tsx    spreadsheet-style grid editor
+    ├── CardEditorFields.tsx        shared editor fields and batch row cells
+    ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview
-    ├── CardAnswer.tsx              prompt/answer/verification presentation
-    ├── CardEditorFields.tsx        reusable editor table fields
-    ├── CardEditors.tsx             editor-component public exports
-    ├── EditCardModal.tsx           single-card editing
-    ├── InventoryCardsEditor.tsx    editable inventory table and noun definitions
-    ├── NounMorphologyPanel.tsx     rules, inference sets, and syntax editing
+    ├── NounMorphologyPanel.tsx     declensions, inference sets, and syntax editing
+    ├── StorageSettingsPanel.tsx    sync and inventory-transfer settings
+    ├── AnswerKeywordSettings.tsx   noun marker keyword settings
     ├── SaveIndicator.tsx           persistence status UI
-    ├── StorageSettingsModal.tsx    sync and inventory-transfer UI
-    ├── StudyOptions.tsx            study options and noun answer-keyword settings
-    └── StudyScope.tsx              study-scope selection UI
+    └── Icons.tsx                   inline SVG icon set
 ```
 
 `Flashcard` is a discriminated union keyed by `type`, so `card.type === "noun"` narrows `card.details` to the noun detail schema at compile time. External JSON remains untrusted until `cardCodec` validates and normalizes it.
@@ -123,7 +123,7 @@ Inventory JSON export/import contains `cards` and `nounMorphology` without trans
 
 Changes to non-noun cards do not invalidate the morphology draft.
 
-Noun-to-declension assignment is not duplicated in this panel. It lives in the Inventory noun-definition grid together with each noun's base, gender, article profile, and derived forms.
+Noun-to-declension assignment is not duplicated in this panel. Nouns are entered as surface forms (singular, plural, gender, article availability) through `cards/nounDraft.ts`, which infers or validates the declension rule and base; the Words grid mode still exposes rule and base directly.
 
 ## External card import contract
 

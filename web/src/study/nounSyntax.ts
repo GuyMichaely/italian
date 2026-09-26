@@ -15,7 +15,7 @@ import {
   type NounSyntaxField,
   type NounSyntaxRule,
 } from "../cards/nounMorphology";
-import type { AnswerKeywords } from "../components/StudyOptions";
+import type { AnswerKeywords } from "./setup";
 
 export type NounSyntaxAttemptStatus = "not-applicable" | "partial" | "complete";
 

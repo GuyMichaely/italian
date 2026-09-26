@@ -19,18 +19,10 @@ import {
   type NounMorphology,
 } from "./cards/nounMorphology";
 import { cardTypes, typeLabels } from "./cardTypes";
-import { SaveIndicator, type SaveState } from "./components/SaveIndicator";
-import { CardAnswer, EnglishAnswer, ItalianPrompt, ItalianVerificationForm, NounAnswerDiagnostic } from "./components/CardAnswer";
-import {
-  AddCardModal,
-  EditCardModal,
-  InventoryCardsEditor,
-  localDateStamp,
-} from "./components/CardEditors";
-import { NounMorphologyPanel } from "./components/NounMorphologyPanel";
-import { StorageSettingsModal } from "./components/StorageSettingsModal";
-import { StudyOptions, readAnswerKeywords, writeAnswerKeywords, type AnswerKeywords, type PromptLanguage, type PromptMode } from "./components/StudyOptions";
-import { StudyScope, type ScopeMode, type StudyScopeOption } from "./components/StudyScope";
+import { useHashRoute } from "./app/useHashRoute";
+import { AppShell } from "./components/AppShell";
+import type { SaveState } from "./components/SaveIndicator";
+import { AddWordsSheet, WordDrawer, localDateStamp } from "./components/CardEditors";
 import {
   extensionCandidatesToCards,
   extensionImportResultType,
@@ -43,6 +35,21 @@ import {
   withEnglishPromptFirst,
   type StudyItem,
 } from "./study/logic";
+import {
+  cardScopeKeys,
+  cardsInScope,
+  readAnswerKeywords,
+  readStudySetup,
+  writeAnswerKeywords,
+  writeStudySetup,
+  type AnswerKeywords,
+  type PromptLanguage,
+  type StudySetup,
+} from "./study/setup";
+import { StudyView, type StudyScopeOption } from "./views/StudyView";
+import { WordsView, type WordsTypeFilter } from "./views/WordsView";
+import { GrammarView } from "./views/GrammarView";
+import { SettingsView } from "./views/SettingsView";
 
 function duplicateCardKey(card: Flashcard) {
   const italianIdentity = card.type === "noun"
@@ -57,35 +64,43 @@ function cardItalianText(card: Flashcard, morphology: NounMorphology) {
   return forms.singular || forms.plural;
 }
 
+function cardSearchText(card: Flashcard, morphology: NounMorphology) {
+  let italian = "";
+  try {
+    italian = cardItalianText(card, morphology);
+  } catch {
+    // A noun whose rule is broken is still searchable by its other fields.
+  }
+  const base = card.type === "noun" ? card.details.base : "";
+  return `${card.english} ${italian} ${base} ${card.setName ?? ""} ${card.tags.join(" ")}`.toLowerCase();
+}
+
 export default function Home() {
-  const [view, setView] = useState<"study" | "library">("study");
+  const [route, navigate] = useHashRoute();
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [nounMorphology, setNounMorphology] = useState<NounMorphology>(() => cloneNounMorphology(defaultNounMorphology));
   const [loadingCards, setLoadingCards] = useState(true);
   const [storageEndpoint, setStorageEndpoint] = useState(readStorageEndpoint);
   const [persistLocal, setPersistLocal] = useState(readSyncPersistLocal);
   const [syncLoadPolicy, setSyncLoadPolicy] = useState<SyncLoadPolicy>(readSyncLoadPolicy);
-  const [storageSettingsOpen, setStorageSettingsOpen] = useState(false);
   const storage = useMemo<CardStorage>(() => createCardStorage(storageEndpoint, {
     persistLocal,
     loadPolicy: syncLoadPolicy,
   }), [persistLocal, storageEndpoint, syncLoadPolicy]);
   const [adding, setAdding] = useState(false);
   const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
+  const [setup, setSetup] = useState<StudySetup>(readStudySetup);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [current, setCurrent] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [verificationResult, setVerificationResult] = useState<"correct" | "wrong" | null>(null);
   const [submittedAnswer, setSubmittedAnswer] = useState("");
-  const [scopeMode, setScopeMode] = useState<ScopeMode>("all");
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [promptMode, setPromptMode] = useState<PromptMode>("english");
-  const [typeToVerify, setTypeToVerify] = useState(false);
   const [answerKeywords, setAnswerKeywords] = useState<AnswerKeywords>(readAnswerKeywords);
-  const [oneDirectionPerWord, setOneDirectionPerWord] = useState(false);
-  const [englishFirstWhenBoth, setEnglishFirstWhenBoth] = useState(false);
   const [directionSeed, setDirectionSeed] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now() >>> 0);
   const [selectedInventoryTags, setSelectedInventoryTags] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<WordsTypeFilter>("all");
+  const [gridMode, setGridMode] = useState(false);
   const [query, setQuery] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -97,6 +112,7 @@ export default function Home() {
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
   const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
 
+  const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
   const tags = useMemo(() => Array.from(new Set(cards.flatMap((card) => card.tags))).sort((a, b) => a.localeCompare(b)), [cards]);
   const suggestedMistakeTagName = useMemo(() => {
@@ -105,22 +121,11 @@ export default function Home() {
   }, [tags]);
   const effectiveMistakeTagName = mistakeTagName || suggestedMistakeTagName;
   const studyScopeOptions = useMemo<StudyScopeOption[]>(() => [
-    ...cardTypes.map((type) => ({ key: `type:${type}`, label: typeLabels[type], kind: "type" as const })),
+    ...cardTypes.map((type) => ({ key: `type:${type}`, label: `${typeLabels[type]}s`, kind: "type" as const })),
     ...setNames.map((name) => ({ key: `set:${name}`, label: name, kind: "set" as const })),
     ...tags.map((tag) => ({ key: `tag:${tag}`, label: tag, kind: "tag" as const })),
   ], [setNames, tags]);
-  const inventoryTagOptions = useMemo(() => [
-    ...cardTypes.map((type) => ({ key: `type:${type}`, label: typeLabels[type], kind: "type" })),
-    ...setNames.map((name) => ({ key: `set:${name}`, label: name, kind: "set" })),
-    ...tags.map((tag) => ({ key: `tag:${tag}`, label: tag, kind: "custom" })),
-  ], [setNames, tags]);
-  const scopedCards = useMemo(() => cards.filter((card) => {
-    if (scopeMode === "all") return true;
-    const belongsToSelectedScope = selectedScopes.includes(`type:${card.type}`)
-      || Boolean(card.setName && selectedScopes.includes(`set:${card.setName}`))
-      || card.tags.some((tag) => selectedScopes.includes(`tag:${tag}`));
-    return scopeMode === "only" ? belongsToSelectedScope : !belongsToSelectedScope;
-  }), [cards, scopeMode, selectedScopes]);
+  const scopedCards = useMemo(() => cardsInScope(cards, setup), [cards, setup]);
   const allStudyItems = useMemo(() => scopedCards.flatMap((card): StudyItem[] => {
     if (promptMode === "english" || promptMode === "italian") {
       return [{ key: `${card.id}:${promptMode}`, card, promptLanguage: promptMode }];
@@ -143,18 +148,18 @@ export default function Home() {
       : randomized;
   }, [allStudyItems, englishFirstWhenBoth, mistakeOnlyKeys, oneDirectionPerWord, promptMode, shuffleSeed]);
   const studyItem = !sessionComplete && studyItems.length && current < studyItems.length ? studyItems[current] : null;
-  const card = studyItem?.card ?? null;
   const typingItalian = Boolean(typeToVerify && studyItem?.promptLanguage === "english");
-  const tagMatchedCards = useMemo(() => cards.filter((item) => {
-    const cardTagKeys = [`type:${item.type}`, ...(item.setName ? [`set:${item.setName}`] : []), ...item.tags.map((tag) => `tag:${tag}`)];
-    return selectedInventoryTags.length === 0 || selectedInventoryTags.some((tag) => cardTagKeys.includes(tag));
-  }), [cards, selectedInventoryTags]);
-  const filteredCards = useMemo(() => tagMatchedCards.filter((item) => {
-    const italian = cardItalianText(item, nounMorphology);
-    const base = item.type === "noun" ? item.details.base : "";
-    const haystack = `${item.english} ${italian} ${base} ${item.setName ?? ""} ${item.tags.join(" ")}`.toLowerCase();
-    return haystack.includes(query.toLowerCase());
-  }), [nounMorphology, query, tagMatchedCards]);
+  const missedItems = useMemo(() => mistakeKeys
+    .map((key) => studyItems.find((item) => item.key === key))
+    .filter((item): item is StudyItem => Boolean(item)), [mistakeKeys, studyItems]);
+  const matchingCards = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return cards.filter((item) => {
+      if (selectedInventoryTags.length && !cardScopeKeys(item).some((key) => selectedInventoryTags.includes(key))) return false;
+      return !needle || cardSearchText(item, nounMorphology).includes(needle);
+    });
+  }, [cards, nounMorphology, query, selectedInventoryTags]);
+  const filteredCards = useMemo(() => typeFilter === "all" ? matchingCards : matchingCards.filter((item) => item.type === typeFilter), [matchingCards, typeFilter]);
 
   useEffect(() => {
     let active = true;
@@ -237,18 +242,14 @@ export default function Home() {
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
-      if (storageSettingsOpen) return;
-      if (event.key === "Escape" && (adding || editingCard)) {
-        setAdding(false);
-        setEditingCard(null);
+      if (adding || editingCard || route !== "study" || setupOpen || !studyItem) return;
+      if (typingItalian) {
+        if (verificationResult && event.key === "Enter") {
+          event.preventDefault();
+          advanceCard();
+        }
         return;
       }
-      if (view === "study" && typingItalian && verificationResult && event.key === "Enter") {
-        event.preventDefault();
-        advanceCard();
-        return;
-      }
-      if (adding || editingCard || view !== "study" || !studyItem || typingItalian) return;
       const target = event.target as HTMLElement;
       if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
       if (event.code === "Space" || (!revealed && event.key === "Enter")) {
@@ -291,36 +292,11 @@ export default function Home() {
     setSubmittedAnswer("");
   }
 
-  function toggleScope(key: string) {
-    setSelectedScopes((items) => items.includes(key) ? items.filter((item) => item !== key) : [...items, key]);
-    resetStudyProgress();
-  }
-
-  function changeScopeMode(mode: ScopeMode) {
-    setScopeMode(mode);
-    resetStudyProgress();
-  }
-
-  function changePromptMode(mode: PromptMode) {
-    setPromptMode(mode);
-    resetStudyProgress();
-  }
-
-  function toggleTypeToVerify() {
-    setTypeToVerify((value) => !value);
-    setRevealed(false);
-    setVerificationResult(null);
-    setSubmittedAnswer("");
-  }
-
-  function toggleOneDirectionPerWord() {
-    setOneDirectionPerWord((value) => !value);
+  function applySetup(next: StudySetup) {
+    setSetup(next);
+    writeStudySetup(next);
     setDirectionSeed((value) => value + 1);
-    resetStudyProgress();
-  }
-
-  function toggleEnglishFirstWhenBoth() {
-    setEnglishFirstWhenBoth((value) => !value);
+    setSetupOpen(false);
     resetStudyProgress();
   }
 
@@ -343,16 +319,10 @@ export default function Home() {
   }
 
   function removeUnavailableInventoryTags(nextCards: Flashcard[]) {
-    const availableTagKeys = new Set([
-      "type:noun",
-      "type:verb",
-      "type:adjective",
-      "type:adverb",
-      ...nextCards.flatMap((item) => [
-        ...(item.setName ? [`set:${item.setName}`] : []),
-        ...item.tags.map((tag) => `tag:${tag}`),
-      ]),
-    ]);
+    const availableTagKeys = new Set(nextCards.flatMap((item) => [
+      ...(item.setName ? [`set:${item.setName}`] : []),
+      ...item.tags.map((tag) => `tag:${tag}`),
+    ]));
     setSelectedInventoryTags((items) => items.filter((key) => availableTagKeys.has(key)));
   }
 
@@ -391,16 +361,15 @@ export default function Home() {
     setSession({ right: 0, wrong: 0, skipped: 0 });
   }
 
-  async function persistManyCards(updatedCards: Flashcard[], _originalCards: Flashcard[], failureMessage: string) {
+  /** Commits a complete card list through one inventory replacement, restoring the previous list on failure. */
+  async function commitCards(nextCards: Flashcard[], failureMessage: string) {
     const previousCards = cards;
-    const updatedById = new Map(updatedCards.map((item) => [item.id, item]));
-    const optimisticCards = previousCards.map((item) => updatedById.get(item.id) ?? item);
-    setCards(optimisticCards);
-    removeUnavailableInventoryTags(optimisticCards);
+    setCards(nextCards);
+    removeUnavailableInventoryTags(nextCards);
     setSyncWarning("");
     setSaveState("saving");
     try {
-      const saved = await storage.replaceInventory({ cards: optimisticCards, nounMorphology });
+      const saved = await storage.replaceInventory({ cards: nextCards, nounMorphology });
       setCards(saved.cards);
       setNounMorphology(saved.nounMorphology);
       removeUnavailableInventoryTags(saved.cards);
@@ -415,22 +384,50 @@ export default function Home() {
     }
   }
 
+  function persistManyCards(updatedCards: Flashcard[], failureMessage: string) {
+    const updatedById = new Map(updatedCards.map((item) => [item.id, item]));
+    return commitCards(cards.map((item) => updatedById.get(item.id) ?? item), failureMessage);
+  }
+
   async function createMistakeTag() {
     const name = effectiveMistakeTagName.trim();
     if (!name || !mistakeKeys.length) return;
     setMistakeTagName(name);
     const cardIds = new Set(mistakeKeys.map((key) => Number(key.split(":", 1)[0])).filter(Number.isFinite));
-    const originalCards = cards.filter((item) => cardIds.has(item.id));
-    const updatedCards = originalCards.map((item) => ({ ...item, tags: item.tags.includes(name) ? item.tags : [...item.tags, name] }));
-    const saved = await persistManyCards(updatedCards, originalCards, "That mistake tag could not be created. No card tags were changed.");
+    const updatedCards = cards
+      .filter((item) => cardIds.has(item.id))
+      .map((item) => ({ ...item, tags: item.tags.includes(name) ? item.tags : [...item.tags, name] }));
+    const saved = await persistManyCards(updatedCards, "That mistake tag could not be created. No card tags were changed.");
     if (saved) setCreatedMistakeTagName(name);
   }
 
   async function removeTagFromExistence(tag: string) {
-    const originalCards = cards.filter((item) => item.tags.includes(tag));
-    if (!originalCards.length || !window.confirm(`Remove #${tag} from ${originalCards.length} ${originalCards.length === 1 ? "card" : "cards"}?`)) return;
-    const updatedCards = originalCards.map((item) => ({ ...item, tags: item.tags.filter((itemTag) => itemTag !== tag) }));
-    await persistManyCards(updatedCards, originalCards, `#${tag} could not be removed. The tag has been restored.`);
+    const affected = cards.filter((item) => item.tags.includes(tag));
+    if (!affected.length || !window.confirm(`Remove #${tag} from ${affected.length} ${affected.length === 1 ? "word" : "words"}?`)) return;
+    await persistManyCards(affected.map((item) => ({ ...item, tags: item.tags.filter((itemTag) => itemTag !== tag) })), `#${tag} could not be removed. The tag has been restored.`);
+  }
+
+  function bulkTag(ids: number[], tag: string) {
+    const idSet = new Set(ids);
+    return persistManyCards(
+      cards.filter((item) => idSet.has(item.id)).map((item) => ({ ...item, tags: item.tags.includes(tag) ? item.tags : [...item.tags, tag] })),
+      `#${tag} could not be added. No words were changed.`,
+    );
+  }
+
+  function bulkSet(ids: number[], setName: string | null) {
+    const idSet = new Set(ids);
+    return persistManyCards(
+      cards.filter((item) => idSet.has(item.id)).map((item) => ({ ...item, setName })),
+      "Those words could not be moved. No words were changed.",
+    );
+  }
+
+  async function bulkDelete(ids: number[]) {
+    const idSet = new Set(ids);
+    const saved = await commitCards(cards.filter((item) => !idSet.has(item.id)), "Those words could not be deleted. They have been restored.");
+    if (saved) setCurrent(0);
+    return saved;
   }
 
   async function addBatch(newCards: Flashcard[]) {
@@ -449,7 +446,7 @@ export default function Home() {
     setCards((items) => [...temporaryCards, ...items]);
     setSyncWarning("");
     setSaveState("saving");
-    setView("library");
+    navigate("words");
     try {
       const savedCards = await storage.createCards(newCards);
       setCards((items) => [...savedCards, ...items.filter((item) => !temporaryIds.has(item.id))]);
@@ -478,7 +475,7 @@ export default function Home() {
       } catch {
         setCards((items) => items.some((item) => item.id === id) ? items : [removed, ...items]);
         setSaveState("failed");
-        setSyncWarning("That card could not be removed. It has been restored.");
+        setSyncWarning("That word could not be removed. It has been restored.");
       }
     })();
   }
@@ -499,7 +496,7 @@ export default function Home() {
       } catch {
         setCards((items) => items.map((item) => item.id === updated.id ? original : item));
         setSaveState("failed");
-        setSyncWarning("That edit could not be saved. The previous card has been restored.");
+        setSyncWarning("That edit could not be saved. The previous version has been restored.");
       }
     })();
   }
@@ -517,7 +514,7 @@ export default function Home() {
       setSaveState("saved");
     } catch (error) {
       setSaveState("failed");
-      setSyncWarning("Noun morphology could not be saved. The current inventory was left unchanged.");
+      setSyncWarning("Grammar changes could not be saved. The current inventory was left unchanged.");
       throw error;
     }
   }
@@ -556,160 +553,84 @@ export default function Home() {
   }
 
   return <>
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="header-inner">
-          <nav aria-label="Main navigation">
-            <button className={view === "study" ? "active" : ""} onClick={() => setView("study")}>Study</button>
-            <button className={view === "library" ? "active" : ""} onClick={() => setView("library")}>Inventory</button>
-          </nav>
-          <div className="header-actions">
-            <button className="storage-button" onClick={() => setStorageSettingsOpen(true)} title={storageEndpoint ? `Sync server: ${storage.label}` : "Inventory is stored locally in this browser"}>
-              <span className={`storage-dot ${storageEndpoint ? "remote" : "local"}`} />
-              {storageEndpoint ? "Sync" : "Local"}
-            </button>
-            <SaveIndicator state={saveState} />
-            <button className="primary-button" onClick={() => setAdding(true)}>＋ New cards</button>
-          </div>
-        </div>
-      </header>
-
-      <div className="content-frame">
-        {view === "study" ? (
-          <section className="study-view">
-            <StudyScope mode={scopeMode} onMode={changeScopeMode} options={studyScopeOptions} selected={selectedScopes} onToggle={toggleScope} />
-            <StudyOptions
-              promptMode={promptMode}
-              onPromptMode={changePromptMode}
-              typeToVerify={typeToVerify}
-              onTypeToVerify={toggleTypeToVerify}
-              oneDirectionPerWord={oneDirectionPerWord}
-              onOneDirectionPerWord={toggleOneDirectionPerWord}
-              englishFirstWhenBoth={englishFirstWhenBoth}
-              onEnglishFirstWhenBoth={toggleEnglishFirstWhenBoth}
-              answerKeywords={answerKeywords}
-              onAnswerKeywords={setAnswerKeywords}
-            />
-            {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
-            {loadingCards ? (
-              <div className="empty-study" role="status"><p>Loading cards…</p></div>
-            ) : sessionComplete ? (
-              <div className="session-complete">
-                <span className="answer-label">{mistakeOnlyKeys ? "Mistake review complete" : "Study complete"}</span>
-                <h2>{mistakeOnlyKeys ? "Mistakes finished" : "Study finished"}</h2>
-                <p>{session.right} right · {session.wrong} wrong · {session.skipped} skipped</p>
-                <div className="completion-actions">
-                  {mistakeOnlyKeys ? <>
-                    <button className="primary-button" onClick={restartCurrentStudy}>Study these mistakes again</button>
-                    <button className="neutral-button" onClick={returnToOriginalStudy}>Study original selection</button>
-                  </> : <>
-                    <button className="primary-button" onClick={restartCurrentStudy}>Study again</button>
-                    {mistakeKeys.length > 0 && <button className="wrong-button" onClick={studyMistakes}>Study mistakes ({mistakeKeys.length})</button>}
-                  </>}
-                </div>
-                {!mistakeOnlyKeys && mistakeKeys.length > 0 && <div className="mistake-tag-creator">
-                  {createdMistakeTagName ? <p className="tag-created" role="status">Created tag <strong>#{createdMistakeTagName}</strong></p> : <>
-                    <label><span>Mistake tag name</span><input value={effectiveMistakeTagName} onChange={(event) => setMistakeTagName(event.target.value)} /></label>
-                    <button className="neutral-button" onClick={() => void createMistakeTag()} disabled={!effectiveMistakeTagName.trim() || saveState === "saving"}>Create mistake tag</button>
-                  </>}
-                </div>}
-              </div>
-            ) : card && studyItem ? <>
-              <div className="session-meta">
-                <span>{studyItem.promptLanguage} prompt{card.setName && <b>{card.setName}</b>}</span>
-                <span>{current + 1} / {studyItems.length}</span>
-              </div>
-              {typingItalian ? (
-                <div className={`flashcard verification-card ${verificationResult ?? ""}`}>
-                  {!verificationResult ? <>
-                    <div className="verification-prompt"><span className="answer-label">English prompt · {typeLabels[card.type]}</span><h2>{card.english}</h2></div>
-                    <ItalianVerificationForm key={studyItem.key} card={card} keywords={answerKeywords} morphology={nounMorphology} onResult={verifyItalian} />
-                  </> : <>
-                    <div className={`verification-result ${verificationResult}`} role="status">
-                      <strong>{verificationResult === "correct" ? "Correct" : "Not quite"}</strong>
-                      <span>{verificationResult === "correct" ? "Your Italian matched every stored field." : "Compare your response with the stored answer below."}</span>
-                    </div>
-                    <div className="submitted-answer"><span>Your answer</span><strong>{submittedAnswer}</strong></div>
-                    <NounAnswerDiagnostic card={card} answer={submittedAnswer} keywords={answerKeywords} morphology={nounMorphology} />
-                    <div className="verified-answer-stack"><EnglishAnswer card={card} /><CardAnswer card={card} morphology={nounMorphology} /></div>
-                  </>}
-                </div>
-              ) : (
-                <button className="flashcard" onClick={() => setRevealed((value) => !value)} aria-label={revealed ? `Show ${studyItem.promptLanguage} prompt` : `Show ${studyItem.promptLanguage === "english" ? "Italian" : "English"} answer`}>
-                  {!revealed
-                    ? studyItem.promptLanguage === "english" ? <div className="question-content"><span className="answer-label">English · {typeLabels[card.type]}</span><h2>{card.english}</h2></div> : <ItalianPrompt card={card} morphology={nounMorphology} />
-                    : studyItem.promptLanguage === "english" ? <CardAnswer card={card} morphology={nounMorphology} /> : <EnglishAnswer card={card} showType />}
-                </button>
-              )}
-              {typingItalian ? (
-                verificationResult ? (
-                  <div className="study-actions verification-actions"><button className="primary-button" onClick={advanceCard}>Continue · Enter</button></div>
-                ) : (
-                  <div className="study-actions verification-actions"><button className="neutral-button" onClick={() => rate("skipped")}>Skip</button></div>
-                )
-              ) : !revealed ? (
-                <div className="study-actions before-reveal">
-                  <button className="neutral-button" onClick={() => rate("skipped")}>Skip</button>
-                  <button className="primary-button" onClick={() => setRevealed(true)}>Reveal answer</button>
-                </div>
-              ) : (
-                <div className="study-actions rating-actions">
-                  <button className="wrong-button" onClick={() => rate("wrong")}><span>1</span> Wrong</button>
-                  <button className="right-button" onClick={() => rate("right")}><span>2</span> Right · Enter</button>
-                </div>
-              )}
-              {!typingItalian && <p className="keyboard-hint">{revealed ? "Space or click flips · 1 wrong · 2 or Enter right" : "Space, Enter, or click flips"}</p>}
-              {(session.right + session.wrong + session.skipped) > 0 && <p className="session-counts">This session: {session.right} right · {session.wrong} wrong · {session.skipped} skipped</p>}
-            </> : (
-              <div className="empty-study">
-                <h2>No cards in this study scope</h2>
-                <p>{scopeMode === "only" && !selectedScopes.length ? "Select one or more parts of speech, sets, or tags above." : "Change the scope or add cards."}</p>
-              </div>
-            )}
-          </section>
-        ) : (
-          <section className="library-view">
-            <h1>Inventory</h1>
-            <div className="inventory-sticky">
-              <div className="inventory-control-row">
-                <input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search words, sets, or tags…" aria-label="Search inventory" />
-              </div>
-              <div className="tag-filter-row" aria-label="Filter by tags">
-                {inventoryTagOptions.map((tag) => tag.kind === "custom" ? <span className="filter-tag-group" key={tag.key}>
-                  <button className={`filter-tag custom ${selectedInventoryTags.includes(tag.key) ? "selected" : ""}`} aria-pressed={selectedInventoryTags.includes(tag.key)} onClick={() => toggleInventoryTag(tag.key)}>{tag.label}</button>
-                  <button className="delete-filter-tag" onClick={() => void removeTagFromExistence(tag.label)} aria-label={`Remove tag ${tag.label} from all cards`} title="Remove tag from all cards">×</button>
-                </span> : <button key={tag.key} className={`filter-tag ${tag.kind} ${selectedInventoryTags.includes(tag.key) ? "selected" : ""}`} aria-pressed={selectedInventoryTags.includes(tag.key)} onClick={() => toggleInventoryTag(tag.key)}>{tag.label}</button>)}
-              </div>
-            </div>
-            {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
-            {loadingCards ? <div className="empty-state" role="status"><strong>Loading cards…</strong></div> : filteredCards.length ? <InventoryCardsEditor
-              key={`${selectedInventoryTags.join("|")}:${query}:${filteredCards.map((item) => item.id).join(",")}`}
-              cards={filteredCards}
-              knownSets={setNames}
-              morphology={nounMorphology}
-              onOpen={setEditingCard}
-              onRemove={removeCard}
-              onSave={(updatedCards, originalCards) => persistManyCards(updatedCards, originalCards, "Those inventory edits could not be saved. The previous cards were restored.")}
-            /> : <div className="empty-state"><strong>No cards found</strong></div>}
-          </section>
-        )}
-      </div>
-
-      {adding && <AddCardModal knownSets={setNames} morphology={nounMorphology} onClose={() => setAdding(false)} onBatch={addBatch} />}
-      {editingCard && <EditCardModal card={editingCard} knownSets={setNames} morphology={nounMorphology} onClose={() => setEditingCard(null)} onSave={updateCard} />}
-      {storageSettingsOpen && <StorageSettingsModal
-        storage={storage}
-        endpoint={storageEndpoint}
-        persistLocal={persistLocal}
-        loadPolicy={syncLoadPolicy}
-        onClose={() => setStorageSettingsOpen(false)}
-        onApply={applyStorageSettings}
-        onSyncNow={syncNow}
+    <AppShell route={route} syncing={Boolean(storageEndpoint)} syncLabel={storage.label} saveState={saveState} onAdd={() => setAdding(true)}>
+      {route === "study" && <StudyView
+        loading={loadingCards}
+        cards={cards}
+        morphology={nounMorphology}
+        keywords={answerKeywords}
+        setup={setup}
+        setupOpen={setupOpen}
+        onSetupOpen={setSetupOpen}
+        onApplySetup={applySetup}
+        scopeOptions={studyScopeOptions}
+        items={studyItems}
+        current={current}
+        studyItem={studyItem}
+        typing={typingItalian}
+        revealed={revealed}
+        onReveal={setRevealed}
+        verificationResult={verificationResult}
+        submittedAnswer={submittedAnswer}
+        onVerify={verifyItalian}
+        onAdvance={advanceCard}
+        onRate={rate}
+        session={session}
+        sessionComplete={sessionComplete}
+        reviewingMistakes={Boolean(mistakeOnlyKeys)}
+        missedItems={missedItems}
+        onRestart={restartCurrentStudy}
+        onReturnToOriginal={returnToOriginalStudy}
+        onStudyMistakes={studyMistakes}
+        mistakeTagName={effectiveMistakeTagName}
+        onMistakeTagName={setMistakeTagName}
+        onCreateMistakeTag={() => void createMistakeTag()}
+        createdMistakeTagName={createdMistakeTagName}
+        savingTag={saveState === "saving"}
+        warning={syncWarning}
+        onAddWords={() => setAdding(true)}
       />}
-    </main>
-    <aside className="noun-pattern-manager" aria-label="Noun morphology manager">
-      <div style={{ width: "fit-content", margin: "0 0 6px auto", border: "1px solid var(--line)", borderRadius: 999, background: "#101317", color: "var(--muted)", padding: "5px 9px", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" }}>Noun morphology</div>
-      <NounMorphologyPanel cards={cards} morphology={nounMorphology} onSave={replaceNounInventory} />
-    </aside>
+      {route === "words" && <WordsView
+        loading={loadingCards}
+        warning={syncWarning}
+        cards={cards}
+        matchingCards={matchingCards}
+        filteredCards={filteredCards}
+        morphology={nounMorphology}
+        knownSets={setNames}
+        query={query}
+        onQuery={setQuery}
+        typeFilter={typeFilter}
+        onTypeFilter={setTypeFilter}
+        selectedFilters={selectedInventoryTags}
+        onToggleFilter={toggleInventoryTag}
+        onClearFilters={() => setSelectedInventoryTags([])}
+        gridMode={gridMode}
+        onGridMode={setGridMode}
+        onOpen={setEditingCard}
+        onRemove={removeCard}
+        onRemoveTag={(tag) => void removeTagFromExistence(tag)}
+        onSaveGrid={(updatedCards) => persistManyCards(updatedCards, "Those edits could not be saved. The previous words were restored.")}
+        onBulkTag={bulkTag}
+        onBulkSet={bulkSet}
+        onBulkDelete={bulkDelete}
+        onAddWords={() => setAdding(true)}
+      />}
+      {route === "grammar" && <>
+        {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
+        <GrammarView cards={cards} morphology={nounMorphology} onSave={replaceNounInventory} />
+      </>}
+      {route === "settings" && <>
+        {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
+        <SettingsView
+          storageProps={{ storage, endpoint: storageEndpoint, persistLocal, loadPolicy: syncLoadPolicy, onApply: applyStorageSettings, onSyncNow: syncNow }}
+          keywords={answerKeywords}
+          onKeywords={setAnswerKeywords}
+        />
+      </>}
+    </AppShell>
+
+    {adding && <AddWordsSheet knownSets={setNames} morphology={nounMorphology} onClose={() => setAdding(false)} onBatch={addBatch} />}
+    {editingCard && <WordDrawer card={editingCard} knownSets={setNames} morphology={nounMorphology} onClose={() => setEditingCard(null)} onSave={updateCard} onRemove={removeCard} />}
   </>;
 }

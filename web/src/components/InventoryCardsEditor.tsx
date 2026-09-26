@@ -2,20 +2,25 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { CardType, Flashcard, NounCard } from "../cards/types";
 import {
   articleProfilesEqual,
-  nounArticleProfiles,
   nounDefinitionForCard,
   resolvedNounForms,
   type NounArticleProfile,
   type NounGender,
   type NounMorphology,
 } from "../cards/nounMorphology";
+import {
+  articleProfileForOption,
+  articleProfileOption,
+  articleProfileOptions,
+  joinArticle,
+  type ArticleProfileOption,
+} from "../cards/nounDraft";
 import { cardTypes, typeLabels } from "../cardTypes";
 import {
   adjectiveCard,
   adjectiveRowFromCard,
   adverbCard,
   adverbRowFromCard,
-  joinArticle,
   parseTags,
   type AdjectiveBatchRow,
   type AdverbBatchRow,
@@ -39,42 +44,6 @@ type NounInventoryRow = {
   gender: NounGender;
   articleProfile: NounArticleProfile;
 };
-
-const articleProfileOptions = [
-  { value: "all", label: "All three", profile: nounArticleProfiles.all },
-  { value: "definite-singular", label: "Definite singular only", profile: nounArticleProfiles.definiteSingularOnly },
-  { value: "definite-plural", label: "Definite plural only", profile: nounArticleProfiles.definitePluralOnly },
-  { value: "none", label: "No articles", profile: nounArticleProfiles.none },
-] as const;
-
-type ArticleProfileOption = typeof articleProfileOptions[number]["value"];
-
-function articleProfileOption(profile: NounArticleProfile): ArticleProfileOption {
-  return articleProfileOptions.find((option) => articleProfilesEqual(option.profile, profile))?.value ?? "none";
-}
-
-function articleProfileForOption(value: ArticleProfileOption): NounArticleProfile {
-  return articleProfileOptions.find((option) => option.value === value)?.profile ?? nounArticleProfiles.none;
-}
-
-const inventoryHeightLimitKey = "parola:inventory:limit-height";
-
-function readInventoryHeightLimit() {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(inventoryHeightLimitKey) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeInventoryHeightLimit(value: boolean) {
-  try {
-    window.localStorage.setItem(inventoryHeightLimitKey, value ? "1" : "0");
-  } catch {
-    // This is only a display preference.
-  }
-}
 
 function nounInventoryRowFromCard(card: NounCard): NounInventoryRow {
   const definition = nounDefinitionForCard(card);
@@ -112,6 +81,7 @@ export function InventoryCardsEditor({
   onSave,
   onOpen,
   onRemove,
+  onExit,
 }: {
   cards: Flashcard[];
   knownSets: string[];
@@ -119,6 +89,7 @@ export function InventoryCardsEditor({
   onSave: (updated: Flashcard[], original: Flashcard[]) => Promise<boolean>;
   onOpen: (card: Flashcard) => void;
   onRemove: (id: number) => void;
+  onExit: () => void;
 }) {
   const [nounRows, setNounRows] = useState<NounInventoryRow[]>(() => cards.filter((card) => card.type === "noun").map(nounInventoryRowFromCard));
   const [verbRows, setVerbRows] = useState(() => cards.filter((card) => card.type === "verb").map(verbRowFromCard));
@@ -130,7 +101,6 @@ export function InventoryCardsEditor({
   const [type, setType] = useState<CardType>(firstType);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [limitHeight, setLimitHeight] = useState(readInventoryHeightLimit);
   const cardById = new Map(cards.map((card) => [card.id, card]));
   const counts = { noun: nounRows.length, verb: verbRows.length, adjective: adjectiveRows.length, adverb: adverbRows.length };
 
@@ -199,11 +169,6 @@ export function InventoryCardsEditor({
     setNounRows((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
   }
 
-  function setHeightLimited(value: boolean) {
-    setLimitHeight(value);
-    writeInventoryHeightLimit(value);
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (nounRows.some((row) => !row.english.trim())) { setType("noun"); setError("Every noun needs an English prompt."); return; }
@@ -250,8 +215,10 @@ export function InventoryCardsEditor({
     ];
     setError("");
     setSaving(true);
-    if (!(await onSave(updated, cards))) setError("The changes could not be saved. The previous cards were restored.");
+    const saved = await onSave(updated, cards);
     setSaving(false);
+    if (saved) onExit();
+    else setError("The changes could not be saved. The previous cards were restored.");
   }
 
   function metadataCells(rowId: string) {
@@ -260,21 +227,16 @@ export function InventoryCardsEditor({
     return <>
       <td><input aria-label={`Set for ${original.english}`} list="known-card-sets" value={rowMetadata?.setName ?? ""} onChange={(event) => updateMetadata(rowId, "setName", event.target.value)} placeholder="Optional" /></td>
       <td><input aria-label={`Tags for ${original.english}`} value={rowMetadata?.tags ?? ""} onChange={(event) => updateMetadata(rowId, "tags", event.target.value)} placeholder="tag, tag" /></td>
-      <td><div className="inventory-row-actions"><button type="button" className="row-open" onClick={() => onOpen(original)} aria-label={`Edit ${original.english}`} title="Edit card">↗</button><button type="button" className="row-remove" onClick={() => { if (window.confirm(`Remove ${original.english}?`)) onRemove(original.id); }} aria-label={`Remove ${original.english}`} title="Remove card">×</button></div></td>
+      <td><div className="inventory-row-actions"><button type="button" className="row-open" onClick={() => onOpen(original)} aria-label={`Open ${original.english}`} title="Open in editor">↗</button><button type="button" className="row-remove" onClick={() => { if (window.confirm(`Remove ${original.english}?`)) onRemove(original.id); }} aria-label={`Remove ${original.english}`} title="Remove card">×</button></div></td>
     </>;
   }
 
   return <form className="inventory-editor" onSubmit={submit}>
-    <div className="inventory-editor-heading">
-      <div className="mode-tabs" aria-label="Inventory card type">
-        {cardTypes.map((item) => <button type="button" key={item} className={type === item ? "active" : ""} disabled={counts[item] === 0} onClick={() => { setType(item); setError(""); }}>{typeLabels[item]}s <span className="tab-count">{counts[item]}</span></button>)}
-      </div>
-      <label className="inventory-height-toggle"><input type="checkbox" checked={limitHeight} onChange={(event) => setHeightLimited(event.target.checked)} /><span>Limit card list height</span></label>
-      <button type="submit" className="primary-button inventory-save" disabled={saving}>{saving ? "Saving…" : `Save visible cards (${cards.length})`}</button>
+    <div className="segmented type-segmented" role="tablist" aria-label="Word type">
+      {cardTypes.map((item) => <button type="button" role="tab" aria-selected={type === item} key={item} className={`${item} ${type === item ? "active" : ""}`} disabled={counts[item] === 0} onClick={() => { setType(item); setError(""); }}>{typeLabels[item]}s <span className="tab-count">{counts[item]}</span></button>)}
     </div>
     <datalist id="known-card-sets">{knownSets.map((name) => <option key={name} value={name} />)}</datalist>
-    <p className="batch-help">Every visible definition field is editable. Filters use union matching; saving updates the cards currently shown.</p>
-    <div className={`batch-table-wrap inventory-table-wrap${limitHeight ? " height-limited" : ""}`}>
+    <div className="batch-table-wrap inventory-table-wrap">
       {type === "noun" && <table className="batch-table inventory-edit-table noun-inventory-table"><thead><tr><th>English</th><th>Gender</th><th>Base</th><th>Declension</th><th>Article profile</th><th>Singular</th><th>Plural</th><th>Set</th><th>Tags</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{nounRows.map((row, index) => {
         let forms = null;
         try { forms = nounPreview(row, morphology); } catch { /* The row can be fixed in place. */ }
@@ -297,6 +259,10 @@ export function InventoryCardsEditor({
       {type === "adjective" && <table className="batch-table adjective-batch-table inventory-edit-table"><thead><tr><th>English</th><th>Masculine singular</th><th>Feminine singular</th><th>Masculine plural</th><th>Feminine plural</th><th>Set</th><th>Tags</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{adjectiveRows.map((row, index) => <tr key={row.id}><AdjectiveRowCells row={row} index={index} onChange={(field, value) => setAdjectiveRows((rows) => rows.map((item) => item.id === row.id ? { ...item, [field]: value } : item))} />{metadataCells(row.id)}</tr>)}</tbody></table>}
       {type === "adverb" && <table className="batch-table adverb-batch-table inventory-edit-table"><thead><tr><th>English</th><th>Italian adverb</th><th>Set</th><th>Tags</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{adverbRows.map((row, index) => <tr key={row.id}><AdverbRowCells row={row} index={index} onChange={(field, value) => setAdverbRows((rows) => rows.map((item) => item.id === row.id ? { ...item, [field]: value } : item))} />{metadataCells(row.id)}</tr>)}</tbody></table>}
     </div>
-    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="grid-save-bar" role="region" aria-label="Grid changes">
+      {error ? <p className="form-error" role="alert">{error}</p> : <p>Editing {cards.length} {cards.length === 1 ? "word" : "words"} as a grid. Changes apply when you save.</p>}
+      <button type="button" className="text-button" onClick={onExit} disabled={saving}>Discard</button>
+      <button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
+    </div>
   </form>;
 }

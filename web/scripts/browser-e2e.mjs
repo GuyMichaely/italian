@@ -96,7 +96,7 @@ try {
   const storageWarning = page.getByText(/Storage unavailable: Noun card 59 must not store a derived italian field\./i);
   await storageWarning.waitFor({ state: "visible" });
 
-  await page.getByRole("button", { name: "Local" }).click();
+  await page.getByRole("link", { name: "Local" }).click();
   await page.getByLabel("Import inventory JSON").fill(JSON.stringify(currentInventory));
 
   page.once("dialog", async (dialog) => {
@@ -108,8 +108,9 @@ try {
   await page.getByRole("button", { name: "Import pasted JSON" }).click();
   await navigation;
 
+  await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Study" }).click();
   await page.getByRole("heading", { name: "mirror" }).waitFor({ state: "visible" });
-  assert.equal(await page.getByText("English · Noun", { exact: true }).count(), 1);
+  assert.equal((await page.locator(".study-card .pos-badge").textContent())?.trim(), "Noun");
 
   const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("parola:inventory") || "null"));
   assert.ok(persisted, "Imported inventory should be persisted to localStorage.");
@@ -117,8 +118,9 @@ try {
   assert.equal(persisted.cards[0].english, "mirror");
   assert.equal(Object.prototype.hasOwnProperty.call(persisted.cards[0], "italian"), false);
 
-  await page.getByRole("checkbox", { name: /Type to verify/i }).check();
-  await page.getByText("English prompt · Noun", { exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Adjust study setup" }).click();
+  await page.getByRole("radio", { name: "Type the Italian" }).click();
+  await page.getByRole("button", { name: "Start studying" }).click();
 
   const answer = page.getByRole("textbox", { name: "Answer" });
   await answer.fill("lo");

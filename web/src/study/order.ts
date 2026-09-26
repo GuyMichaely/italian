@@ -1,5 +1,5 @@
 import type { Flashcard } from "../cards/types";
-import type { PromptLanguage } from "../components/StudyOptions";
+import type { PromptLanguage } from "./setup";
 
 export type StudyItem = {
   key: string;
