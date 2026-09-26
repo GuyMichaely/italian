@@ -415,6 +415,23 @@ export default function Home() {
     await persistManyCards(affected.map((item) => ({ ...item, tags: item.tags.filter((itemTag) => itemTag !== tag) })), `#${tag} could not be removed. The tag has been restored.`);
   }
 
+  /** Renames a tag on every word; renaming onto an existing tag merges the two. */
+  async function renameTag(from: string, to: string) {
+    const affected = cards.filter((item) => item.tags.includes(from));
+    if (!affected.length) return;
+    setSelectedInventoryTags((keys) => [...new Set(keys.map((key) => key === `tag:${from}` ? `tag:${to}` : key))]);
+    const saved = await persistManyCards(
+      affected.map((item) => ({ ...item, tags: [...new Set(item.tags.map((tag) => tag === from ? to : tag))] })),
+      `#${from} could not be renamed. No words were changed.`,
+    );
+    if (!saved) return;
+    if (setup.selectedScopes.includes(`tag:${from}`)) {
+      const next = { ...setup, selectedScopes: [...new Set(setup.selectedScopes.map((key) => key === `tag:${from}` ? `tag:${to}` : key))] };
+      setSetup(next);
+      writeStudySetup(next);
+    }
+  }
+
   function bulkTag(ids: number[], tag: string) {
     const idSet = new Set(ids);
     return persistManyCards(
@@ -617,6 +634,7 @@ export default function Home() {
         onOpen={setEditingCard}
         onRemove={removeCard}
         onRemoveTag={(tag) => void removeTagFromExistence(tag)}
+        onRenameTag={(from, to) => void renameTag(from, to)}
         onSaveGrid={(updatedCards) => persistManyCards(updatedCards, "Those edits could not be saved. The previous words were restored.")}
         onBulkTag={bulkTag}
         onBulkSet={bulkSet}

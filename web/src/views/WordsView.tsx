@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { CardType, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import { cardTypes, typeLabels } from "../cardTypes";
@@ -14,6 +14,7 @@ function FilterRail({
   onToggle,
   onClear,
   onRemoveTag,
+  onRenameTag,
 }: {
   sets: [string, number][];
   tags: [string, number][];
@@ -21,23 +22,41 @@ function FilterRail({
   onToggle: (key: string) => void;
   onClear: () => void;
   onRemoveTag: (tag: string) => void;
+  onRenameTag: (from: string, to: string) => void;
 }) {
   const [editingTags, setEditingTags] = useState(false);
+  const [renaming, setRenaming] = useState<{ tag: string; value: string } | null>(null);
+
+  function submitRename(event: FormEvent) {
+    event.preventDefault();
+    const to = renaming?.value.trim();
+    if (renaming && to && to !== renaming.tag) onRenameTag(renaming.tag, to);
+    setRenaming(null);
+  }
+
   return <div className="filter-rail">
     <div className="filter-section">
       <div className="filter-heading"><h3>Sets</h3>{selected.length > 0 && <button type="button" className="text-button small" onClick={onClear}>Clear filters</button>}</div>
       {sets.length ? <ul>{sets.map(([name, count]) => {
         const key = `set:${name}`;
-        return <li key={key}><button type="button" className={`filter-item ${selected.includes(key) ? "selected" : ""}`} aria-pressed={selected.includes(key)} onClick={() => onToggle(key)}><Icon name="folder" size={15} /><span>{name}</span><small>{count}</small></button></li>;
+        return <li key={key}><button type="button" className={`filter-item ${selected.includes(key) ? "selected" : ""}`} aria-pressed={selected.includes(key)} onClick={() => onToggle(key)} title={name}><Icon name="folder" size={15} /><span>{name}</span><small>{count}</small></button></li>;
       })}</ul> : <p className="filter-empty">No sets yet</p>}
     </div>
     <div className="filter-section">
-      <div className="filter-heading"><h3>Tags</h3>{tags.length > 0 && <button type="button" className="text-button small" onClick={() => setEditingTags((value) => !value)}>{editingTags ? "Done" : "Manage"}</button>}</div>
+      <div className="filter-heading"><h3>Tags</h3>{tags.length > 0 && <button type="button" className="text-button small" onClick={() => { setEditingTags((value) => !value); setRenaming(null); }}>{editingTags ? "Done" : "Manage"}</button>}</div>
       {tags.length ? <ul>{tags.map(([tag, count]) => {
         const key = `tag:${tag}`;
         return <li key={key} className="filter-tag-row">
-          <button type="button" className={`filter-item ${selected.includes(key) ? "selected" : ""}`} aria-pressed={selected.includes(key)} onClick={() => onToggle(key)}><span className="hash">#</span><span>{tag}</span><small>{count}</small></button>
-          {editingTags && <button type="button" className="icon-button danger" onClick={() => onRemoveTag(tag)} aria-label={`Remove tag ${tag} from all words`} title="Remove from all words"><Icon name="trash" size={15} /></button>}
+          {renaming?.tag === tag
+            ? <form className="tag-rename" onSubmit={submitRename}>
+              <input autoFocus value={renaming.value} onChange={(event) => setRenaming({ tag, value: event.target.value })} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setRenaming(null); } }} aria-label={`New name for tag ${tag}`} />
+              <button type="submit" className="icon-button" aria-label="Save tag name" title="Save"><Icon name="check" size={15} /></button>
+            </form>
+            : <button type="button" className={`filter-item ${selected.includes(key) ? "selected" : ""}`} aria-pressed={selected.includes(key)} onClick={() => onToggle(key)} title={`#${tag}`}><span className="hash">#</span><span>{tag}</span><small>{count}</small></button>}
+          {editingTags && renaming?.tag !== tag && <>
+            <button type="button" className="icon-button" onClick={() => setRenaming({ tag, value: tag })} aria-label={`Rename tag ${tag}`} title="Rename (renaming onto an existing tag merges them)"><Icon name="pencil" size={15} /></button>
+            <button type="button" className="icon-button danger" onClick={() => onRemoveTag(tag)} aria-label={`Remove tag ${tag} from all words`} title="Remove from all words"><Icon name="trash" size={15} /></button>
+          </>}
         </li>;
       })}</ul> : <p className="filter-empty">No tags yet</p>}
     </div>
@@ -90,6 +109,7 @@ export function WordsView({
   onOpen,
   onRemove,
   onRemoveTag,
+  onRenameTag,
   onSaveGrid,
   onBulkTag,
   onBulkSet,
@@ -114,6 +134,7 @@ export function WordsView({
   onOpen: (card: Flashcard) => void;
   onRemove: (id: number) => void;
   onRemoveTag: (tag: string) => void;
+  onRenameTag: (from: string, to: string) => void;
   onSaveGrid: (updated: Flashcard[]) => Promise<boolean>;
   onBulkTag: (ids: number[], tag: string) => Promise<boolean>;
   onBulkSet: (ids: number[], setName: string | null) => Promise<boolean>;
@@ -152,7 +173,7 @@ export function WordsView({
     if (await action()) setSelectedIds([]);
   }
 
-  const rail = <FilterRail sets={sets} tags={tags} selected={selectedFilters} onToggle={onToggleFilter} onClear={onClearFilters} onRemoveTag={onRemoveTag} />;
+  const rail = <FilterRail sets={sets} tags={tags} selected={selectedFilters} onToggle={onToggleFilter} onClear={onClearFilters} onRemoveTag={onRemoveTag} onRenameTag={onRenameTag} />;
   const activeFilterCount = selectedFilters.length;
 
   return <section className="words-view">

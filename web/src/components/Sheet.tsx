@@ -27,11 +27,13 @@ export function Sheet({
       onClose();
     }
     window.addEventListener("keydown", handleKey);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Lock scrolling on the root element: its reserved scrollbar gutter keeps the page width steady.
+    const root = document.documentElement;
+    const previousOverflow = root.style.overflow;
+    root.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = previousOverflow;
+      root.style.overflow = previousOverflow;
     };
   }, [closeDisabled, onClose]);
 

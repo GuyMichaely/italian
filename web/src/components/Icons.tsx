@@ -15,6 +15,7 @@ const paths = {
   help: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
   restart: "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4",
   tag: "M3 12V4h8l9 9-8 8zM7.5 8h.01",
+  pencil: "M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
   folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
 } as const;
