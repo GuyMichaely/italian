@@ -3,7 +3,7 @@
 // One-time conversion of a Parola inventory from the rule/base noun schema to the declension schema:
 // - noun details { rule, base, gender, articleProfile } become
 //   { declension: { kind: "rule", rule, base }, gender, articleProfile, articleGroups: { singular: null, plural: null } };
-// - noun morphology gains the default editable article groups;
+// - noun morphology gains the default editable vowel/consonant letters and article groups;
 // - each syntax gains excludedArticleGroups: ["lo"] for article-bearing shorthand syntaxes
 //   (the retired hardcoded "lo nouns need the full declension" policy), [] otherwise.
 // Works on exported inventory JSON and on the sync API's stored snapshot ({ cards, nounMorphology, updatedAt }).
@@ -15,6 +15,11 @@ if (!inputPath || !outputPath) {
   console.error("Usage: node scripts/migrate-noun-declensions.mjs <input.json> <output.json>");
   process.exit(1);
 }
+
+const defaultArticleLetters = {
+  vowels: ["a", "e", "i", "o", "u", "à", "á", "è", "é", "ì", "í", "ò", "ó", "ù", "ú"],
+  consonants: ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"],
+};
 
 const defaultArticleGroups = [
   {
@@ -31,7 +36,7 @@ const defaultArticleGroups = [
   },
   {
     name: "consonant",
-    startsWith: [],
+    startsWith: ["C"],
     masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
     feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
   },
@@ -70,6 +75,7 @@ function convertMorphology(value) {
   if ("articleGroups" in morphology) return morphology;
   return {
     ...morphology,
+    articleLetters: defaultArticleLetters,
     articleGroups: defaultArticleGroups,
     syntaxRules: morphology.syntaxRules.map((syntax) => ({
       ...syntax,

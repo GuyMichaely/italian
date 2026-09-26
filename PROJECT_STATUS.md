@@ -63,7 +63,7 @@ A canonical noun card stores:
 - `articleProfile`, an object with Boolean `definiteSingular`, `definitePlural`, and `indefiniteSingular` capabilities (four canonical combinations: all, definite singular only, definite plural only, none);
 - `articleGroups`, per-form article-group exceptions (`null` means the group comes from spelling).
 
-A noun card does not store top-level `italian` or article strings. Regular forms are generated from the rule and base; articles come from the morphology's editable article groups, where each form's group is chosen by spelling patterns (`sC`, `iV`, `V`, …) unless the noun overrides it (for example plural `dei` in the `lo` group gives `gli dei`).
+A noun card does not store top-level `italian` or article strings. Regular forms are generated from the rule and base; articles come from the morphology's editable article groups, where each form's group is the first group, top to bottom, whose spelling pattern matches (`sC`, `iV`, `V`, `C`, …, with `V` and `C` defined by editable vowel and consonant lists) unless the noun overrides it (for example plural `dei` in the `lo` group gives `gli dei`).
 
 Declension rules, inference sets, syntax rules, and article groups use unique names as references, and the grammar editor cascades renames (rules into inference sets and nouns; inference sets into syntaxes; article groups into syntax exclusions and noun exceptions). `Irregular` is reserved as a rule name.
 

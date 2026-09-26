@@ -131,6 +131,10 @@ const defaultNounMorphology = {
       inferenceSet: "Full noun answers",
     },
   ],
+  articleLetters: {
+    vowels: ["a", "e", "i", "o", "u", "à", "á", "è", "é", "ì", "í", "ò", "ó", "ù", "ú"],
+    consonants: ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"],
+  },
   articleGroups: [
     {
       name: "lo",
@@ -146,7 +150,7 @@ const defaultNounMorphology = {
     },
     {
       name: "consonant",
-      startsWith: [],
+      startsWith: ["C"],
       masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
       feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
     },
@@ -333,24 +337,49 @@ function normalizeArticleSet(value, label) {
   };
 }
 
+function normalizeLetterList(value, label) {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array of letters.`);
+  const letters = [...new Set(value.map((item) => normalizeIdentityText(item ?? "")))];
+  for (const letter of letters) {
+    if ([...letter].length !== 1 || !/\p{L}/u.test(letter)) throw new Error(`${label} must contain single letters; “${letter}” is not one.`);
+  }
+  if (!letters.length) throw new Error(`${label} must contain at least one letter.`);
+  return letters;
+}
+
+function normalizeArticleLetters(value) {
+  const letters = objectValue(value, "Article letters");
+  assertExactKeys(letters, "Article letters", ["vowels", "consonants"]);
+  const vowels = normalizeLetterList(letters.vowels, "Vowels");
+  const consonants = normalizeLetterList(letters.consonants, "Consonants");
+  const shared = vowels.filter((letter) => consonants.includes(letter));
+  if (shared.length) throw new Error(`A letter cannot be both a vowel and a consonant: ${shared.join(", ")}.`);
+  return { vowels, consonants };
+}
+
+function normalizeArticlePattern(value, groupName) {
+  const raw = nonEmptyString(value, `Article group ${groupName} pattern`).normalize("NFC");
+  const pattern = [...raw].map((token) => token === "V" || token === "C" ? token : token.toLocaleLowerCase("it-IT")).join("");
+  if (/\s/u.test(pattern)) throw new Error(`Article group ${groupName} pattern “${raw}” must not contain spaces.`);
+  return pattern;
+}
+
 function normalizeNounMorphology(value) {
   const payload = objectValue(value, "Noun morphology");
-  assertExactKeys(payload, "Noun morphology", ["articleGroups", "declensionRules", "inferenceSets", "syntaxRules"]);
+  assertExactKeys(payload, "Noun morphology", ["articleGroups", "articleLetters", "declensionRules", "inferenceSets", "syntaxRules"]);
   if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.inferenceSets) || !Array.isArray(payload.syntaxRules) || !Array.isArray(payload.articleGroups)) {
     throw new Error("Noun morphology needs articleGroups, declensionRules, inferenceSets, and syntaxRules arrays.");
   }
 
-  const articleGroups = payload.articleGroups.map((raw, index, all) => {
+  const articleLetters = normalizeArticleLetters(payload.articleLetters);
+  const articleGroups = payload.articleGroups.map((raw) => {
     const group = objectValue(raw, "Article group");
     assertExactKeys(group, "Article group", ["name", "startsWith", "masculine", "feminine"]);
     if (!Array.isArray(group.startsWith)) throw new Error("Article group startsWith must be an array.");
     const name = nonEmptyString(group.name, "Article group name");
-    const last = index === all.length - 1;
-    const startsWith = [...new Set(group.startsWith.map((pattern) => nonEmptyString(pattern, `Article group ${name} pattern`)))];
-    if (!last && !startsWith.length) throw new Error(`Article group ${name} needs at least one spelling pattern.`);
     return {
       name,
-      startsWith: last ? [] : startsWith,
+      startsWith: [...new Set(group.startsWith.map((pattern) => normalizeArticlePattern(pattern, name)))],
       masculine: normalizeArticleSet(group.masculine, `Article group ${name} masculine articles`),
       feminine: normalizeArticleSet(group.feminine, `Article group ${name} feminine articles`),
     };
@@ -456,7 +485,7 @@ function normalizeNounMorphology(value) {
     };
   });
   assertUniqueNames(syntaxRules, "syntax rule");
-  return { declensionRules, inferenceSets, syntaxRules, articleGroups };
+  return { declensionRules, inferenceSets, syntaxRules, articleLetters, articleGroups };
 }
 
 function validateState(cards, nounMorphology) {

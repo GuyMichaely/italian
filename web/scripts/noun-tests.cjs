@@ -306,9 +306,9 @@ test("morphology validation covers article groups and syntax exclusions", () => 
   unknownGroup.syntaxRules[0].excludedArticleGroups = ["nope"];
   assert.throws(() => normalizeNounMorphology(unknownGroup), /unknown article group/i);
 
-  const patternless = cloneNounMorphology(defaultNounMorphology);
-  patternless.articleGroups[0].startsWith = [];
-  assert.throws(() => normalizeNounMorphology(patternless), /needs at least one spelling pattern/i);
+  const sharedLetter = cloneNounMorphology(defaultNounMorphology);
+  sharedLetter.articleLetters.vowels.push("h");
+  assert.throws(() => normalizeNounMorphology(sharedLetter), /both a vowel and a consonant/i);
 
   const reserved = cloneNounMorphology(defaultNounMorphology);
   reserved.declensionRules[0].name = "Irregular";
@@ -318,4 +318,36 @@ test("morphology validation covers article groups and syntax exclusions", () => 
 test("nouns reject article exceptions naming an unknown group", () => {
   const card = nounCard({ english: "book", rule: rules.oI, base: "libr", articleGroups: { singular: "nope", plural: null } });
   assert.throws(() => resolvedNounForms(card, defaultNounMorphology), /unknown article group/i);
+});
+
+test("article groups match from top to bottom", () => {
+  const card = nounCard({ english: "mirror", rule: rules.chioChi, base: "spec" });
+  assert.equal(resolvedNounForms(card, defaultNounMorphology).definiteSingularArticle, "lo");
+
+  const consonantFirst = cloneNounMorphology(defaultNounMorphology);
+  consonantFirst.articleGroups.reverse();
+  assert.equal(resolvedNounForms(card, consonantFirst).definiteSingularArticle, "il");
+});
+
+test("V and C refer to the editable letter lists", () => {
+  const hotel = nounCard({ english: "hotel", rule: rules.identity, base: "hotel" });
+  assert.equal(resolvedNounForms(hotel, defaultNounMorphology).definiteSingularArticle, "il");
+
+  const silentH = cloneNounMorphology(defaultNounMorphology);
+  silentH.articleLetters.consonants = silentH.articleLetters.consonants.filter((letter) => letter !== "h");
+  silentH.articleLetters.vowels.push("h");
+  assert.equal(resolvedNounForms(hotel, silentH).definiteSingularArticle, "l’");
+});
+
+test("a form that no article group matches is an error only when it needs an article", () => {
+  const morphology = cloneNounMorphology(defaultNounMorphology);
+  morphology.articleLetters.consonants = morphology.articleLetters.consonants.filter((letter) => letter !== "h");
+  const hotel = nounCard({ english: "hotel", rule: rules.identity, base: "hotel" });
+  assert.throws(() => resolvedNounForms(hotel, morphology), /no article group matches/i);
+
+  const exception = nounCard({ english: "hotel", rule: rules.identity, base: "hotel", articleGroups: { singular: "vowel", plural: "consonant" } });
+  assert.equal(resolvedNounForms(exception, morphology).definiteSingularArticle, "l’");
+
+  const articleless = nounCard({ english: "Hollywood", rule: rules.singularBase, base: "Hollywood", articleProfile: nounArticleProfiles.none });
+  assert.equal(resolvedNounForms(articleless, morphology).singular, "Hollywood");
 });

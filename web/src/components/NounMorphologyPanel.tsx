@@ -55,20 +55,38 @@ function newSyntax(inferenceSet: string, existing: NounSyntaxRule[]): NounSyntax
 function newArticleGroup(existing: NounArticleGroup[]): NounArticleGroup {
   return {
     name: uniqueName("New group", existing.map((group) => group.name)),
-    startsWith: ["?"],
+    startsWith: [],
     masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
     feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
   };
 }
 
 const articleColumns: { gender: "masculine" | "feminine"; key: keyof NounArticleSet; label: string }[] = [
-  { gender: "masculine", key: "definiteSingular", label: "the (sg.)" },
-  { gender: "masculine", key: "definitePlural", label: "the (pl.)" },
-  { gender: "masculine", key: "indefiniteSingular", label: "a" },
-  { gender: "feminine", key: "definiteSingular", label: "the (sg.)" },
-  { gender: "feminine", key: "definitePlural", label: "the (pl.)" },
-  { gender: "feminine", key: "indefiniteSingular", label: "a" },
+  { gender: "masculine", key: "definiteSingular", label: "definite singular" },
+  { gender: "masculine", key: "definitePlural", label: "definite plural" },
+  { gender: "masculine", key: "indefiniteSingular", label: "indefinite singular" },
+  { gender: "feminine", key: "definiteSingular", label: "definite singular" },
+  { gender: "feminine", key: "definitePlural", label: "definite plural" },
+  { gender: "feminine", key: "indefiniteSingular", label: "indefinite singular" },
 ];
+
+function parsePatterns(text: string) {
+  return text.split(",").map((pattern) => pattern.trim()).filter(Boolean);
+}
+
+/** Comma-separated patterns, edited as text so a trailing comma survives while typing. */
+function PatternInput({ value, onChange, label }: { value: string[]; onChange: (patterns: string[]) => void; label: string }) {
+  const [text, setText] = useState(() => value.join(", "));
+  useEffect(() => {
+    setText((current) => JSON.stringify(parsePatterns(current)) === JSON.stringify(value) ? current : value.join(", "));
+  }, [value]);
+  return <input className="morphology-suffix-input" value={text} onChange={(event) => { setText(event.target.value); onChange(parsePatterns(event.target.value)); }} aria-label={label} placeholder="sC, z, gn" spellCheck={false} />;
+}
+
+/** Letter lists are edited as free text; every non-space, non-comma character is one letter. */
+function lettersFromText(value: string) {
+  return [...value.normalize("NFC").toLocaleLowerCase("it-IT")].filter((character) => !/[\s,]/u.test(character));
+}
 
 /** Nouns with an irregular declension or an article-group exception, for the Exceptions list. */
 function exceptionalNouns(cards: Flashcard[]) {
@@ -401,15 +419,8 @@ export function NounMorphologyPanel({
     if (group) updateArticleGroup(index, { [gender]: { ...group[gender], [key]: value } });
   }
 
-  function moveArticleGroup(index: number, direction: -1 | 1) {
-    const nextIndex = index + direction;
-    changeMorphology((current) => {
-      if (nextIndex < 0 || nextIndex >= current.articleGroups.length) return current;
-      const articleGroups = [...current.articleGroups];
-      [articleGroups[index], articleGroups[nextIndex]] = [articleGroups[nextIndex]!, articleGroups[index]!];
-      // Only the last group may be pattern-free; give a group moving up from last place a placeholder pattern.
-      return { ...current, articleGroups: articleGroups.map((group, groupIndex) => groupIndex < articleGroups.length - 1 && !group.startsWith.length ? { ...group, startsWith: ["?"] } : group) };
-    });
+  function updateArticleLetters(kind: "vowels" | "consonants", value: string) {
+    changeMorphology((current) => ({ ...current, articleLetters: { ...current.articleLetters, [kind]: lettersFromText(value) } }));
   }
 
   function removeArticleGroup(index: number) {
@@ -533,31 +544,27 @@ export function NounMorphologyPanel({
 
       <section className="grammar-section" id="articles" aria-labelledby="articles-heading">
       <h2 id="articles-heading">Articles</h2>
-      <p className="section-intro">A word belongs to the first group whose pattern matches how it starts; anything else falls into the last group. Patterns are letters plus <code>C</code> for any consonant and <code>V</code> for any vowel, so <code>sC</code> means s + consonant and <code>iV</code> means i + vowel. Singular and plural forms are grouped separately, and a noun can override its group under Exceptions in the word editor.</p>
+      <p className="section-intro">Each group lists patterns for how a word starts. In a pattern, <code>V</code> stands for any vowel and <code>C</code> for any consonant from the lists below; every other letter stands for itself, so <code>sC</code> is s + consonant and <code>iV</code> is i + vowel. Groups are checked from top to bottom and the first match wins. Singular and plural forms are grouped separately, and a noun can override its group under Article exceptions in the word editor.</p>
+      <div className="letter-sets">
+        <label className="field"><span>Vowels (<code>V</code>)</span><input lang="it" value={draft.articleLetters.vowels.join(" ")} onChange={(event) => updateArticleLetters("vowels", event.target.value)} spellCheck={false} /></label>
+        <label className="field"><span>Consonants (<code>C</code>)</span><input lang="it" value={draft.articleLetters.consonants.join(" ")} onChange={(event) => updateArticleLetters("consonants", event.target.value)} spellCheck={false} /></label>
+      </div>
       <div className="noun-patterns-table-wrap">
         <table className="noun-patterns-table article-groups-table">
           <thead>
-            <tr><th rowSpan={2}>Group</th><th rowSpan={2}>Starts with</th><th colSpan={3} className="gender-heading">Masculine</th><th colSpan={3} className="gender-heading">Feminine</th><th rowSpan={2} /></tr>
-            <tr>{articleColumns.map((column) => <th key={`${column.gender}:${column.key}`}>{column.label}</th>)}</tr>
+            <tr><th rowSpan={3}>Group</th><th rowSpan={3}>Starts with</th><th colSpan={3} className="grouped-heading">Masculine</th><th colSpan={3} className="grouped-heading">Feminine</th><th rowSpan={3} /></tr>
+            <tr><th colSpan={2} className="grouped-heading">Definite</th><th className="grouped-heading">Indefinite</th><th colSpan={2} className="grouped-heading">Definite</th><th className="grouped-heading">Indefinite</th></tr>
+            <tr><th>Singular</th><th>Plural</th><th>Singular</th><th>Singular</th><th>Plural</th><th>Singular</th></tr>
           </thead>
-          <tbody>{draft.articleGroups.map((group, index) => {
-            const last = index === draft.articleGroups.length - 1;
-            return <tr key={`group:${index}`}>
-              <td><input value={group.name} onChange={(event) => renameArticleGroup(index, event.target.value)} aria-label="Article group name" /></td>
-              <td>{last
-                ? <span className="muted-cell">everything else</span>
-                : <input className="morphology-suffix-input" value={group.startsWith.join(", ")} onChange={(event) => updateArticleGroup(index, { startsWith: event.target.value.split(",").map((pattern) => pattern.trim()).filter(Boolean) })} aria-label={`Patterns for ${group.name}`} placeholder="sC, z, gn" />}</td>
-              {articleColumns.map((column) => <td key={`${column.gender}:${column.key}`}><input className="article-input" lang="it" value={group[column.gender][column.key]} onChange={(event) => updateArticle(index, column.gender, column.key, event.target.value)} aria-label={`${group.name} ${column.gender} ${column.label}`} /></td>)}
-              <td><div className="noun-pattern-actions">
-                <button type="button" className="neutral-button" onClick={() => moveArticleGroup(index, -1)} disabled={index === 0} aria-label={`Move ${group.name} up`}>↑</button>
-                <button type="button" className="neutral-button" onClick={() => moveArticleGroup(index, 1)} disabled={last} aria-label={`Move ${group.name} down`}>↓</button>
-                <button type="button" className="row-remove" onClick={() => removeArticleGroup(index)} aria-label={`Remove article group ${group.name}`}>×</button>
-              </div></td>
-            </tr>;
-          })}</tbody>
+          <tbody>{draft.articleGroups.map((group, index) => <tr key={`group:${index}`}>
+            <td><input value={group.name} onChange={(event) => renameArticleGroup(index, event.target.value)} aria-label="Article group name" /></td>
+            <td><PatternInput value={group.startsWith} onChange={(startsWith) => updateArticleGroup(index, { startsWith })} label={`Patterns for ${group.name}`} /></td>
+            {articleColumns.map((column) => <td key={`${column.gender}:${column.key}`}><input className="article-input" lang="it" value={group[column.gender][column.key]} onChange={(event) => updateArticle(index, column.gender, column.key, event.target.value)} aria-label={`${group.name} ${column.gender} ${column.label}`} /></td>)}
+            <td><button type="button" className="row-remove" onClick={() => removeArticleGroup(index)} aria-label={`Remove article group ${group.name}`}>×</button></td>
+          </tr>)}</tbody>
         </table>
       </div>
-      <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, articleGroups: [newArticleGroup(current.articleGroups), ...current.articleGroups] }))}>Add group</button></div>
+      <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, articleGroups: [newArticleGroup(current.articleGroups), ...current.articleGroups] }))}>Add group at top</button></div>
       </section>
 
       <section className="grammar-section" id="inference-sets" aria-labelledby="inference-heading">

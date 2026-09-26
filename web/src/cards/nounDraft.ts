@@ -164,7 +164,7 @@ export function nounDraftForEditing(card: NounCard, morphology: NounMorphology):
 
 /** The article group a form would get from its spelling alone, for "Automatic (…)" labels. */
 export function spellingGroup(word: string, morphology: NounMorphology) {
-  return word.trim() ? articleGroupForWord(word, morphology) : null;
+  return word.trim() ? articleGroupForWord(word, morphology) ?? "no match" : null;
 }
 
 /** Suggests a plural from the most specific two-number rule whose singular suffix matches. */

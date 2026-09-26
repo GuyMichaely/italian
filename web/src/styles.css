@@ -465,11 +465,12 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .syntax-fields-table .neutral-button { min-height: 30px; padding: 0 9px; }
 
 .article-groups-table { min-width: 980px; }
-.article-groups-table th.gender-heading { text-align: center; border-bottom: 0; padding-bottom: 2px; }
-.article-groups-table thead tr:first-child th { position: static; }
+.article-groups-table th.grouped-heading { text-align: center; border-bottom: 0; padding-bottom: 2px; }
+.article-groups-table thead th { position: static; }
+.letter-sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; max-width: 900px; }
+.letter-sets input { font-family: var(--mono); letter-spacing: .04em; }
 .article-groups-table input.article-input { max-width: 86px; text-align: center; }
 .article-groups-table td:nth-child(2) input { max-width: none; min-width: 230px; }
-.muted-cell { color: var(--faint); font-size: 13px; padding-left: 11px; font-style: italic; }
 .syntax-exclusions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .syntax-exclusions > span { color: var(--muted); font-size: 13px; }
 .exception-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }

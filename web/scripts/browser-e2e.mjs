@@ -44,6 +44,10 @@ const morphology = {
       excludedArticleGroups: [],
     },
   ],
+  articleLetters: {
+    vowels: ["a", "e", "i", "o", "u", "à", "á", "è", "é", "ì", "í", "ò", "ó", "ù", "ú"],
+    consonants: ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"],
+  },
   articleGroups: [
     {
       name: "lo",
@@ -59,7 +63,7 @@ const morphology = {
     },
     {
       name: "consonant",
-      startsWith: [],
+      startsWith: ["C"],
       masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
       feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
     },

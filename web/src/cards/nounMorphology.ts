@@ -52,9 +52,10 @@ export type NounArticleSet = {
 };
 
 /**
- * One row of the article table. A word belongs to the first group with a matching `startsWith`
- * pattern; a word matching no pattern belongs to the last group. Patterns are literal letters plus
- * `C` (any consonant) and `V` (any vowel), e.g. `sC` for s + consonant or `iV` for i + vowel.
+ * One row of the article table. Patterns describe how a word starts: lowercase letters match
+ * themselves, `V` matches any letter in the vowel set and `C` any letter in the consonant set,
+ * e.g. `sC` for s + consonant or `iV` for i + vowel. Groups are checked from top to bottom and the
+ * first group with a matching pattern wins.
  */
 export type NounArticleGroup = {
   name: string;
@@ -63,10 +64,17 @@ export type NounArticleGroup = {
   feminine: NounArticleSet;
 };
 
+/** The letters that the `V` and `C` pattern tokens stand for. */
+export type NounArticleLetters = {
+  vowels: string[];
+  consonants: string[];
+};
+
 export type NounMorphology = {
   declensionRules: NounDeclensionRule[];
   inferenceSets: NounInferenceSet[];
   syntaxRules: NounSyntaxRule[];
+  articleLetters: NounArticleLetters;
   articleGroups: NounArticleGroup[];
 };
 
@@ -213,6 +221,10 @@ export const defaultNounMorphology: NounMorphology = {
       excludedArticleGroups: [],
     },
   ],
+  articleLetters: {
+    vowels: ["a", "e", "i", "o", "u", "à", "á", "è", "é", "ì", "í", "ò", "ó", "ù", "ú"],
+    consonants: ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"],
+  },
   articleGroups: [
     {
       name: "lo",
@@ -228,7 +240,7 @@ export const defaultNounMorphology: NounMorphology = {
     },
     {
       name: "consonant",
-      startsWith: [],
+      startsWith: ["C"],
       masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
       feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
     },
@@ -341,30 +353,23 @@ export function articleProfileCompatibleWithForms(profile: NounArticleProfile, f
 
 /* ---------- Articles ---------- */
 
-const vowels = "aeiouàáèéìíòóùú";
-
-function patternMatches(word: string, pattern: string) {
-  if (pattern.length > word.length) return false;
-  for (let index = 0; index < pattern.length; index += 1) {
-    const token = pattern[index]!;
-    const letter = word[index]!;
-    if (token === "V") {
-      if (!vowels.includes(letter)) return false;
-    } else if (token === "C") {
-      if (vowels.includes(letter) || !/\p{L}/u.test(letter)) return false;
-    } else if (token.toLocaleLowerCase("it-IT") !== letter) {
-      return false;
-    }
-  }
-  return true;
+function patternMatches(word: string, pattern: string, letters: NounArticleLetters) {
+  const characters = [...word];
+  const tokens = [...pattern];
+  if (tokens.length > characters.length) return false;
+  return tokens.every((token, index) => {
+    const letter = characters[index]!;
+    if (token === "V") return letters.vowels.includes(letter);
+    if (token === "C") return letters.consonants.includes(letter);
+    return token === letter;
+  });
 }
 
-/** The article group a word's spelling puts it in: the first group with a matching pattern, else the last group. */
+/** The article group a word's spelling puts it in: the first group, top to bottom, with a matching pattern. */
 export function articleGroupForWord(word: string, morphology: NounMorphology) {
   const normalized = normalizeText(word);
-  const groups = morphology.articleGroups;
-  const match = groups.slice(0, -1).find((group) => group.startsWith.some((pattern) => patternMatches(normalized, pattern)));
-  return (match ?? groups.at(-1))?.name ?? null;
+  const match = morphology.articleGroups.find((group) => group.startsWith.some((pattern) => patternMatches(normalized, pattern, morphology.articleLetters)));
+  return match?.name ?? null;
 }
 
 export function articleSetFor(morphology: NounMorphology, groupName: string, gender: NounGender) {
@@ -458,11 +463,17 @@ export function resolveNounDetails(details: NounDetails, morphology: NounMorphol
   for (const override of [details.articleGroups.singular, details.articleGroups.plural]) {
     if (override && !groupNames.has(override)) throw new Error(`${label} references unknown article group ${override}.`);
   }
-  const singularGroup = singular ? details.articleGroups.singular ?? articleGroupForWord(singular, morphology) : null;
-  const pluralGroup = plural ? details.articleGroups.plural ?? articleGroupForWord(plural, morphology) : null;
+  const profile = details.articleProfile;
+  const groupFor = (form: string, needed: boolean, override: string | null) => {
+    if (!form) return null;
+    const group = override ?? articleGroupForWord(form, morphology);
+    if (!group && needed) throw new Error(`${label}: no article group matches “${form}”. Add a pattern under Grammar → Articles or set an exception.`);
+    return group;
+  };
+  const singularGroup = groupFor(singular, profile.definiteSingular || profile.indefiniteSingular, details.articleGroups.singular);
+  const pluralGroup = groupFor(plural, profile.definitePlural, details.articleGroups.plural);
   const singularArticles = singularGroup ? articleSetFor(morphology, singularGroup, details.gender) : null;
   const pluralArticles = pluralGroup ? articleSetFor(morphology, pluralGroup, details.gender) : null;
-  const profile = details.articleProfile;
   return {
     gender: details.gender,
     articleProfile: profile,
@@ -531,23 +542,50 @@ function normalizeArticleSet(value: unknown, label: string): NounArticleSet {
   };
 }
 
+function normalizeLetterList(value: unknown, label: string) {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array of letters.`);
+  const letters = [...new Set(value.map((item) => normalizeText(String(item ?? ""))))];
+  for (const letter of letters) {
+    if ([...letter].length !== 1 || !/\p{L}/u.test(letter)) throw new Error(`${label} must contain single letters; “${letter}” is not one.`);
+  }
+  if (!letters.length) throw new Error(`${label} must contain at least one letter.`);
+  return letters;
+}
+
+function normalizeArticleLetters(value: unknown): NounArticleLetters {
+  const letters = objectValue(value, "Article letters");
+  assertExactKeys(letters, "Article letters", ["vowels", "consonants"]);
+  const vowels = normalizeLetterList(letters.vowels, "Vowels");
+  const consonants = normalizeLetterList(letters.consonants, "Consonants");
+  const shared = vowels.filter((letter) => consonants.includes(letter));
+  if (shared.length) throw new Error(`A letter cannot be both a vowel and a consonant: ${shared.join(", ")}.`);
+  return { vowels, consonants };
+}
+
+/** Patterns keep `V` and `C` as set tokens and lowercase every other letter. */
+function normalizeArticlePattern(value: unknown, groupName: string) {
+  const raw = nonEmptyString(value, `Article group ${groupName} pattern`).normalize("NFC");
+  const pattern = [...raw].map((token) => token === "V" || token === "C" ? token : token.toLocaleLowerCase("it-IT")).join("");
+  if (/\s/u.test(pattern)) throw new Error(`Article group ${groupName} pattern “${raw}” must not contain spaces.`);
+  return pattern;
+}
+
 export function normalizeNounMorphology(value: unknown): NounMorphology {
   const payload = objectValue(value, "Noun morphology");
-  assertExactKeys(payload, "Noun morphology", ["articleGroups", "declensionRules", "inferenceSets", "syntaxRules"]);
+  assertExactKeys(payload, "Noun morphology", ["articleGroups", "articleLetters", "declensionRules", "inferenceSets", "syntaxRules"]);
   if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.inferenceSets) || !Array.isArray(payload.syntaxRules) || !Array.isArray(payload.articleGroups)) {
     throw new Error("Noun morphology needs articleGroups, declensionRules, inferenceSets, and syntaxRules arrays.");
   }
 
-  const articleGroups: NounArticleGroup[] = payload.articleGroups.map((raw, index, all) => {
+  const articleLetters = normalizeArticleLetters(payload.articleLetters);
+  const articleGroups: NounArticleGroup[] = payload.articleGroups.map((raw) => {
     const group = objectValue(raw, "Article group");
     assertExactKeys(group, "Article group", ["name", "startsWith", "masculine", "feminine"]);
     if (!Array.isArray(group.startsWith)) throw new Error("Article group startsWith must be an array.");
     const name = nonEmptyString(group.name, "Article group name");
-    const startsWith = [...new Set(group.startsWith.map((pattern) => nonEmptyString(pattern, `Article group ${name} pattern`)))];
-    if (index < all.length - 1 && !startsWith.length) throw new Error(`Article group ${name} needs at least one spelling pattern; only the last group matches everything else.`);
     return {
       name,
-      startsWith: index === all.length - 1 ? [] : startsWith,
+      startsWith: [...new Set(group.startsWith.map((pattern) => normalizeArticlePattern(pattern, name)))],
       masculine: normalizeArticleSet(group.masculine, `Article group ${name} masculine articles`),
       feminine: normalizeArticleSet(group.feminine, `Article group ${name} feminine articles`),
     };
@@ -661,5 +699,5 @@ export function normalizeNounMorphology(value: unknown): NounMorphology {
   });
   assertUniqueNames(syntaxRules, "syntax rule");
 
-  return { declensionRules, inferenceSets, syntaxRules, articleGroups };
+  return { declensionRules, inferenceSets, syntaxRules, articleLetters, articleGroups };
 }

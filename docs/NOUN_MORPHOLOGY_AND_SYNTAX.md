@@ -73,15 +73,17 @@ Rule names are unique and serve as references. `Irregular` and names starting wi
 
 ## Articles
 
-Articles come from an editable table of article groups. Each group has a name, spelling patterns, and the three masculine and three feminine articles:
+Articles come from an editable table of article groups. Each group has a name, spelling patterns, and the masculine and feminine definite singular, definite plural, and indefinite singular articles:
 
-| Group | Starts with | Masc. the (sg.) | Masc. the (pl.) | Masc. a | Fem. the (sg.) | Fem. the (pl.) | Fem. a |
+| Group | Starts with | Masc. definite singular | Masc. definite plural | Masc. indefinite singular | Fem. definite singular | Fem. definite plural | Fem. indefinite singular |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | lo | sC, z, gn, ps, pn, x, y, iV | lo | gli | uno | la | le | una |
 | vowel | V | l’ | gli | un | l’ | le | un’ |
-| consonant | everything else | il | i | un | la | le | una |
+| consonant | C | il | i | un | la | le | una |
 
-A form belongs to the first group with a matching pattern; a form matching none belongs to the last group. Patterns are letters plus `C` (any consonant) and `V` (any vowel), so `sC` is s + consonant and `iV` is i + vowel. Singular and plural forms are grouped separately, which is how `amico` / `amici` gives `l’amico` / `gli amici`.
+In a pattern, `V` stands for any letter in the vowel list and `C` for any letter in the consonant list; every other letter stands for itself, so `sC` is s + consonant and `iV` is i + vowel. Both lists are part of the morphology (`articleLetters`) and editable; by default `h`, `j`, `k`, `w`, `x`, and `y` are consonants. Groups are checked from top to bottom and the first group with a matching pattern wins, so `lo` must stay above `consonant` for `sC` to take effect. There is no catch-all group: a form that needs an article but matches no pattern is an error until a pattern or a noun exception covers it.
+
+Singular and plural forms are grouped separately, which is how `amico` / `amici` gives `l’amico` / `gli amici`.
 
 The table is read in two directions:
 
@@ -190,9 +192,10 @@ The editor cascades renames of rules, inference sets, and article groups, and re
     "declensionRules": [],
     "inferenceSets": [],
     "syntaxRules": [],
+    "articleLetters": { "vowels": [], "consonants": [] },
     "articleGroups": []
   }
 }
 ```
 
-The schema is strict. The earlier noun shape `{ rule, base, gender, articleProfile }` is retired; `scripts/migrate-noun-declensions.mjs` converts inventories that use it, adding the default article groups and the `lo` shorthand exclusions.
+The schema is strict. The earlier noun shape `{ rule, base, gender, articleProfile }` is retired; `scripts/migrate-noun-declensions.mjs` converts inventories that use it, adding the default letter lists, article groups, and `lo` shorthand exclusions.
