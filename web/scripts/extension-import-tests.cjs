@@ -37,10 +37,10 @@ function canonicalNoun(overrides = {}) {
     setName: null,
     tags: [],
     details: {
-      rule: "-chio → -chi",
-      base: "spec",
+      declension: { kind: "rule", rule: "-chio → -chi", base: "spec" },
       gender: "masculine",
       articleProfile: nounArticleProfiles.all,
+      articleGroups: { singular: null, plural: null },
     },
     ...overrides,
   };
@@ -74,7 +74,23 @@ test("extension imports reject the retired noun forms/details shape", () => {
 
   assert.throws(
     () => extensionCandidatesToCards([legacy], defaultNounMorphology),
-    /must contain exactly.*articleProfile.*base.*gender.*rule/i,
+    /must contain exactly.*articleGroups.*articleProfile.*declension.*gender/i,
+  );
+});
+
+test("extension imports reject the retired rule/base noun schema", () => {
+  const retired = canonicalNoun({
+    details: {
+      rule: "-chio → -chi",
+      base: "spec",
+      gender: "masculine",
+      articleProfile: nounArticleProfiles.all,
+    },
+  });
+
+  assert.throws(
+    () => extensionCandidatesToCards([retired], defaultNounMorphology),
+    /must contain exactly.*articleGroups.*articleProfile.*declension.*gender/i,
   );
 });
 
@@ -90,7 +106,7 @@ test("extension imports reject the retired articleMode noun schema", () => {
 
   assert.throws(
     () => extensionCandidatesToCards([retired], defaultNounMorphology),
-    /must contain exactly.*articleProfile.*base.*gender.*rule/i,
+    /must contain exactly.*articleGroups.*articleProfile.*declension.*gender/i,
   );
 });
 
@@ -98,10 +114,10 @@ test("extension imports reject noun article profiles unsupported by their declen
   const invalid = canonicalNoun({
     english: "clothes",
     details: {
-      rule: "Plural form is the base",
-      base: "vestiti",
+      declension: { kind: "rule", rule: "Plural form is the base", base: "vestiti" },
       gender: "masculine",
       articleProfile: nounArticleProfiles.all,
+      articleGroups: { singular: null, plural: null },
     },
   });
 

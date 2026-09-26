@@ -11,7 +11,7 @@ import {
   type AdverbBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
-import { articleProfileOptions, emptyNounDraft, nounCardFromDraft, nounDraftForEditing, type NounDraft } from "../cards/nounDraft";
+import { articleProfileOptions, emptyNounDraft, irregularRuleValue, nounCardFromDraft, nounDraftForEditing, spellingGroup, type NounDraft } from "../cards/nounDraft";
 import { standardAdjectivePattern } from "../study/logic";
 import { NounDerivedPreview, NounRuleSelect, SetField, TagsField } from "./CardEditorFields";
 import { Sheet } from "./Sheet";
@@ -116,9 +116,27 @@ export function WordDrawer({
             </label>
           </div>
           <label className="field">
-            <span>Declension rule</span>
+            <span>Declension rule{noun.rule === irregularRuleValue ? " · forms are stored exactly as typed" : ""}</span>
             <NounRuleSelect label="Declension rule" value={noun.rule} morphology={morphology} onChange={(rule) => setNoun((draft) => ({ ...draft, rule }))} />
           </label>
+          <details className="exceptions-box" open={Boolean(noun.singularGroup || noun.pluralGroup)}>
+            <summary>Article exceptions{noun.singularGroup || noun.pluralGroup ? " · on" : ""}</summary>
+            <p className="field-hint">Articles normally follow the spelling rules in Grammar → Articles. Override a form’s group when a word breaks them, e.g. plural “dei” in the “lo” group gives “gli dei”.</p>
+            <div className="field-row">
+              {(["singular", "plural"] as const).map((number) => {
+                const form = number === "singular" ? noun.singular : noun.plural;
+                const field = number === "singular" ? "singularGroup" : "pluralGroup";
+                const automatic = spellingGroup(form, morphology);
+                return <label className="field" key={number}>
+                  <span>{number === "singular" ? "Singular" : "Plural"} group</span>
+                  <select value={noun[field]} disabled={!form.trim()} onChange={(event) => setNoun((draft) => ({ ...draft, [field]: event.target.value }))}>
+                    <option value="">Automatic{automatic ? ` (${automatic})` : ""}</option>
+                    {morphology.articleGroups.map((group) => <option key={group.name} value={group.name}>{group.name}</option>)}
+                  </select>
+                </label>;
+              })}
+            </div>
+          </details>
           <div className="derived-box"><span className="field-label">Generated forms</span><NounDerivedPreview draft={noun} morphology={morphology} /></div>
         </>}
         {verb && <>

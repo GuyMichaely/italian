@@ -1,6 +1,8 @@
-const endpointKey = "parola:storage-endpoint";
-const persistLocalKey = "parola:sync-persist-local";
-const loadPolicyKey = "parola:sync-load-policy";
+import { storageKey } from "./keys";
+
+const endpointKey = storageKey("storage-endpoint");
+const persistLocalKey = storageKey("sync-persist-local");
+const loadPolicyKey = storageKey("sync-load-policy");
 
 export type SyncLoadPolicy = "automatic" | "ask";
 

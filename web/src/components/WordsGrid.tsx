@@ -49,7 +49,7 @@ function cardFromRow(row: GridRow, id: number, morphology: NounMorphology): Flas
   if (row.type === "noun") {
     const resolved = resolveNounDraft(row, morphology);
     if (!resolved.ok) throw new Error(resolved.error);
-    return { ...common, type: "noun", english, details: resolved.definition };
+    return { ...common, type: "noun", english, details: resolved.details };
   }
   if (row.type === "verb") {
     const fields = [row.infinitive, row.io, row.tu, row.luiLei, row.noi, row.voi, row.loro, row.participle].map((value) => value.trim());

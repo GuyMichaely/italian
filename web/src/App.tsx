@@ -12,6 +12,8 @@ import {
   type SyncLoadPolicy,
 } from "./storage";
 import type { Flashcard } from "./cards/types";
+import { cardDuplicateKey } from "./storage/cardCodec";
+import { hasProductionInventory, readProductionInventory } from "./storage/productionInventory";
 import {
   cloneNounMorphology,
   defaultNounMorphology,
@@ -30,7 +32,6 @@ import {
   type ExtensionImportResult,
 } from "./extensionImport";
 import {
-  normalizeAnswer,
   shuffled,
   withEnglishPromptFirst,
   type StudyItem,
@@ -51,12 +52,6 @@ import { WordsView, type WordsTypeFilter } from "./views/WordsView";
 import { GrammarView } from "./views/GrammarView";
 import { SettingsView } from "./views/SettingsView";
 
-function duplicateCardKey(card: Flashcard) {
-  const italianIdentity = card.type === "noun"
-    ? `${normalizeAnswer(card.details.rule)}\u0000${normalizeAnswer(card.details.base)}`
-    : normalizeAnswer(card.italian);
-  return `${card.type}\u0000${normalizeAnswer(card.english)}\u0000${italianIdentity}`;
-}
 
 function cardItalianText(card: Flashcard, morphology: NounMorphology) {
   if (card.type !== "noun") return card.italian;
@@ -71,7 +66,8 @@ function cardSearchText(card: Flashcard, morphology: NounMorphology) {
   } catch {
     // A noun whose rule is broken is still searchable by its other fields.
   }
-  const base = card.type === "noun" ? card.details.base : "";
+  const declension = card.type === "noun" ? card.details.declension : null;
+  const base = declension?.kind === "rule" ? declension.base : "";
   return `${card.english} ${italian} ${base} ${card.setName ?? ""} ${card.tags.join(" ")}`.toLowerCase();
 }
 
@@ -109,6 +105,7 @@ export default function Home() {
   const [mistakeOnlyKeys, setMistakeOnlyKeys] = useState<string[] | null>(null);
   const [mistakeTagName, setMistakeTagName] = useState("");
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
+  const [productionAvailable] = useState(hasProductionInventory);
   const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
 
   const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
@@ -456,10 +453,10 @@ export default function Home() {
   }
 
   async function addBatch(newCards: Flashcard[]) {
-    const existingKeys = new Set(cards.map(duplicateCardKey));
+    const existingKeys = new Set(cards.map(cardDuplicateKey));
     const newKeys = new Set<string>();
     for (const newCard of newCards) {
-      const key = duplicateCardKey(newCard);
+      const key = cardDuplicateKey(newCard);
       if (existingKeys.has(key) || newKeys.has(key)) {
         throw new Error(`A ${newCard.type} card for “${cardItalianText(newCard, nounMorphology)}” / “${newCard.english}” already exists.`);
       }
@@ -567,6 +564,25 @@ export default function Home() {
     setSessionComplete(false);
   }
 
+  /** Prototype-only: copy the current Parola app's words into this build's separate storage. */
+  async function copyProductionInventory() {
+    if (cards.length && !window.confirm("Replace this prototype's words and grammar with a copy from the current Parola app? The current app is not changed.")) return;
+    setSyncWarning("");
+    try {
+      const state = readProductionInventory();
+      setSaveState("saving");
+      const saved = await storage.replaceInventory(state);
+      setCards(saved.cards);
+      setNounMorphology(saved.nounMorphology);
+      removeUnavailableInventoryTags(saved.cards);
+      resetStudyProgress();
+      setSaveState("saved");
+    } catch (error) {
+      setSaveState("failed");
+      setSyncWarning(error instanceof Error ? `Could not copy from the current app: ${error.message}` : "Could not copy from the current app.");
+    }
+  }
+
   async function syncNow() {
     if (!storage.syncNow) return;
     const nextState = await storage.syncNow();
@@ -615,6 +631,7 @@ export default function Home() {
         savingTag={saveState === "saving"}
         warning={syncWarning}
         onAddWords={() => setAdding(true)}
+        onCopyProduction={productionAvailable ? () => void copyProductionInventory() : undefined}
       />}
       {route === "words" && <WordsView
         loading={loadingCards}
@@ -640,10 +657,11 @@ export default function Home() {
         onBulkSet={bulkSet}
         onBulkDelete={bulkDelete}
         onAddWords={() => setAdding(true)}
+        onCopyProduction={productionAvailable ? () => void copyProductionInventory() : undefined}
       />}
       {route === "grammar" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
-        <GrammarView cards={cards} morphology={nounMorphology} onSave={replaceNounInventory} />
+        <GrammarView cards={cards} morphology={nounMorphology} onSave={replaceNounInventory} onOpenCard={setEditingCard} />
       </>}
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
@@ -651,6 +669,7 @@ export default function Home() {
           storageProps={{ storage, endpoint: storageEndpoint, persistLocal, loadPolicy: syncLoadPolicy, onApply: applyStorageSettings, onSyncNow: syncNow }}
           keywords={answerKeywords}
           onKeywords={setAnswerKeywords}
+          onCopyProduction={productionAvailable ? () => void copyProductionInventory() : undefined}
         />
       </>}
     </AppShell>

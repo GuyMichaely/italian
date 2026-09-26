@@ -6,37 +6,44 @@ Parola keeps a noun's lexical definition separate from the study syntax used to 
 
 A noun card stores four facts:
 
-- `rule`, the name of its declension rule;
-- `base`, the string transformed by that rule;
+- `declension`, how its forms are produced: a declension `rule` and `base`, or an irregular noun's forms;
 - `gender`;
-- `articleProfile`, an object containing the noun's three article capabilities.
+- `articleProfile`, an object containing the noun's three article capabilities;
+- `articleGroups`, per-form article-group exceptions (`null` means "from spelling").
 
-The article capabilities are:
+The article capabilities are `definiteSingular`, `definitePlural`, and `indefiniteSingular`.
 
-- `definiteSingular`;
-- `definitePlural`;
-- `indefiniteSingular`.
-
-For example:
+A regular noun:
 
 ```json
 {
   "type": "noun",
   "english": "mirror",
   "details": {
-    "rule": "-chio → -chi",
-    "base": "spec",
+    "declension": { "kind": "rule", "rule": "-chio → -chi", "base": "spec" },
     "gender": "masculine",
-    "articleProfile": {
-      "definiteSingular": true,
-      "definitePlural": true,
-      "indefiniteSingular": true
-    }
+    "articleProfile": { "definiteSingular": true, "definitePlural": true, "indefiniteSingular": true },
+    "articleGroups": { "singular": null, "plural": null }
   }
 }
 ```
 
-A noun card does not store top-level `italian`, generated singular/plural strings, or article strings. The active morphology generates its Italian surface forms from `rule` and `base`.
+An irregular noun stores its forms outright; an empty form means the noun lacks that number:
+
+```json
+{
+  "type": "noun",
+  "english": "god",
+  "details": {
+    "declension": { "kind": "irregular", "singular": "dio", "plural": "dei" },
+    "gender": "masculine",
+    "articleProfile": { "definiteSingular": true, "definitePlural": true, "indefiniteSingular": true },
+    "articleGroups": { "singular": null, "plural": "lo" }
+  }
+}
+```
+
+A noun card does not store top-level `italian`, generated forms of a regular noun, or article strings. Articles always come from the article table.
 
 ## Declension rules
 
@@ -60,61 +67,49 @@ singular entry only        -> singular only
 plural entry only          -> plural only
 ```
 
-A blank suffix means the base itself is the surface form. `Plural form is the base` therefore represents a plural-only noun by storing its plural form as the base.
+A blank suffix means the base itself is the surface form. Generation appends the suffix; recognition removes it.
 
-Generation appends the configured suffix. Recognition reverses that operation by removing the suffix.
+Rule names are unique and serve as references. `Irregular` and names starting with `:` are reserved. Renaming a rule in the grammar editor updates inference-set references and noun-card references when saved.
 
-Rule names are unique and serve as references. Renaming a rule in the morphology editor updates inference-set references and noun-card references when saved.
+## Articles
+
+Articles come from an editable table of article groups. Each group has a name, spelling patterns, and the three masculine and three feminine articles:
+
+| Group | Starts with | Masc. the (sg.) | Masc. the (pl.) | Masc. a | Fem. the (sg.) | Fem. the (pl.) | Fem. a |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| lo | sC, z, gn, ps, pn, x, y, iV | lo | gli | uno | la | le | una |
+| vowel | V | l’ | gli | un | l’ | le | un’ |
+| consonant | everything else | il | i | un | la | le | una |
+
+A form belongs to the first group with a matching pattern; a form matching none belongs to the last group. Patterns are letters plus `C` (any consonant) and `V` (any vowel), so `sC` is s + consonant and `iV` is i + vowel. Singular and plural forms are grouped separately, which is how `amico` / `amici` gives `l’amico` / `gli amici`.
+
+The table is read in two directions:
+
+- **Which article does this word take?** A form's group plus gender, definiteness, and number gives exactly one article.
+- **What does this typed article say?** Every row containing the article. `lo` is masculine singular definite; `l’` is singular definite of either gender, so an answer using it needs a gender marker. Articles ending in an apostrophe are treated as elided and split from the following word (`l’amica` → `l’` + `amica`).
+
+### Exceptions
+
+Where spelling and pronunciation disagree, a noun overrides a form's group:
+
+```text
+dio / dei with plural group "lo"   -> il dio, gli dei, un dio
+chef with both groups "lo"          -> lo chef, gli chef, uno chef
+```
+
+Exceptions change a form's group only, never its gender or number. The Grammar page lists every noun that is irregular or has an exception.
 
 ## Number and article availability are independent
 
-Declension number availability and article availability are separate facts.
+A noun can have singular and plural forms while enabling only `definiteSingular`. The structural checks only require an enabled article capability to have the form it needs: `definitePlural` requires a plural form; `definiteSingular` and `indefiniteSingular` require a singular form.
 
-A noun can have singular and plural forms while enabling only `definiteSingular`. Its plural form still exists, but the noun definition says definite plural and indefinite singular article constructions are not accepted for that card's sense.
-
-Parola therefore does not derive `articleProfile` from the declension rule and does not derive number availability from `articleProfile`.
-
-The structural compatibility checks require an enabled article capability to have the noun form it needs. `definitePlural` requires a plural form. `definiteSingular` and `indefiniteSingular` require a singular form.
-
-## Article profiles
-
-The profile is represented as the product of three Boolean capabilities. Parola restricts that product to four canonical combinations:
-
-| Definite singular | Definite plural | Indefinite singular | Meaning |
-| --- | --- | --- | --- |
-| yes | yes | yes | all three article constructions |
-| yes | no | no | definite singular only |
-| no | yes | no | definite plural only |
-| no | no | no | no articles |
-
-The other four Boolean combinations are rejected by the current schema.
-
-Parola calculates the actual Italian article spelling from gender and the generated noun form. The profile controls which of those article constructions are available.
-
-For example, a masculine `specchio` card with all three capabilities yields `lo specchio`, `gli specchi`, and `uno specchio`. A card with all three capabilities disabled yields no article forms.
-
-The profile describes the noun sense being taught. It is not a claim that no marked or context-dependent Italian construction can ever use the word differently.
+The profile is restricted to four combinations: all three, definite singular only, definite plural only, or none.
 
 ## Inference sets
 
-An inference set is a named learning-policy group containing declension-rule names.
+An inference set is a named learning-policy group of declension-rule names. A syntax can infer only rules in its selected inference set. A noun can use a rule that is not currently available to a shorthand syntax, in which case only a syntax whose set includes that rule can match it.
 
-```json
-{
-  "name": "Learned shorthand",
-  "declensionRules": [
-    "Singular form is the base",
-    "Plural form is the base",
-    "Unchanged singular / plural",
-    "-o → -i",
-    "-e → -i"
-  ]
-}
-```
-
-A syntax can infer only rules in its selected inference set.
-
-This remains separate from the noun's actual rule. A noun can use a rule that is not currently available to a shorthand syntax.
+Irregular nouns belong to every inference set implicitly, but an irregular form cannot be inferred from another form. A reading of an answer as an irregular noun is therefore offered only when the answer supplies every form: both numbers, or one number together with a singular-only or plural-only marker.
 
 ## Syntax rules
 
@@ -123,158 +118,70 @@ A syntax rule stores:
 - `name`;
 - optional or required markers;
 - ordered input fields;
-- `inferenceSet`.
-
-It does not store an article profile or a number mode. Article and number claims are derived from the syntax structure at runtime.
+- `inferenceSet`;
+- `excludedArticleGroups`, article groups whose nouns this syntax does not accept.
 
 ### Article-bearing syntax
 
-An article field asserts only the article capability represented by that field.
+Each article field declares its definiteness and number, and the typed article must be one the table allows for that combination. The field also asserts the matching article capability:
 
 ```text
-<definite singular article> <singular noun>
-    requires articleProfile.definiteSingular
-
-<definite plural article> <plural noun>
-    requires articleProfile.definitePlural
-
-<indefinite singular article> <singular noun>
-    requires articleProfile.indefiniteSingular
+<definite singular article> <singular noun>     requires articleProfile.definiteSingular
+<definite plural article> <plural noun>         requires articleProfile.definitePlural
+<indefinite singular article> <singular noun>   requires articleProfile.indefiniteSingular
 ```
 
-This does not require exact profile equality. `il libro` can match a noun with all three capabilities or one with only definite singular enabled. `i libri` can match all-three or definite-plural-only. An indefinite singular answer can match only the all-three profile under the current four-profile model.
-
-The article spelling itself is checked against the inferred noun form and gender.
-
-Unambiguous articles also supply gender evidence. `lo`, `il`, `i`, `gli`, `un`, and `uno` convey masculine. `la`, `le`, `una`, and `un'` convey feminine. `l'` is ambiguous, so the default syntax requires an explicit gender marker for it. The live parser preview shows article-derived gender as soon as that evidence is available.
+This does not require exact profile equality: `il libro` matches a noun with all three capabilities or with definite singular only.
 
 ### Articleless syntax
 
-A syntax with no article field asserts that all three article capabilities are false.
+A syntax with no article field asserts that all three article capabilities are false. It must require an explicit gender marker and a singular-only or plural-only marker, for example `f s Venezia`.
 
-The canonical articleless syntaxes require both an explicit gender marker and a singular-only or plural-only marker, for example:
+### Article-group exclusions
 
-```text
-f s Venezia
-```
+The default shorthand syntaxes exclude the `lo` group, so `lo specchio` and `lo zaino` must be answered with the full declension (`lo specchio gli specchi uno`). This replaces the former hardcoded "lo nouns need the full declension" policy and can be edited per syntax. Exclusions are checked against the card's own group (including exceptions) when grading; the preview also uses the typed word's spelling to steer toward a non-excluded syntax.
 
-That answer asserts feminine gender, singular-only morphology, and no articles.
-
-### Number constraints
-
-A noun field identifies the surface form being supplied. A singular noun field can be recognized by any inference rule that has a singular form; it does not by itself assert that the noun is singular-only.
-
-A required singular-only or plural-only marker is stronger. When present, it constrains inference to a declension rule with exactly that number availability.
-
-## `lo` full-declension policy
-
-Masculine nouns whose generated definite singular article is `lo` are excluded from shorthand candidate generation. This is a study policy derived from the generated article, not a property stored on individual noun cards or declension rules.
-
-For the ordinary two-number, all-articles case, the learner must use the full-declension syntax:
-
-```text
-lo specchio gli specchi uno
-lo zaino gli zaini uno
-```
-
-`lo specchio` and `lo zaino` are structurally complete definite-singular syntaxes, but they produce no allowed shorthand candidate and are therefore wrong.
-
-The rule applies even when the noun's declension rule is in `Learned shorthand`. Adding `-chio → -chi` to `Learned shorthand` no longer makes `lo specchio` sufficient. The full declension still does.
-
-## Candidate parsing
+## Verification
 
 For each typed noun answer Parola:
 
-1. Tries every syntax rule against the typed tokens.
-2. Parses explicit gender and singular/plural-only markers.
-3. Reads gender evidence from supplied articles.
-4. Derives article constraints from the syntax fields.
-5. Loads the syntax's inference set.
-6. Tries every applicable declension rule in that set.
-7. Uses the typed noun form or forms to infer a base.
-8. Validates typed article spellings against the inferred form and gender.
-9. Excludes `lo`-class candidates from non-full shorthand syntaxes.
-10. Produces candidates containing inferred `rule`, `base`, and `gender`, plus the syntax-derived article constraint.
-11. Only then compares candidates with the prompted card.
+1. Tries every syntax against the typed tokens and parses gender and singular/plural-only markers.
+2. Reads each typed article through the article table: it must fit its field's definiteness and number, and together the articles (or a marker) must settle the gender.
+3. For each rule in the syntax's inference set, recovers a base from the typed noun form or forms. Several noun fields must agree on one base. It also adds an `Irregular` reading when the answer supplies every form.
+4. Only then compares these readings with the prompted card. A reading matches when:
+   - its rule and base (or, for irregular nouns, every form) equal the card's;
+   - its gender equals the card's;
+   - the card's article profile allows the syntax's article fields;
+   - the card's article group is not excluded by the syntax;
+   - each typed article equals the article the table gives for the card's form group (with exceptions), gender, definiteness, and number.
 
-The target card is not consulted while candidates are generated.
+Steps 1–3 never consult the card, so the live preview can show the selected syntax, the fields read so far, article-derived gender, missing fields, and possible declensions without revealing the answer.
 
 The result rules are:
 
-- Any matching candidate means correct.
-- If no candidate matches but at least one syntax is structurally complete, the answer is wrong.
-- If no syntax is structurally complete, the input is invalid or incomplete.
+- Any matching reading means correct.
+- If nothing matches but at least one syntax is complete, the answer is wrong.
+- If no syntax is complete, the input is invalid or incomplete and cannot be submitted.
 
-A complete syntax can therefore be wrong even if its inference set produces zero candidates.
+## Examples
 
-## Example: `specchio`
+`il libro` for `-o → -i` / `libr` / masculine: `il` fits the definite singular field and says masculine; `-o → -i` recovers `libr`; the card's `libro` is in the consonant group, which gives `il`. Correct. `lo libro` reads the same declension but the expected article is `il`, so it is wrong; the preview still lists the possible declensions.
 
-The card is:
+`gli dei` for the irregular `dio` / `dei`: the preview lists every rule whose plural ending fits `dei`, but the shorthand does not supply the singular, so no irregular reading is offered and the answer is wrong. `il dio gli dei un` gives an irregular reading whose forms match, and the plural exception makes `gli` the expected plural article. Correct.
 
-```text
-rule: -chio → -chi
-base: spec
-gender: masculine
-articleProfile: definiteSingular=true, definitePlural=true, indefiniteSingular=true
-```
-
-Its surface forms are derived:
-
-```text
-specchio / specchi
-lo specchio / gli specchi / uno specchio
-```
-
-`lo` immediately supplies masculine gender evidence to the parser. However, `lo specchio` is still insufficient because `specchio` belongs to the `lo` class. The accepted full answer is:
-
-```text
-lo specchio gli specchi uno
-```
-
-`m specchio` is not an article-taking shorthand in the current default syntax set.
-
-## Example: `Venezia`
-
-A Venice card is represented as:
-
-```text
-rule: Singular form is the base
-base: Venezia
-gender: feminine
-articleProfile: definiteSingular=false, definitePlural=false, indefiniteSingular=false
-```
-
-The default articleless singular syntax accepts:
-
-```text
-f s Venezia
-```
-
-`f Venezia` is incomplete because it does not explicitly state singular-only behavior. `la Venezia` is a complete article-bearing syntax, but it is wrong for the articleless card because its definite-singular capability is disabled.
+`f s Venezia` for an articleless, singular-only feminine card is correct; `f Venezia` is incomplete; `la Venezia` is complete but wrong because the card allows no articles.
 
 ## Names as references
 
-Declension rules and inference sets use their unique names as references:
-
 ```text
-noun card          -> rule name
+noun card          -> rule name, article-group names (exceptions)
 inference set      -> declension rule names
-syntax rule        -> inference-set name
+syntax rule        -> inference-set name, article-group names (exclusions)
 ```
 
-The editor updates those references when names change and rejects duplicate names.
-
-## Live preview
-
-The live preview shows the selected syntax, consumed fields, missing fields, article-derived gender, and declension names inferred from that syntax.
-
-Part of speech is shown with the English prompt rather than inside the `Parola reads this as` preview.
-
-Candidate generation does not consult the prompted card's stored rule, base, gender, or article profile, so the preview does not reveal which candidate is correct before submission.
+The editor cascades renames of rules, inference sets, and article groups, and rejects duplicates. An article group used by a noun exception cannot be deleted.
 
 ## Inventory state
-
-Cards and noun morphology form one inventory state:
 
 ```json
 {
@@ -282,11 +189,10 @@ Cards and noun morphology form one inventory state:
   "nounMorphology": {
     "declensionRules": [],
     "inferenceSets": [],
-    "syntaxRules": []
+    "syntaxRules": [],
+    "articleGroups": []
   }
 }
 ```
 
-The schema is strict. Noun cards with a top-level `italian` field are retired, as are noun `articleMode` fields and syntax `articleMode`/`numberMode` fields.
-
-Storage validates the snapshot as a whole. Every noun must reference an existing rule, and every enabled article capability must have the noun form it requires. Noun surface forms are derived rather than stored and cross-checked against a redundant value.
+The schema is strict. The earlier noun shape `{ rule, base, gender, articleProfile }` is retired; `scripts/migrate-noun-declensions.mjs` converts inventories that use it, adding the default article groups and the `lo` shorthand exclusions.

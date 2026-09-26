@@ -5,6 +5,7 @@ import type {
   VerbCard,
 } from "./types";
 import { cardTypes } from "../cardTypes";
+import { storageKey } from "../storage/keys";
 import { emptyNounDraft, type NounDraft } from "./nounDraft";
 
 export type NounBatchRow = NounDraft & {
@@ -48,10 +49,10 @@ export type BatchDraft<Row> = {
   rows: Row[];
 };
 
-const cardAdderTypeKey = "parola:add-words:type";
+const cardAdderTypeKey = storageKey("add-words:type");
 
 export function cardAdderDraftKey(type: CardType) {
-  return `parola:add-words:${type}`;
+  return storageKey(`add-words:${type}`);
 }
 
 export function readCardAdderType(): CardType {

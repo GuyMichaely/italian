@@ -1,4 +1,4 @@
-import type { CardType, Flashcard } from "../cards/types";
+import type { CardType, Flashcard, NounArticleGroupOverrides, NounDeclension } from "../cards/types";
 import { normalizeNounArticleProfile } from "../cards/nounMorphology";
 import { cardTypes } from "../cardTypes";
 
@@ -19,6 +19,36 @@ function stringField(value: unknown) {
   return String(value ?? "");
 }
 
+function normalizeNounDeclension(value: unknown, id: number): NounDeclension {
+  const declension = objectValue(value, `Noun card ${id} declension`);
+  if (declension.kind === "rule") {
+    assertExactKeys(declension, `Noun card ${id} rule declension`, ["kind", "rule", "base"]);
+    const rule = String(declension.rule ?? "").trim();
+    if (!rule) throw new Error(`Noun card ${id} needs a declension rule name.`);
+    return { kind: "rule", rule, base: String(declension.base ?? "").normalize("NFC") };
+  }
+  if (declension.kind === "irregular") {
+    assertExactKeys(declension, `Noun card ${id} irregular declension`, ["kind", "singular", "plural"]);
+    const singular = String(declension.singular ?? "").normalize("NFC").trim();
+    const plural = String(declension.plural ?? "").normalize("NFC").trim();
+    if (!singular && !plural) throw new Error(`Irregular noun card ${id} needs a singular or plural form.`);
+    return { kind: "irregular", singular, plural };
+  }
+  throw new Error(`Noun card ${id} declension must be a rule or irregular declension.`);
+}
+
+function normalizeArticleGroupOverrides(value: unknown, id: number): NounArticleGroupOverrides {
+  const overrides = objectValue(value, `Noun card ${id} article groups`);
+  assertExactKeys(overrides, `Noun card ${id} article groups`, ["singular", "plural"]);
+  const group = (raw: unknown) => {
+    if (raw === null) return null;
+    const name = String(raw ?? "").trim();
+    if (!name) throw new Error(`Noun card ${id} article group exceptions must be a group name or null.`);
+    return name;
+  };
+  return { singular: group(overrides.singular), plural: group(overrides.plural) };
+}
+
 export function cloneCards(cards: Flashcard[]): Flashcard[] {
   return cards.map((card) => {
     if (card.type === "noun") {
@@ -27,7 +57,9 @@ export function cloneCards(cards: Flashcard[]): Flashcard[] {
         tags: [...card.tags],
         details: {
           ...card.details,
+          declension: { ...card.details.declension },
           articleProfile: { ...card.details.articleProfile },
+          articleGroups: { ...card.details.articleGroups },
         },
       };
     }
@@ -40,7 +72,10 @@ function normalizeIdentityText(value: string) {
 }
 
 function nounIdentity(card: Extract<Flashcard, { type: "noun" }>) {
-  return `${normalizeIdentityText(card.details.rule)}\u0000${normalizeIdentityText(card.details.base)}`;
+  const declension = card.details.declension;
+  return declension.kind === "rule"
+    ? `rule\u0000${normalizeIdentityText(declension.rule)}\u0000${normalizeIdentityText(declension.base)}`
+    : `irregular\u0000${normalizeIdentityText(declension.singular)}\u0000${normalizeIdentityText(declension.plural)}`;
 }
 
 export function cardDuplicateKey(card: Flashcard) {
@@ -49,7 +84,9 @@ export function cardDuplicateKey(card: Flashcard) {
 }
 
 function cardIdentityLabel(card: Flashcard) {
-  return card.type === "noun" ? `${card.details.rule} / base ${card.details.base || "∅"}` : card.italian;
+  if (card.type !== "noun") return card.italian;
+  const declension = card.details.declension;
+  return declension.kind === "rule" ? `${declension.rule} / base ${declension.base || "∅"}` : [declension.singular, declension.plural].filter(Boolean).join(" / ");
 }
 
 export function assertNoDuplicateCards(existing: Flashcard[], incoming: Flashcard[]) {
@@ -82,20 +119,17 @@ export function normalizeCard(value: unknown): Flashcard {
     if (Object.prototype.hasOwnProperty.call(raw, "italian")) {
       throw new Error(`Noun card ${id} must not store a derived italian field.`);
     }
-    assertExactKeys(details, `Noun card ${id} details`, ["articleProfile", "base", "gender", "rule"]);
-    const rule = String(details.rule ?? "").trim();
+    assertExactKeys(details, `Noun card ${id} details`, ["articleGroups", "articleProfile", "declension", "gender"]);
     const gender = details.gender;
-    if (!rule || (gender !== "masculine" && gender !== "feminine")) {
-      throw new Error(`Noun card ${id} does not use the current rule/base/gender/article-profile schema.`);
-    }
+    if (gender !== "masculine" && gender !== "feminine") throw new Error(`Noun card ${id} has an invalid gender.`);
     return {
       ...common,
       type: "noun",
       details: {
-        rule,
-        base: String(details.base ?? "").normalize("NFC"),
+        declension: normalizeNounDeclension(details.declension, id),
         gender,
         articleProfile: normalizeNounArticleProfile(details.articleProfile, `Noun card ${id} article profile`),
+        articleGroups: normalizeArticleGroupOverrides(details.articleGroups, id),
       },
     };
   }

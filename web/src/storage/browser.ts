@@ -8,8 +8,9 @@ import {
 import { assertNoDuplicateCards, cloneCards, normalizeCard } from "./cardCodec";
 import { assertInventoryState } from "./inventoryState";
 import type { CardStorage, InventoryState } from "./types";
+import { storageKey } from "./keys";
 
-const inventoryKey = "parola:inventory";
+const inventoryKey = storageKey("inventory");
 
 export interface InventorySnapshot extends InventoryState {
   updatedAt: string | null;

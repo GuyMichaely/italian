@@ -1,4 +1,5 @@
 import type { CardType, Flashcard } from "../cards/types";
+import { storageKey } from "../storage/keys";
 
 export type PromptLanguage = "english" | "italian";
 export type PromptMode = PromptLanguage | "both";
@@ -37,8 +38,8 @@ export const defaultAnswerKeywords: AnswerKeywords = {
   pluralOnly: "p",
 };
 
-const studySetupKey = "parola:study-setup";
-const answerKeywordsKey = "parola:answer-keywords";
+const studySetupKey = storageKey("study-setup");
+const answerKeywordsKey = storageKey("answer-keywords");
 
 export function readStudySetup(): StudySetup {
   if (typeof window === "undefined") return defaultStudySetup;

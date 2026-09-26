@@ -27,6 +27,7 @@ const morphology = {
         { kind: "noun", number: "singular" },
       ],
       inferenceSet: "All test rules",
+      excludedArticleGroups: ["lo"],
     },
     {
       name: "Full declension",
@@ -40,6 +41,27 @@ const morphology = {
         { kind: "article", definiteness: "indefinite", number: "singular" },
       ],
       inferenceSet: "All test rules",
+      excludedArticleGroups: [],
+    },
+  ],
+  articleGroups: [
+    {
+      name: "lo",
+      startsWith: ["sC", "z", "gn", "ps", "pn", "x", "y", "iV"],
+      masculine: { definiteSingular: "lo", definitePlural: "gli", indefiniteSingular: "uno" },
+      feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
+    },
+    {
+      name: "vowel",
+      startsWith: ["V"],
+      masculine: { definiteSingular: "l’", definitePlural: "gli", indefiniteSingular: "un" },
+      feminine: { definiteSingular: "l’", definitePlural: "le", indefiniteSingular: "un’" },
+    },
+    {
+      name: "consonant",
+      startsWith: [],
+      masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
+      feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
     },
   ],
 };
@@ -53,14 +75,14 @@ const currentInventory = {
       setName: null,
       tags: [],
       details: {
-        rule: "-chio → -chi",
-        base: "spec",
+        declension: { kind: "rule", rule: "-chio → -chi", base: "spec" },
         gender: "masculine",
         articleProfile: {
           definiteSingular: true,
           definitePlural: true,
           indefiniteSingular: true,
         },
+        articleGroups: { singular: null, plural: null },
       },
     },
   ],
@@ -84,10 +106,10 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error));
 
   await page.addInitScript((snapshot) => {
-    const seedKey = "parola:e2e-stale-state-seeded";
+    const seedKey = "parola-next:e2e-stale-state-seeded";
     if (window.sessionStorage.getItem(seedKey)) return;
     window.localStorage.clear();
-    window.localStorage.setItem("parola:inventory", JSON.stringify(snapshot));
+    window.localStorage.setItem("parola-next:inventory", JSON.stringify(snapshot));
     window.sessionStorage.setItem(seedKey, "1");
   }, staleLocalSnapshot);
 
@@ -112,7 +134,7 @@ try {
   await page.getByRole("heading", { name: "mirror" }).waitFor({ state: "visible" });
   assert.equal((await page.locator(".study-card .pos-badge").textContent())?.trim(), "Noun");
 
-  const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("parola:inventory") || "null"));
+  const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("parola-next:inventory") || "null"));
   assert.ok(persisted, "Imported inventory should be persisted to localStorage.");
   assert.equal(persisted.cards.length, 1);
   assert.equal(persisted.cards[0].english, "mirror");

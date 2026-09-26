@@ -1,17 +1,16 @@
-import type { NounCard } from "./types";
+import type { NounCard, NounDetails } from "./types";
 import {
-  articleProfileCompatibleWithRule,
+  articleGroupForWord,
+  articleProfileCompatibleWithForms,
   articleProfilesEqual,
   generateNounForm,
-  inferNounDefinitionFromForms,
+  inferRuleDeclension,
   nounArticleProfiles,
-  nounDefinitionForCard,
   recognizeNounForm,
-  resolvedNounForms,
+  resolveNounDetails,
   ruleSupportsFormNumber,
-  suggestedNounArticles,
   type NounArticleProfile,
-  type NounDefinition,
+  type NounDeclension,
   type NounGender,
   type NounMorphology,
   type ResolvedNounForms,
@@ -34,10 +33,14 @@ export function articleProfileForOption(value: ArticleProfileOption): NounArticl
   return articleProfileOptions.find((option) => option.value === value)?.profile ?? nounArticleProfiles.none;
 }
 
+/** Rule-select value for an irregular noun. Rule names cannot start with ":", so it never collides. */
+export const irregularRuleValue = ":irregular";
+
 /**
- * The one noun-entry model shared by batch creation and single-card editing.
- * The learner types surface forms; the stored rule and base are derived from them.
- * An empty `rule` means "infer the declension rule automatically".
+ * The one noun-entry model shared by batch creation, the word drawer, and the words grid.
+ * The learner types surface forms; the stored declension is derived from them.
+ * `rule` is "" to infer a rule automatically, a rule name, or `irregularRuleValue`.
+ * `singularGroup` / `pluralGroup` are "" for "from spelling" or an article-group name (an exception).
  */
 export type NounDraft = {
   english: string;
@@ -46,19 +49,42 @@ export type NounDraft = {
   plural: string;
   articles: ArticleProfileOption;
   rule: string;
+  singularGroup: string;
+  pluralGroup: string;
 };
 
 export type ResolvedNounDraft =
-  | { ok: true; definition: NounDefinition; forms: ResolvedNounForms; inferred: boolean }
+  | { ok: true; details: NounDetails; forms: ResolvedNounForms; inferred: boolean }
   | { ok: false; error: string };
 
 export function emptyNounDraft(): NounDraft {
-  return { english: "", gender: "masculine", singular: "", plural: "", articles: "all", rule: "" };
+  return { english: "", gender: "masculine", singular: "", plural: "", articles: "all", rule: "", singularGroup: "", pluralGroup: "" };
 }
 
-function formsForDefinition(definition: NounDefinition, morphology: NounMorphology) {
-  const card: NounCard = { id: 0, type: "noun", english: "", setName: null, tags: [], details: definition };
-  return resolvedNounForms(card, morphology);
+function draftDeclension(draft: NounDraft, singular: string, plural: string, morphology: NounMorphology): { declension: NounDeclension } | { error: string } {
+  if (draft.rule === irregularRuleValue) return { declension: { kind: "irregular", singular, plural } };
+
+  if (!draft.rule) {
+    const inferred = inferRuleDeclension({ singular, plural }, morphology);
+    if (inferred) return { declension: inferred };
+    return {
+      error: singular && plural
+        ? `No declension rule turns “${singular}” into “${plural}”. Pick a rule or choose Irregular.`
+        : "No single declension rule fits. Pick a rule or choose Irregular.",
+    };
+  }
+
+  const rule = morphology.declensionRules.find((item) => item.name === draft.rule);
+  if (!rule) return { error: `The rule “${draft.rule}” no longer exists.` };
+  if (singular && !ruleSupportsFormNumber(rule, "singular")) return { error: `“${rule.name}” has no singular form.` };
+  if (plural && !ruleSupportsFormNumber(rule, "plural")) return { error: `“${rule.name}” has no plural form.` };
+  const base = singular ? recognizeNounForm(rule, singular, "singular") : recognizeNounForm(rule, plural, "plural");
+  if (base === null) return { error: `“${singular || plural}” does not fit “${rule.name}”.` };
+  const generatedPlural = generateNounForm(rule, base, "plural") ?? "";
+  if (singular && plural && generatedPlural.toLocaleLowerCase("it-IT") !== plural.toLocaleLowerCase("it-IT")) {
+    return { error: `“${rule.name}” makes the plural “${generatedPlural}”, not “${plural}”.` };
+  }
+  return { declension: { kind: "rule", rule: rule.name, base } };
 }
 
 export function resolveNounDraft(draft: NounDraft, morphology: NounMorphology): ResolvedNounDraft {
@@ -66,48 +92,22 @@ export function resolveNounDraft(draft: NounDraft, morphology: NounMorphology): 
   const plural = draft.plural.normalize("NFC").trim();
   if (!singular && !plural) return { ok: false, error: "Enter the singular or plural form." };
   const articleProfile = articleProfileForOption(draft.articles);
-  if (!singular && (articleProfile.definiteSingular || articleProfile.indefiniteSingular)) {
-    return { ok: false, error: "Singular articles need a singular form." };
-  }
-  if (!plural && articleProfile.definitePlural && !draft.rule) {
-    return { ok: false, error: "A plural article needs a plural form." };
-  }
 
-  let definition: NounDefinition | null;
-  if (!draft.rule) {
-    definition = inferNounDefinitionFromForms({
-      singular,
-      plural,
-      gender: draft.gender,
-      ...suggestedNounArticles(draft.gender, singular, plural, articleProfile),
-    }, morphology);
-    if (!definition) {
-      return {
-        ok: false,
-        error: singular && plural
-          ? `No declension rule turns “${singular}” into “${plural}”. Pick a rule or add one in Grammar.`
-          : "No single declension rule fits. Pick a rule or add one in Grammar.",
-      };
-    }
-  } else {
-    const rule = morphology.declensionRules.find((item) => item.name === draft.rule);
-    if (!rule) return { ok: false, error: `The rule “${draft.rule}” no longer exists.` };
-    if (singular && !ruleSupportsFormNumber(rule, "singular")) return { ok: false, error: `“${rule.name}” has no singular form.` };
-    if (plural && !ruleSupportsFormNumber(rule, "plural")) return { ok: false, error: `“${rule.name}” has no plural form.` };
-    const base = singular ? recognizeNounForm(rule, singular, "singular") : recognizeNounForm(rule, plural, "plural");
-    if (base === null) return { ok: false, error: `“${singular || plural}” does not fit “${rule.name}”.` };
-    const generatedPlural = generateNounForm(rule, base, "plural") ?? "";
-    if (singular && plural && generatedPlural.toLocaleLowerCase("it-IT") !== plural.toLocaleLowerCase("it-IT")) {
-      return { ok: false, error: `“${rule.name}” makes the plural “${generatedPlural}”, not “${plural}”.` };
-    }
-    if (!articleProfileCompatibleWithRule(articleProfile, rule)) {
-      return { ok: false, error: `Those articles need a form that “${rule.name}” does not have.` };
-    }
-    definition = { rule: rule.name, base, gender: draft.gender, articleProfile };
-  }
+  const result = draftDeclension(draft, singular, plural, morphology);
+  if ("error" in result) return { ok: false, error: result.error };
+  const details: NounDetails = {
+    declension: result.declension,
+    gender: draft.gender,
+    articleProfile,
+    articleGroups: { singular: draft.singularGroup || null, plural: draft.pluralGroup || null },
+  };
 
   try {
-    return { ok: true, definition, forms: formsForDefinition(definition, morphology), inferred: !draft.rule };
+    const forms = resolveNounDetails(details, morphology);
+    if (!articleProfileCompatibleWithForms(articleProfile, forms)) {
+      return { ok: false, error: !forms.singular ? "Singular articles need a singular form." : "A plural article needs a plural form." };
+    }
+    return { ok: true, details, forms, inferred: !draft.rule };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "This noun cannot be generated." };
   }
@@ -122,25 +122,27 @@ export function nounCardFromDraft(
   if (!english) throw new Error("Every noun needs an English prompt.");
   const resolved = resolveNounDraft(draft, morphology);
   if (!resolved.ok) throw new Error(`${english}: ${resolved.error}`);
-  return { ...common, type: "noun", english, details: resolved.definition };
+  return { ...common, type: "noun", english, details: resolved.details };
 }
 
 export function nounDraftFromCard(card: NounCard, morphology: NounMorphology): NounDraft {
-  const definition = nounDefinitionForCard(card);
-  const forms = resolvedNounForms(card, morphology);
+  const details = card.details;
+  const forms = resolveNounDetails(details, morphology, `Noun card ${card.id}`);
   const draft: NounDraft = {
     english: card.english,
-    gender: definition.gender,
+    gender: details.gender,
     singular: forms.singular,
     plural: forms.plural,
-    articles: articleProfileOption(definition.articleProfile),
-    rule: "",
+    articles: articleProfileOption(details.articleProfile),
+    rule: irregularRuleValue,
+    singularGroup: details.articleGroups.singular ?? "",
+    pluralGroup: details.articleGroups.plural ?? "",
   };
-  const automatic = resolveNounDraft(draft, morphology);
-  const automaticMatches = automatic.ok
-    && automatic.definition.rule === definition.rule
-    && automatic.definition.base === definition.base;
-  return automaticMatches ? draft : { ...draft, rule: definition.rule };
+  if (details.declension.kind === "irregular") return draft;
+  const declension = details.declension;
+  const automatic = inferRuleDeclension({ singular: forms.singular, plural: forms.plural }, morphology);
+  const automaticMatches = automatic?.rule === declension.rule && automatic.base === declension.base;
+  return { ...draft, rule: automaticMatches ? "" : declension.rule };
 }
 
 /** Like nounDraftFromCard, but still returns an editable draft for a noun whose stored rule is broken. */
@@ -148,8 +150,21 @@ export function nounDraftForEditing(card: NounCard, morphology: NounMorphology):
   try {
     return nounDraftFromCard(card, morphology);
   } catch {
-    return { ...emptyNounDraft(), english: card.english, gender: card.details.gender, singular: card.details.base, rule: card.details.rule };
+    const declension = card.details.declension;
+    return {
+      ...emptyNounDraft(),
+      english: card.english,
+      gender: card.details.gender,
+      singular: declension.kind === "rule" ? declension.base : declension.singular,
+      plural: declension.kind === "rule" ? "" : declension.plural,
+      rule: declension.kind === "rule" ? declension.rule : irregularRuleValue,
+    };
   }
+}
+
+/** The article group a form would get from its spelling alone, for "Automatic (…)" labels. */
+export function spellingGroup(word: string, morphology: NounMorphology) {
+  return word.trim() ? articleGroupForWord(word, morphology) : null;
 }
 
 /** Suggests a plural from the most specific two-number rule whose singular suffix matches. */

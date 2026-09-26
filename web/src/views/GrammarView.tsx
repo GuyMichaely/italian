@@ -3,7 +3,7 @@ import type { NounMorphology } from "../cards/nounMorphology";
 import { NounMorphologyPanel } from "../components/NounMorphologyPanel";
 import type { InventoryState } from "../storage";
 
-export function GrammarView({ cards, morphology, onSave }: { cards: Flashcard[]; morphology: NounMorphology; onSave: (state: InventoryState) => Promise<void> }) {
+export function GrammarView({ cards, morphology, onSave, onOpenCard }: { cards: Flashcard[]; morphology: NounMorphology; onSave: (state: InventoryState) => Promise<void>; onOpenCard: (card: Flashcard) => void }) {
   return <section className="grammar-view">
     <header className="page-header">
       <div>
@@ -11,6 +11,6 @@ export function GrammarView({ cards, morphology, onSave }: { cards: Flashcard[];
         <p>How Parola builds noun forms from each word, and which typed noun answers it accepts.</p>
       </div>
     </header>
-    <NounMorphologyPanel cards={cards} morphology={morphology} onSave={onSave} />
+    <NounMorphologyPanel cards={cards} morphology={morphology} onSave={onSave} onOpenCard={onOpenCard} />
   </section>;
 }

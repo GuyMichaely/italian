@@ -464,6 +464,26 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .syntax-fields-table .noun-pattern-actions { justify-content: flex-end; }
 .syntax-fields-table .neutral-button { min-height: 30px; padding: 0 9px; }
 
+.article-groups-table { min-width: 980px; }
+.article-groups-table th.gender-heading { text-align: center; border-bottom: 0; padding-bottom: 2px; }
+.article-groups-table thead tr:first-child th { position: static; }
+.article-groups-table input.article-input { max-width: 86px; text-align: center; }
+.article-groups-table td:nth-child(2) input { max-width: none; min-width: 230px; }
+.muted-cell { color: var(--faint); font-size: 13px; padding-left: 11px; font-style: italic; }
+.syntax-exclusions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.syntax-exclusions > span { color: var(--muted); font-size: 13px; }
+.exception-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.exception-item { display: grid; gap: 2px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); text-align: left; }
+.exception-item:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.exception-item strong { font-weight: 600; }
+.exception-item span { color: var(--muted); font-size: 13.5px; }
+.exception-item small { color: var(--accent); font-size: 12px; }
+.exceptions-box { display: grid; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.exceptions-box[open] { padding-bottom: 14px; }
+.exceptions-box summary { cursor: pointer; color: var(--muted); font-size: 13.5px; font-weight: 600; }
+.exceptions-box summary:hover { color: var(--text); }
+.prototype-note { border-color: rgba(139, 157, 255, .45); background: rgba(139, 157, 255, .06); grid-column: 1 / -1; }
+
 /* ---------- Settings ---------- */
 .settings-view { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 18px; align-items: start; }
 .settings-view > .page-header { grid-column: 1 / -1; margin-bottom: 4px; }

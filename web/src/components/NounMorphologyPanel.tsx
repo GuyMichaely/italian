@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { Flashcard } from "../cards/types";
+import type { Flashcard, NounCard } from "../cards/types";
+import { nounFormPhrases } from "../cards/nounDraft";
 import {
   cloneNounMorphology,
   normalizeNounMorphology,
   nounDefinitionForCard,
   resolvedNounForms,
+  type NounArticleGroup,
+  type NounArticleSet,
   type NounDeclensionRule,
   type NounFormNumber,
   type NounMorphology,
@@ -45,7 +48,32 @@ function newSyntax(inferenceSet: string, existing: NounSyntaxRule[]): NounSyntax
       { kind: "noun", number: "singular" },
     ],
     inferenceSet,
+    excludedArticleGroups: [],
   };
+}
+
+function newArticleGroup(existing: NounArticleGroup[]): NounArticleGroup {
+  return {
+    name: uniqueName("New group", existing.map((group) => group.name)),
+    startsWith: ["?"],
+    masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
+    feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
+  };
+}
+
+const articleColumns: { gender: "masculine" | "feminine"; key: keyof NounArticleSet; label: string }[] = [
+  { gender: "masculine", key: "definiteSingular", label: "the (sg.)" },
+  { gender: "masculine", key: "definitePlural", label: "the (pl.)" },
+  { gender: "masculine", key: "indefiniteSingular", label: "a" },
+  { gender: "feminine", key: "definiteSingular", label: "the (sg.)" },
+  { gender: "feminine", key: "definitePlural", label: "the (pl.)" },
+  { gender: "feminine", key: "indefiniteSingular", label: "a" },
+];
+
+/** Nouns with an irregular declension or an article-group exception, for the Exceptions list. */
+function exceptionalNouns(cards: Flashcard[]) {
+  return cards.filter((card): card is NounCard => card.type === "noun"
+    && (card.details.declension.kind === "irregular" || Boolean(card.details.articleGroups.singular || card.details.articleGroups.plural)));
 }
 
 function syntaxTokens(syntax: NounSyntaxRule) {
@@ -95,17 +123,24 @@ function identityRuleNames(morphology: NounMorphology) {
   return Object.fromEntries(morphology.declensionRules.map((rule) => [rule.name, rule.name])) as Record<string, string>;
 }
 
+function identityGroupNames(morphology: NounMorphology) {
+  return Object.fromEntries(morphology.articleGroups.map((group) => [group.name, group.name])) as Record<string, string>;
+}
+
 export function NounMorphologyPanel({
   cards,
   morphology,
   onSave,
+  onOpenCard,
 }: {
   cards: Flashcard[];
   morphology: NounMorphology;
   onSave: (state: InventoryState) => Promise<void>;
+  onOpenCard: (card: Flashcard) => void;
 }) {
   const [draft, setDraft] = useState(() => cloneNounMorphology(morphology));
   const [ruleNamesByOriginal, setRuleNamesByOriginal] = useState(() => identityRuleNames(morphology));
+  const [groupNamesByOriginal, setGroupNamesByOriginal] = useState(() => identityGroupNames(morphology));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [sourceChanged, setSourceChanged] = useState(false);
@@ -122,6 +157,7 @@ export function NounMorphologyPanel({
     }
     setDraft(cloneNounMorphology(morphology));
     setRuleNamesByOriginal(identityRuleNames(morphology));
+    setGroupNamesByOriginal(identityGroupNames(morphology));
     appliedSourceRef.current = nextFingerprint;
     setSourceChanged(false);
   }, [cards, dirty, morphology]);
@@ -184,8 +220,8 @@ export function NounMorphologyPanel({
     const name = draft.declensionRules[index]?.name;
     if (!name) return;
     const usedByCard = cards.some((card) => {
-      if (card.type !== "noun") return false;
-      const originalName = nounDefinitionForCard(card).rule;
+      if (card.type !== "noun" || card.details.declension.kind !== "rule") return false;
+      const originalName = card.details.declension.rule;
       return (ruleNamesByOriginal[originalName] ?? originalName) === name;
     });
     const usedBySet = draft.inferenceSets.some((set) => set.declensionRules.includes(name));
@@ -333,9 +369,85 @@ export function NounMorphologyPanel({
     }));
   }
 
+  function renameArticleGroup(index: number, name: string) {
+    const oldName = draft.articleGroups[index]?.name;
+    if (oldName === undefined || oldName === name) return;
+    if (draft.articleGroups.some((group, groupIndex) => groupIndex !== index && group.name === name)) {
+      setError(`An article group named ${name} already exists.`);
+      return;
+    }
+    changeMorphology((current) => ({
+      ...current,
+      articleGroups: current.articleGroups.map((group, groupIndex) => groupIndex === index ? { ...group, name } : group),
+      syntaxRules: current.syntaxRules.map((syntax) => ({
+        ...syntax,
+        excludedArticleGroups: syntax.excludedArticleGroups.map((groupName) => groupName === oldName ? name : groupName),
+      })),
+    }));
+    setGroupNamesByOriginal((current) => Object.fromEntries(
+      Object.entries(current).map(([original, currentName]) => [original, currentName === oldName ? name : currentName]),
+    ));
+  }
+
+  function updateArticleGroup(index: number, patch: Partial<NounArticleGroup>) {
+    changeMorphology((current) => ({
+      ...current,
+      articleGroups: current.articleGroups.map((group, groupIndex) => groupIndex === index ? { ...group, ...patch } : group),
+    }));
+  }
+
+  function updateArticle(index: number, gender: "masculine" | "feminine", key: keyof NounArticleSet, value: string) {
+    const group = draft.articleGroups[index];
+    if (group) updateArticleGroup(index, { [gender]: { ...group[gender], [key]: value } });
+  }
+
+  function moveArticleGroup(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    changeMorphology((current) => {
+      if (nextIndex < 0 || nextIndex >= current.articleGroups.length) return current;
+      const articleGroups = [...current.articleGroups];
+      [articleGroups[index], articleGroups[nextIndex]] = [articleGroups[nextIndex]!, articleGroups[index]!];
+      // Only the last group may be pattern-free; give a group moving up from last place a placeholder pattern.
+      return { ...current, articleGroups: articleGroups.map((group, groupIndex) => groupIndex < articleGroups.length - 1 && !group.startsWith.length ? { ...group, startsWith: ["?"] } : group) };
+    });
+  }
+
+  function removeArticleGroup(index: number) {
+    const name = draft.articleGroups[index]?.name;
+    if (!name) return;
+    if (draft.articleGroups.length === 1) {
+      setError("Keep at least one article group.");
+      return;
+    }
+    const usedByCard = cards.some((card) => card.type === "noun" && [card.details.articleGroups.singular, card.details.articleGroups.plural]
+      .some((original) => original !== null && (groupNamesByOriginal[original] ?? original) === name));
+    if (usedByCard) {
+      setError(`Some nouns use ${name} as an article exception. Change those nouns first.`);
+      return;
+    }
+    changeMorphology((current) => ({
+      ...current,
+      articleGroups: current.articleGroups.filter((_, groupIndex) => groupIndex !== index),
+      syntaxRules: current.syntaxRules.map((syntax) => ({ ...syntax, excludedArticleGroups: syntax.excludedArticleGroups.filter((groupName) => groupName !== name) })),
+    }));
+  }
+
+  function toggleSyntaxExclusion(syntaxIndex: number, groupName: string) {
+    changeMorphology((current) => ({
+      ...current,
+      syntaxRules: current.syntaxRules.map((syntax, index) => index !== syntaxIndex ? syntax : {
+        ...syntax,
+        excludedArticleGroups: syntax.excludedArticleGroups.includes(groupName)
+          ? syntax.excludedArticleGroups.filter((name) => name !== groupName)
+          : [...syntax.excludedArticleGroups, groupName],
+      }),
+    }));
+  }
+
   function reloadCurrentSource() {
     setDraft(cloneNounMorphology(morphology));
     setRuleNamesByOriginal(identityRuleNames(morphology));
+    setGroupNamesByOriginal(identityGroupNames(morphology));
     appliedSourceRef.current = nounSourceFingerprint(cards, morphology);
     setDirty(false);
     setSourceChanged(false);
@@ -353,14 +465,16 @@ export function NounMorphologyPanel({
       const updatedCards = cards.map((card) => {
         if (card.type !== "noun") return card;
         const definition = nounDefinitionForCard(card);
-        const rule = ruleNamesByOriginal[definition.rule] ?? definition.rule;
+        const renameGroup = (name: string | null) => name === null ? null : groupNamesByOriginal[name] ?? name;
+        const declension = definition.declension.kind === "rule"
+          ? { ...definition.declension, rule: ruleNamesByOriginal[definition.declension.rule] ?? definition.declension.rule }
+          : definition.declension;
         const nextCard: Flashcard = {
           ...card,
           details: {
-            rule,
-            base: definition.base,
-            gender: definition.gender,
-            articleProfile: definition.articleProfile,
+            ...definition,
+            declension,
+            articleGroups: { singular: renameGroup(definition.articleGroups.singular), plural: renameGroup(definition.articleGroups.plural) },
           },
         };
         resolvedNounForms(nextCard, normalized);
@@ -369,6 +483,7 @@ export function NounMorphologyPanel({
       await onSave({ cards: updatedCards, nounMorphology: normalized });
       setDraft(cloneNounMorphology(normalized));
       setRuleNamesByOriginal(identityRuleNames(normalized));
+      setGroupNamesByOriginal(identityGroupNames(normalized));
       appliedSourceRef.current = nounSourceFingerprint(updatedCards, normalized);
       setDirty(false);
       setSourceChanged(false);
@@ -380,10 +495,13 @@ export function NounMorphologyPanel({
     }
   }
 
+  const exceptions = exceptionalNouns(cards);
   const sections = [
     { id: "declensions", label: "Declensions", count: draft.declensionRules.length },
+    { id: "articles", label: "Articles", count: draft.articleGroups.length },
     { id: "inference-sets", label: "Inference sets", count: draft.inferenceSets.length },
     { id: "answer-syntax", label: "Answer syntax", count: draft.syntaxRules.length },
+    { id: "noun-exceptions", label: "Exceptions", count: exceptions.length },
   ];
 
   return <section className="noun-patterns-panel" aria-label="Noun morphology">
@@ -413,9 +531,38 @@ export function NounMorphologyPanel({
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, declensionRules: [...current.declensionRules, newRule(current.declensionRules)] }))}>Add rule</button></div>
       </section>
 
+      <section className="grammar-section" id="articles" aria-labelledby="articles-heading">
+      <h2 id="articles-heading">Articles</h2>
+      <p className="section-intro">A word belongs to the first group whose pattern matches how it starts; anything else falls into the last group. Patterns are letters plus <code>C</code> for any consonant and <code>V</code> for any vowel, so <code>sC</code> means s + consonant and <code>iV</code> means i + vowel. Singular and plural forms are grouped separately, and a noun can override its group under Exceptions in the word editor.</p>
+      <div className="noun-patterns-table-wrap">
+        <table className="noun-patterns-table article-groups-table">
+          <thead>
+            <tr><th rowSpan={2}>Group</th><th rowSpan={2}>Starts with</th><th colSpan={3} className="gender-heading">Masculine</th><th colSpan={3} className="gender-heading">Feminine</th><th rowSpan={2} /></tr>
+            <tr>{articleColumns.map((column) => <th key={`${column.gender}:${column.key}`}>{column.label}</th>)}</tr>
+          </thead>
+          <tbody>{draft.articleGroups.map((group, index) => {
+            const last = index === draft.articleGroups.length - 1;
+            return <tr key={`group:${index}`}>
+              <td><input value={group.name} onChange={(event) => renameArticleGroup(index, event.target.value)} aria-label="Article group name" /></td>
+              <td>{last
+                ? <span className="muted-cell">everything else</span>
+                : <input className="morphology-suffix-input" value={group.startsWith.join(", ")} onChange={(event) => updateArticleGroup(index, { startsWith: event.target.value.split(",").map((pattern) => pattern.trim()).filter(Boolean) })} aria-label={`Patterns for ${group.name}`} placeholder="sC, z, gn" />}</td>
+              {articleColumns.map((column) => <td key={`${column.gender}:${column.key}`}><input className="article-input" lang="it" value={group[column.gender][column.key]} onChange={(event) => updateArticle(index, column.gender, column.key, event.target.value)} aria-label={`${group.name} ${column.gender} ${column.label}`} /></td>)}
+              <td><div className="noun-pattern-actions">
+                <button type="button" className="neutral-button" onClick={() => moveArticleGroup(index, -1)} disabled={index === 0} aria-label={`Move ${group.name} up`}>↑</button>
+                <button type="button" className="neutral-button" onClick={() => moveArticleGroup(index, 1)} disabled={last} aria-label={`Move ${group.name} down`}>↓</button>
+                <button type="button" className="row-remove" onClick={() => removeArticleGroup(index)} aria-label={`Remove article group ${group.name}`}>×</button>
+              </div></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, articleGroups: [newArticleGroup(current.articleGroups), ...current.articleGroups] }))}>Add group</button></div>
+      </section>
+
       <section className="grammar-section" id="inference-sets" aria-labelledby="inference-heading">
       <h2 id="inference-heading">Inference sets</h2>
-      <p className="section-intro">Inference sets decide which declensions a shorthand answer may assume. Leave a rule out of <em>Learned shorthand</em> until you know it, and Parola will insist on the full form for those nouns.</p>
+      <p className="section-intro">Inference sets decide which declensions a shorthand answer may assume. Leave a rule out of <em>Learned shorthand</em> until you know it, and Parola will insist on the full form for those nouns. Irregular nouns belong to every set, but an answer only counts when it gives every form the noun has.</p>
       {draft.inferenceSets.map((set, setIndex) => <div className="morphology-inference-set" key={`set:${setIndex}`}>
         <div className="noun-pattern-actions">
           <input value={set.name} onChange={(event) => renameInferenceSet(setIndex, event.target.value)} aria-label="Inference set name" />
@@ -452,6 +599,13 @@ export function NounMorphologyPanel({
               </tr></tbody>
             </table>
           </div>
+          {syntax.fields.some((field) => field.kind === "article") && <div className="syntax-exclusions">
+            <span>Not for nouns in</span>
+            <div className="morphology-rule-checks">{draft.articleGroups.map((group) => <label key={group.name}>
+              <input type="checkbox" checked={syntax.excludedArticleGroups.includes(group.name)} onChange={() => toggleSyntaxExclusion(syntaxIndex, group.name)} />
+              <span>{group.name}</span>
+            </label>)}</div>
+          </div>}
           <div className="noun-patterns-table-wrap">
             <table className="noun-patterns-table syntax-fields-table">
               <thead><tr><th>#</th><th>Input field</th><th /></tr></thead>
@@ -476,6 +630,25 @@ export function NounMorphologyPanel({
         </div>;
       })}
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={addSyntax}>Add syntax rule</button></div>
+      </section>
+
+      <section className="grammar-section" id="noun-exceptions" aria-labelledby="exceptions-heading">
+      <h2 id="exceptions-heading">Exceptions</h2>
+      <p className="section-intro">Nouns that are irregular or override their article group. Set these in the word editor under Rule and Exceptions.</p>
+      {exceptions.length ? <ul className="exception-list">{exceptions.map((card) => {
+        let forms: ReturnType<typeof resolvedNounForms> | null = null;
+        try { forms = resolvedNounForms(card, morphology); } catch { /* shown as-is */ }
+        const notes = [
+          card.details.declension.kind === "irregular" ? "irregular" : null,
+          card.details.articleGroups.singular ? `singular as ${card.details.articleGroups.singular}` : null,
+          card.details.articleGroups.plural ? `plural as ${card.details.articleGroups.plural}` : null,
+        ].filter(Boolean);
+        return <li key={card.id}><button type="button" className="exception-item" onClick={() => onOpenCard(card)}>
+          <strong lang="it">{forms ? nounFormPhrases(forms).map((phrase) => phrase.text).join(" · ") || [forms.singular, forms.plural].filter(Boolean).join(" / ") : card.english}</strong>
+          <span>{card.english}</span>
+          <small>{notes.join(" · ")}</small>
+        </button></li>;
+      })}</ul> : <p className="filter-empty">No exceptions yet.</p>}
       </section>
     </div>
     {(dirty || message || error) && <div className="grid-save-bar" role="region" aria-label="Grammar changes">

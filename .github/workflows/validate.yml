@@ -55,7 +55,9 @@ jobs:
         run: node --check api/server.mjs
 
       - name: Check migration script syntax
-        run: node --check scripts/migrate-article-profiles.mjs
+        run: |
+          node --check scripts/migrate-article-profiles.mjs
+          node --check scripts/migrate-noun-declensions.mjs
 
       - name: Check extension syntax
         working-directory: extension

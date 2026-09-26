@@ -8,11 +8,26 @@ export type NounArticleProfile =
   | { definiteSingular: false; definitePlural: true; indefiniteSingular: false }
   | { definiteSingular: false; definitePlural: false; indefiniteSingular: false };
 
+/** How a noun's forms are produced: from a declension rule and base, or listed outright. */
+export type NounDeclension =
+  | { kind: "rule"; rule: string; base: string }
+  /** An empty form means the noun does not have that number. At least one form is non-empty. */
+  | { kind: "irregular"; singular: string; plural: string };
+
+/**
+ * Per-form article-group exceptions. `null` means the group is chosen from the form's spelling
+ * using the morphology's article groups; a name forces that group (e.g. plural "dei" → "lo" gives "gli dei").
+ */
+export type NounArticleGroupOverrides = {
+  singular: string | null;
+  plural: string | null;
+};
+
 export type NounDetails = {
-  rule: string;
-  base: string;
+  declension: NounDeclension;
   gender: NounGender;
   articleProfile: NounArticleProfile;
+  articleGroups: NounArticleGroupOverrides;
 };
 
 export type VerbDetails = {

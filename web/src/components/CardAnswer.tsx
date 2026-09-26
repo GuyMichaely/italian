@@ -1,11 +1,11 @@
 import { type FormEvent, useState } from "react";
 import type { AdjectiveCard, AdverbCard, Flashcard, NounCard, VerbCard } from "../cards/types";
-import { resolvedNounForms, ruleForNounCard, type NounMorphology } from "../cards/nounMorphology";
+import { irregularDeclensionName, resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
 import { nounFormPhrases } from "../cards/nounDraft";
 import type { AnswerKeywords } from "../study/setup";
 import { AnswerParsePreview, analyzeAnswerSyntax } from "./AnswerParsePreview";
 import { verifyPowerAnswer } from "../study/logic";
-import { evaluateNounAnswer } from "../study/nounSyntax";
+import { evaluateNounAnswer, type NounSyntaxCandidate } from "../study/nounSyntax";
 import { Icon } from "./Icons";
 
 /** The single Italian headword shown for a card in prompts, lists, and answers. */
@@ -15,17 +15,18 @@ export function italianHeadword(card: Flashcard, morphology: NounMorphology) {
     const forms = resolvedNounForms(card, morphology);
     return forms.singular || forms.plural;
   } catch {
-    return card.details.base;
+    const declension = card.details.declension;
+    return declension.kind === "rule" ? declension.base : declension.singular || declension.plural;
   }
 }
 
 function NounAnswer({ card, morphology }: { card: NounCard; morphology: NounMorphology }) {
   const forms = resolvedNounForms(card, morphology);
-  const rule = ruleForNounCard(card, morphology);
+  const rule = forms.rule ?? irregularDeclensionName;
   const phrases = nounFormPhrases(forms);
   return (
     <div className="answer-block">
-      <p className="answer-meta">{forms.gender}{rule ? ` · ${rule.name}` : ""}</p>
+      <p className="answer-meta">{forms.gender} · {rule}</p>
       <p className="italian-word">{forms.singular || forms.plural}</p>
       {phrases.length
         ? <dl className="form-list">{phrases.map((phrase) => <div key={phrase.label}><dt>{phrase.label}</dt><dd lang="it">{phrase.text}</dd></div>)}</dl>
@@ -77,22 +78,29 @@ export function CardAnswer({ card, morphology }: { card: Flashcard; morphology: 
   return <AdjectiveAnswer card={card} />;
 }
 
+function candidateDescription(candidate: NounSyntaxCandidate) {
+  const definition = candidate.definition;
+  const shape = definition.kind === "rule"
+    ? `base ${definition.base || "∅"}`
+    : [definition.singular, definition.plural].filter((form): form is string => form !== null).join(" / ");
+  return `${shape} · ${definition.gender} · ${candidate.syntaxName}`;
+}
+
 export function NounAnswerDiagnostic({ card, answer, keywords, morphology }: { card: Flashcard; answer: string; keywords: AnswerKeywords; morphology: NounMorphology }) {
   if (card.type !== "noun") return null;
   const evaluation = evaluateNounAnswer(card, answer, morphology, keywords);
   if (evaluation.result === "correct") return null;
 
   const uniqueCandidates = Array.from(new Map(evaluation.candidates.map((candidate) => {
-    const key = `${candidate.syntaxName}\u0000${candidate.declensionRule}\u0000${candidate.definition.base}\u0000${candidate.definition.gender}`;
-    return [key, candidate] as const;
+    return [candidateDescription(candidate), candidate] as const;
   })).values());
 
   return <details className="diagnostic">
     <summary>How Parola read your answer</summary>
     {uniqueCandidates.length
-      ? <ul>{uniqueCandidates.map((candidate) => <li key={`${candidate.syntaxName}:${candidate.declensionRule}:${candidate.definition.base}:${candidate.definition.gender}`}>
+      ? <ul>{uniqueCandidates.map((candidate) => <li key={candidateDescription(candidate)}>
           <strong>{candidate.declensionRule}</strong>
-          {` · base ${candidate.definition.base || "∅"} · ${candidate.definition.gender} · ${candidate.syntaxName}`}
+          {` · ${candidateDescription(candidate)}`}
         </li>)}</ul>
       : <p>No allowed declension rule recognized the completed noun syntax.</p>}
   </details>;

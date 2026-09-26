@@ -69,6 +69,7 @@ const defaultNounMorphology = {
         { kind: "article", definiteness: "definite", number: "singular" },
         { kind: "noun", number: "singular" },
       ],
+      excludedArticleGroups: ["lo"],
       inferenceSet: "Learned shorthand",
     },
     {
@@ -79,6 +80,7 @@ const defaultNounMorphology = {
         { kind: "article", definiteness: "definite", number: "plural" },
         { kind: "noun", number: "plural" },
       ],
+      excludedArticleGroups: ["lo"],
       inferenceSet: "Learned shorthand",
     },
     {
@@ -89,6 +91,7 @@ const defaultNounMorphology = {
         { kind: "article", definiteness: "indefinite", number: "singular" },
         { kind: "noun", number: "singular" },
       ],
+      excludedArticleGroups: ["lo"],
       inferenceSet: "Learned shorthand",
     },
     {
@@ -102,6 +105,7 @@ const defaultNounMorphology = {
         { kind: "noun", number: "plural" },
         { kind: "article", definiteness: "indefinite", number: "singular" },
       ],
+      excludedArticleGroups: [],
       inferenceSet: "Full noun answers",
     },
     {
@@ -112,6 +116,7 @@ const defaultNounMorphology = {
       ],
       markerOrder: "any",
       fields: [{ kind: "noun", number: "singular" }],
+      excludedArticleGroups: [],
       inferenceSet: "Full noun answers",
     },
     {
@@ -122,9 +127,30 @@ const defaultNounMorphology = {
       ],
       markerOrder: "any",
       fields: [{ kind: "noun", number: "plural" }],
+      excludedArticleGroups: [],
       inferenceSet: "Full noun answers",
     },
   ],
+  articleGroups: [
+    {
+      name: "lo",
+      startsWith: ["sC", "z", "gn", "ps", "pn", "x", "y", "iV"],
+      masculine: { definiteSingular: "lo", definitePlural: "gli", indefiniteSingular: "uno" },
+      feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
+    },
+    {
+      name: "vowel",
+      startsWith: ["V"],
+      masculine: { definiteSingular: "l’", definitePlural: "gli", indefiniteSingular: "un" },
+      feminine: { definiteSingular: "l’", definitePlural: "le", indefiniteSingular: "un’" },
+    },
+    {
+      name: "consonant",
+      startsWith: [],
+      masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
+      feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
+    },
+  ]
 };
 
 let writeQueue = Promise.resolve();
@@ -150,15 +176,21 @@ function normalizeIdentityText(value) {
   return String(value).normalize("NFC").trim().toLocaleLowerCase("it-IT").replace(/[’`]/g, "'").replace(/\s+/g, " ");
 }
 
+function nounIdentity(declension) {
+  return declension.kind === "rule"
+    ? `rule\u0000${normalizeIdentityText(declension.rule)}\u0000${normalizeIdentityText(declension.base)}`
+    : `irregular\u0000${normalizeIdentityText(declension.singular)}\u0000${normalizeIdentityText(declension.plural)}`;
+}
+
 function cardDuplicateKey(card) {
-  const italianIdentity = card.type === "noun"
-    ? `${normalizeIdentityText(card.details.rule)}\u0000${normalizeIdentityText(card.details.base)}`
-    : normalizeIdentityText(card.italian);
+  const italianIdentity = card.type === "noun" ? nounIdentity(card.details.declension) : normalizeIdentityText(card.italian);
   return `${card.type}\u0000${normalizeIdentityText(card.english)}\u0000${italianIdentity}`;
 }
 
 function cardIdentityLabel(card) {
-  return card.type === "noun" ? `${card.details.rule} / base ${card.details.base || "∅"}` : card.italian;
+  if (card.type !== "noun") return card.italian;
+  const declension = card.details.declension;
+  return declension.kind === "rule" ? `${declension.rule} / base ${declension.base || "∅"}` : [declension.singular, declension.plural].filter(Boolean).join(" / ");
 }
 
 function objectValue(value, label) {
@@ -201,6 +233,29 @@ function normalizeNounArticleProfile(value, label = "Noun article profile") {
   return normalized;
 }
 
+function normalizeNounDeclension(value) {
+  const declension = objectValue(value, "Noun declension");
+  if (declension.kind === "rule") {
+    assertExactKeys(declension, "Noun rule declension", ["kind", "rule", "base"]);
+    return { kind: "rule", rule: nonEmptyString(declension.rule, "Noun declension rule"), base: String(declension.base ?? "").normalize("NFC") };
+  }
+  if (declension.kind === "irregular") {
+    assertExactKeys(declension, "Noun irregular declension", ["kind", "singular", "plural"]);
+    const singular = String(declension.singular ?? "").normalize("NFC").trim();
+    const plural = String(declension.plural ?? "").normalize("NFC").trim();
+    if (!singular && !plural) throw new Error("An irregular noun needs a singular or plural form.");
+    return { kind: "irregular", singular, plural };
+  }
+  throw new Error("Noun declension must be a rule or irregular declension.");
+}
+
+function normalizeArticleGroupOverrides(value) {
+  const overrides = objectValue(value, "Noun article groups");
+  assertExactKeys(overrides, "Noun article groups", ["singular", "plural"]);
+  const group = (raw) => raw === null ? null : nonEmptyString(raw, "Noun article group exception");
+  return { singular: group(overrides.singular), plural: group(overrides.plural) };
+}
+
 function normalizeCard(value, { requireId = false } = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Card must be an object.");
   const id = Number(value.id);
@@ -215,17 +270,14 @@ function normalizeCard(value, { requireId = false } = {}) {
 
   if (type === "noun") {
     if (Object.prototype.hasOwnProperty.call(value, "italian")) throw new Error("Noun cards must not store a derived italian field.");
-    assertExactKeys(rawDetails, "Noun card details", ["articleProfile", "base", "gender", "rule"]);
-    const rule = String(rawDetails.rule ?? "").trim();
+    assertExactKeys(rawDetails, "Noun card details", ["articleGroups", "articleProfile", "declension", "gender"]);
     const gender = rawDetails.gender;
-    if (!rule || (gender !== "masculine" && gender !== "feminine")) {
-      throw new Error("Noun card does not use the current rule/base/gender/article-profile schema.");
-    }
+    if (gender !== "masculine" && gender !== "feminine") throw new Error("Noun card needs a masculine or feminine gender.");
     details = {
-      rule,
-      base: String(rawDetails.base ?? "").normalize("NFC"),
+      declension: normalizeNounDeclension(rawDetails.declension),
       gender,
       articleProfile: normalizeNounArticleProfile(rawDetails.articleProfile),
+      articleGroups: normalizeArticleGroupOverrides(rawDetails.articleGroups),
     };
   } else {
     italian = String(value.italian || "").trim();
@@ -265,19 +317,47 @@ function assertUniqueNames(values, label) {
   }
 }
 
-function articleProfileCompatibleWithRule(profile, rule) {
-  if (profile.definiteSingular && !rule.forms.singular) return false;
-  if (profile.definitePlural && !rule.forms.plural) return false;
-  if (profile.indefiniteSingular && !rule.forms.singular) return false;
+function articleProfileCompatibleWithForms(profile, forms) {
+  if ((profile.definiteSingular || profile.indefiniteSingular) && !forms.singular) return false;
+  if (profile.definitePlural && !forms.plural) return false;
   return true;
+}
+
+function normalizeArticleSet(value, label) {
+  const set = objectValue(value, label);
+  assertExactKeys(set, label, ["definiteSingular", "definitePlural", "indefiniteSingular"]);
+  return {
+    definiteSingular: nonEmptyString(set.definiteSingular, `${label} definite singular`),
+    definitePlural: nonEmptyString(set.definitePlural, `${label} definite plural`),
+    indefiniteSingular: nonEmptyString(set.indefiniteSingular, `${label} indefinite singular`),
+  };
 }
 
 function normalizeNounMorphology(value) {
   const payload = objectValue(value, "Noun morphology");
-  assertExactKeys(payload, "Noun morphology", ["declensionRules", "inferenceSets", "syntaxRules"]);
-  if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.inferenceSets) || !Array.isArray(payload.syntaxRules)) {
-    throw new Error("Noun morphology needs declensionRules, inferenceSets, and syntaxRules arrays.");
+  assertExactKeys(payload, "Noun morphology", ["articleGroups", "declensionRules", "inferenceSets", "syntaxRules"]);
+  if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.inferenceSets) || !Array.isArray(payload.syntaxRules) || !Array.isArray(payload.articleGroups)) {
+    throw new Error("Noun morphology needs articleGroups, declensionRules, inferenceSets, and syntaxRules arrays.");
   }
+
+  const articleGroups = payload.articleGroups.map((raw, index, all) => {
+    const group = objectValue(raw, "Article group");
+    assertExactKeys(group, "Article group", ["name", "startsWith", "masculine", "feminine"]);
+    if (!Array.isArray(group.startsWith)) throw new Error("Article group startsWith must be an array.");
+    const name = nonEmptyString(group.name, "Article group name");
+    const last = index === all.length - 1;
+    const startsWith = [...new Set(group.startsWith.map((pattern) => nonEmptyString(pattern, `Article group ${name} pattern`)))];
+    if (!last && !startsWith.length) throw new Error(`Article group ${name} needs at least one spelling pattern.`);
+    return {
+      name,
+      startsWith: last ? [] : startsWith,
+      masculine: normalizeArticleSet(group.masculine, `Article group ${name} masculine articles`),
+      feminine: normalizeArticleSet(group.feminine, `Article group ${name} feminine articles`),
+    };
+  });
+  if (!articleGroups.length) throw new Error("Noun morphology needs at least one article group.");
+  assertUniqueNames(articleGroups, "article group");
+  const articleGroupNames = new Set(articleGroups.map((group) => group.name));
 
   const declensionRules = payload.declensionRules.map((raw) => {
     const rule = objectValue(raw, "Declension rule");
@@ -310,8 +390,10 @@ function normalizeNounMorphology(value) {
 
   const syntaxRules = payload.syntaxRules.map((raw) => {
     const syntax = objectValue(raw, "Syntax rule");
-    assertExactKeys(syntax, "Syntax rule", ["name", "markers", "markerOrder", "fields", "inferenceSet"]);
-    if (!Array.isArray(syntax.markers) || !Array.isArray(syntax.fields)) throw new Error("Syntax rule markers and fields must be arrays.");
+    assertExactKeys(syntax, "Syntax rule", ["name", "markers", "markerOrder", "fields", "inferenceSet", "excludedArticleGroups"]);
+    if (!Array.isArray(syntax.markers) || !Array.isArray(syntax.fields) || !Array.isArray(syntax.excludedArticleGroups)) {
+      throw new Error("Syntax rule markers, fields, and excludedArticleGroups must be arrays.");
+    }
     if (syntax.markerOrder !== "any") throw new Error("Syntax markerOrder must be any.");
 
     const markers = syntax.markers.map((rawMarker) => {
@@ -359,16 +441,22 @@ function normalizeNounMorphology(value) {
       }
     }
 
+    const excludedArticleGroups = [...new Set(syntax.excludedArticleGroups.map((groupName) => nonEmptyString(groupName, "Excluded article group")))];
+    for (const groupName of excludedArticleGroups) {
+      if (!articleGroupNames.has(groupName)) throw new Error(`Syntax rule references unknown article group: ${groupName}.`);
+    }
+
     return {
       name,
       markers,
       markerOrder: "any",
       fields,
       inferenceSet,
+      excludedArticleGroups,
     };
   });
   assertUniqueNames(syntaxRules, "syntax rule");
-  return { declensionRules, inferenceSets, syntaxRules };
+  return { declensionRules, inferenceSets, syntaxRules, articleGroups };
 }
 
 function validateState(cards, nounMorphology) {
@@ -380,12 +468,24 @@ function validateState(cards, nounMorphology) {
   }
 
   const rules = new Map(nounMorphology.declensionRules.map((rule) => [rule.name, rule]));
+  const groupNames = new Set(nounMorphology.articleGroups.map((group) => group.name));
   for (const card of cards) {
     if (card.type !== "noun") continue;
-    const rule = rules.get(card.details.rule);
-    if (!rule) throw new Error(`Noun card ${card.id ?? card.english} references unknown declension rule ${card.details.rule}.`);
-    if (!articleProfileCompatibleWithRule(card.details.articleProfile, rule)) {
-      throw new Error(`Noun card ${card.id ?? card.english} has an article profile that requires a noun form its declension does not provide.`);
+    const label = `Noun card ${card.id ?? card.english}`;
+    const { declension, articleGroups } = card.details;
+    let forms;
+    if (declension.kind === "rule") {
+      const rule = rules.get(declension.rule);
+      if (!rule) throw new Error(`${label} references unknown declension rule ${declension.rule}.`);
+      forms = { singular: Boolean(rule.forms.singular), plural: Boolean(rule.forms.plural) };
+    } else {
+      forms = { singular: Boolean(declension.singular), plural: Boolean(declension.plural) };
+    }
+    if (!articleProfileCompatibleWithForms(card.details.articleProfile, forms)) {
+      throw new Error(`${label} has an article profile that requires a noun form it does not have.`);
+    }
+    for (const group of [articleGroups.singular, articleGroups.plural]) {
+      if (group !== null && !groupNames.has(group)) throw new Error(`${label} references unknown article group ${group}.`);
     }
   }
 }

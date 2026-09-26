@@ -1,15 +1,22 @@
-import type { Flashcard } from "../cards/types";
+import type { Flashcard, NounCard } from "../cards/types";
 import {
+  articleGroupForWord,
+  articleKey,
   articleProfileAllows,
   articleProfilesEqual,
-  generateNounForm,
+  articleReadings,
+  articleSetFor,
+  elidedArticles,
+  irregularDeclensionName,
+  nounArticleGroup,
   nounArticleProfiles,
-  nounDefinitionForCard,
+  normalizeText,
   recognizeNounForm,
+  resolvedNounForms,
   ruleNumberMode,
-  suggestedNounArticles,
+  type ArticleReading,
   type NounArticleCapability,
-  type NounDefinition,
+  type NounFormNumber,
   type NounGender,
   type NounMorphology,
   type NounSyntaxField,
@@ -28,10 +35,17 @@ export type NounArticleConstraint =
   | { kind: "none" }
   | { kind: "requires"; capabilities: NounArticleCapability[] };
 
-export type NounCandidateDefinition = Pick<NounDefinition, "rule" | "base" | "gender">;
+/**
+ * One reading of the typed answer, built without looking at the card: either a declension rule and
+ * the base it recovers, or an irregular noun whose forms are exactly what was typed.
+ */
+export type NounCandidateDefinition =
+  | { kind: "rule"; rule: string; base: string; gender: NounGender }
+  | { kind: "irregular"; singular: string | null; plural: string | null; gender: NounGender };
 
 export type NounSyntaxCandidate = {
   syntaxName: string;
+  /** The rule name, or "Irregular". */
   declensionRule: string;
   definition: NounCandidateDefinition;
   articleConstraint: NounArticleConstraint;
@@ -45,6 +59,13 @@ export type NounSyntaxAttempt = {
   candidates: NounSyntaxCandidate[];
   consumedTokens: number;
   reason: string;
+  /** Typed values aligned with `syntax.fields`, once the syntax is complete. */
+  values: string[];
+  /**
+   * The typed noun's spelling puts it in an article group this syntax excludes (e.g. "lo zaino" in a
+   * shorthand syntax). Only steers the preview toward another syntax; grading uses the card's own group.
+   */
+  excludedBySpelling: boolean;
 };
 
 export type NounAnswerEvaluation = {
@@ -54,12 +75,8 @@ export type NounAnswerEvaluation = {
   matchingCandidates: NounSyntaxCandidate[];
 };
 
-function normalize(value: string) {
-  return value.normalize("NFC").trim().toLocaleLowerCase("it-IT").replace(/[’`]/g, "'").replace(/\s+/g, " ");
-}
-
 function keywordMatches(value: string, configured: string) {
-  return normalize(value) === normalize(configured);
+  return normalizeText(value) === normalizeText(configured);
 }
 
 function tokenize(value: string) {
@@ -69,10 +86,13 @@ function tokenize(value: string) {
   });
 }
 
-function expandElidedArticleTokens(parts: string[]) {
+/** Splits “l'amica” into “l'” + “amica” for every elided article in the article table. */
+function expandElidedArticleTokens(parts: string[], morphology: NounMorphology) {
+  const elided = elidedArticles(morphology).sort((left, right) => right.length - left.length);
   return parts.flatMap((part) => {
-    const match = part.match(/^(l['’]|un['’])(.+)$/i);
-    return match ? [match[1], match[2]] : [part];
+    const normalized = normalizeText(part);
+    const article = elided.find((candidate) => normalized.startsWith(candidate) && normalized.length > candidate.length);
+    return article ? [part.slice(0, article.length), part.slice(article.length)] : [part];
   });
 }
 
@@ -85,18 +105,6 @@ function genderMarker(value: string, keywords: AnswerKeywords): NounGender | nul
 function tantumMarker(value: string, keywords: AnswerKeywords): "singular" | "plural" | null {
   if (keywordMatches(value, keywords.singularOnly)) return "singular";
   if (keywordMatches(value, keywords.pluralOnly)) return "plural";
-  return null;
-}
-
-function articleFacts(value: string) {
-  const article = normalize(value);
-  if (["il", "lo"].includes(article)) return { definiteness: "definite" as const, number: "singular" as const, gender: "masculine" as const };
-  if (article === "la") return { definiteness: "definite" as const, number: "singular" as const, gender: "feminine" as const };
-  if (article === "l'") return { definiteness: "definite" as const, number: "singular" as const, gender: null };
-  if (["i", "gli"].includes(article)) return { definiteness: "definite" as const, number: "plural" as const, gender: "masculine" as const };
-  if (article === "le") return { definiteness: "definite" as const, number: "plural" as const, gender: "feminine" as const };
-  if (["un", "uno"].includes(article)) return { definiteness: "indefinite" as const, number: "singular" as const, gender: "masculine" as const };
-  if (["una", "un'"].includes(article)) return { definiteness: "indefinite" as const, number: "singular" as const, gender: "feminine" as const };
   return null;
 }
 
@@ -118,19 +126,21 @@ function syntaxArticleConstraint(syntax: NounSyntaxRule): NounArticleConstraint 
   return capabilities.length ? { kind: "requires", capabilities } : { kind: "none" };
 }
 
-function syntaxSuppliesFullDeclension(syntax: NounSyntaxRule) {
-  const constraint = syntaxArticleConstraint(syntax);
-  return constraint.kind === "requires"
-    && constraint.capabilities.includes("definite-singular")
-    && constraint.capabilities.includes("definite-plural")
-    && constraint.capabilities.includes("indefinite-singular")
-    && syntax.fields.some((field) => field.kind === "noun" && field.number === "singular")
-    && syntax.fields.some((field) => field.kind === "noun" && field.number === "plural");
+/** The table readings of a typed article that fit this article field's definiteness and number. */
+function fieldReadings(field: Extract<NounSyntaxField, { kind: "article" }>, value: string, morphology: NounMorphology) {
+  return articleReadings(value, morphology).filter((reading) => reading.definiteness === field.definiteness && reading.number === field.number);
 }
 
-function expectedArticle(field: Extract<NounSyntaxField, { kind: "article" }>, articles: ReturnType<typeof suggestedNounArticles>) {
-  if (field.definiteness === "indefinite") return articles.indefiniteArticle;
-  return field.number === "singular" ? articles.definiteSingularArticle : articles.definitePluralArticle;
+/** Genders every typed article agrees on; null when no article constrains gender. */
+function articleGenders(fields: NounSyntaxField[], values: string[], morphology: NounMorphology): Set<NounGender> | null {
+  let genders: Set<NounGender> | null = null;
+  fields.forEach((field, index) => {
+    if (field.kind !== "article" || values[index] === undefined) return;
+    const readings: ArticleReading[] = fieldReadings(field, values[index]!, morphology);
+    const fieldGenders = new Set(readings.map((reading) => reading.gender));
+    genders = genders ? new Set([...genders].filter((gender) => fieldGenders.has(gender))) : fieldGenders;
+  });
+  return genders;
 }
 
 function parseMarkers(tokens: string[], syntax: NounSyntaxRule, keywords: AnswerKeywords) {
@@ -168,32 +178,6 @@ function parseMarkers(tokens: string[], syntax: NounSyntaxRule, keywords: Answer
   return { invalid: false as const, index, gender, tantum, pieces, missingRequired };
 }
 
-function suppliedArticleGender(fields: NounSyntaxField[], values: string[]): NounGender | null {
-  const genders = new Set<NounGender>();
-  fields.slice(0, values.length).forEach((field, index) => {
-    if (field.kind !== "article") return;
-    const gender = articleFacts(values[index] ?? "")?.gender;
-    if (gender) genders.add(gender);
-  });
-  return genders.size === 1 ? [...genders][0]! : null;
-}
-
-function candidateGenders(explicitGender: NounGender | null, fields: NounSyntaxField[], values: string[]): NounGender[] {
-  const articleGenders = new Set<NounGender>();
-  fields.forEach((field, index) => {
-    if (field.kind !== "article") return;
-    const facts = articleFacts(values[index] ?? "");
-    if (facts?.gender) articleGenders.add(facts.gender);
-  });
-
-  if (explicitGender) {
-    if ([...articleGenders].some((gender) => gender !== explicitGender)) return [];
-    return [explicitGender];
-  }
-  if (articleGenders.size !== 1) return [];
-  return [[...articleGenders][0]!];
-}
-
 function ruleSpecificity(ruleName: string, syntax: NounSyntaxRule, morphology: NounMorphology) {
   const rule = morphology.declensionRules.find((item) => item.name === ruleName);
   if (!rule) return 0;
@@ -203,85 +187,69 @@ function ruleSpecificity(ruleName: string, syntax: NounSyntaxRule, morphology: N
   }));
 }
 
+function typedNounForms(syntax: NounSyntaxRule, values: string[]) {
+  const forms: Partial<Record<NounFormNumber, string>> = {};
+  syntax.fields.forEach((field, index) => {
+    if (field.kind === "noun") forms[field.number] = values[index] ?? "";
+  });
+  return forms;
+}
+
 function buildCandidates(
   syntax: NounSyntaxRule,
   morphology: NounMorphology,
-  genders: NounGender[],
+  gender: NounGender,
   tantum: "singular" | "plural" | null,
   values: string[],
 ): NounSyntaxCandidate[] {
   const inferenceSet = morphology.inferenceSets.find((set) => set.name === syntax.inferenceSet);
-  if (!inferenceSet || !genders.length) return [];
-  const result: NounSyntaxCandidate[] = [];
+  if (!inferenceSet) return [];
   const articleConstraint = syntaxArticleConstraint(syntax);
-  const fullDeclension = syntaxSuppliesFullDeclension(syntax);
+  const typed = typedNounForms(syntax, values);
+  const result: NounSyntaxCandidate[] = [];
 
   for (const ruleName of inferenceSet.declensionRules) {
     const rule = morphology.declensionRules.find((item) => item.name === ruleName);
     if (!rule || (tantum && ruleNumberMode(rule) !== tantum)) continue;
-    const observedBases: string[] = [];
-    syntax.fields.forEach((field, index) => {
-      if (field.kind !== "noun") return;
-      const base = recognizeNounForm(rule, values[index] ?? "", field.number);
-      if (base !== null) observedBases.push(base);
-      else observedBases.push("\u0000NO_MATCH\u0000");
+    const bases = (["singular", "plural"] as const)
+      .filter((number) => typed[number] !== undefined)
+      .map((number) => recognizeNounForm(rule, typed[number]!, number));
+    if (!bases.length || bases.some((base) => base === null)) continue;
+    if (new Set(bases.map((base) => normalizeText(base!))).size !== 1) continue;
+    result.push({
+      syntaxName: syntax.name,
+      declensionRule: rule.name,
+      definition: { kind: "rule", rule: rule.name, base: bases[0]!, gender },
+      articleConstraint,
     });
-    if (observedBases.some((base) => base === "\u0000NO_MATCH\u0000")) continue;
-    const normalizedBases = new Set(observedBases.map(normalize));
-    if (normalizedBases.size !== 1) continue;
-    const base = observedBases[0] ?? "";
-
-    const singular = generateNounForm(rule, base, "singular") ?? "";
-    const plural = generateNounForm(rule, base, "plural") ?? "";
-
-    for (const gender of genders) {
-      const articles = suggestedNounArticles(gender, singular, plural, nounArticleProfiles.all);
-      if (!fullDeclension && normalize(articles.definiteSingularArticle) === "lo") continue;
-      const articlesMatch = syntax.fields.every((field, index) => {
-        if (field.kind !== "article") return true;
-        return normalize(values[index] ?? "") === normalize(expectedArticle(field, articles));
-      });
-      if (!articlesMatch) continue;
-
-      result.push({
-        syntaxName: syntax.name,
-        declensionRule: rule.name,
-        definition: {
-          rule: rule.name,
-          base,
-          gender,
-        },
-        articleConstraint,
-      });
-    }
   }
 
-  return result.sort((left, right) => {
+  result.sort((left, right) => {
     const specificity = ruleSpecificity(right.declensionRule, syntax, morphology) - ruleSpecificity(left.declensionRule, syntax, morphology);
-    if (specificity) return specificity;
-    const byRule = left.declensionRule.localeCompare(right.declensionRule);
-    if (byRule) return byRule;
-    return left.definition.gender.localeCompare(right.definition.gender);
+    return specificity || left.declensionRule.localeCompare(right.declensionRule);
   });
-}
 
-function candidateMatchesTarget(candidate: NounSyntaxCandidate, target: NounDefinition) {
-  if (
-    candidate.definition.rule !== target.rule
-    || normalize(candidate.definition.base) !== normalize(target.base)
-    || candidate.definition.gender !== target.gender
-  ) return false;
-
-  if (candidate.articleConstraint.kind === "none") return articleProfilesEqual(target.articleProfile, nounArticleProfiles.none);
-  return candidate.articleConstraint.capabilities.every((capability) => articleProfileAllows(target.articleProfile, capability));
+  // Irregular nouns are implicitly part of every inference set, but an irregular form cannot be
+  // inferred, so the answer must supply every form: both numbers, or one number marked as the only one.
+  const suppliesEveryForm = (typed.singular !== undefined && typed.plural !== undefined) || Boolean(tantum);
+  if (suppliesEveryForm) {
+    result.push({
+      syntaxName: syntax.name,
+      declensionRule: irregularDeclensionName,
+      definition: { kind: "irregular", singular: typed.singular ?? null, plural: typed.plural ?? null, gender },
+      articleConstraint,
+    });
+  }
+  return result;
 }
 
 export function attemptNounSyntax(rawValue: string, syntax: NounSyntaxRule, morphology: NounMorphology, keywords: AnswerKeywords): NounSyntaxAttempt {
   const originalTokens = tokenize(rawValue);
+  const notApplicable = (pieces: NounSyntaxPiece[], consumedTokens: number, reason: string): NounSyntaxAttempt => (
+    { syntax, status: "not-applicable", pieces, missing: [], candidates: [], consumedTokens, reason, values: [], excludedBySpelling: false }
+  );
   const markerParse = parseMarkers(originalTokens, syntax, keywords);
-  if (markerParse.invalid) {
-    return { syntax, status: "not-applicable", pieces: markerParse.pieces, missing: [], candidates: [], consumedTokens: markerParse.index, reason: markerParse.reason };
-  }
+  if (markerParse.invalid) return notApplicable(markerParse.pieces, markerParse.index, markerParse.reason);
 
   if (markerParse.missingRequired.length && markerParse.index === originalTokens.length) {
     return {
@@ -292,33 +260,28 @@ export function attemptNounSyntax(rawValue: string, syntax: NounSyntaxRule, morp
       candidates: [],
       consumedTokens: markerParse.index,
       reason: "Required noun markers are still missing.",
+      values: [],
+      excludedBySpelling: false,
     };
   }
-  if (markerParse.missingRequired.length) {
-    return { syntax, status: "not-applicable", pieces: markerParse.pieces, missing: [], candidates: [], consumedTokens: markerParse.index, reason: "Required noun marker is missing before the answer fields." };
-  }
+  if (markerParse.missingRequired.length) return notApplicable(markerParse.pieces, markerParse.index, "Required noun marker is missing before the answer fields.");
 
-  const values = expandElidedArticleTokens(originalTokens.slice(markerParse.index));
+  const values = expandElidedArticleTokens(originalTokens.slice(markerParse.index), morphology);
   const pieces = [...markerParse.pieces];
-  if (values.length > syntax.fields.length) {
-    return { syntax, status: "not-applicable", pieces, missing: [], candidates: [], consumedTokens: originalTokens.length, reason: "Too many fields for this syntax." };
-  }
+  if (values.length > syntax.fields.length) return notApplicable(pieces, originalTokens.length, "Too many fields for this syntax.");
 
   for (let index = 0; index < values.length; index += 1) {
     const field = syntax.fields[index];
     const value = values[index] ?? "";
     if (!field) break;
-    if (field.kind === "article") {
-      const facts = articleFacts(value);
-      if (!facts || facts.number !== field.number || facts.definiteness !== field.definiteness) {
-        return { syntax, status: "not-applicable", pieces, missing: [], candidates: [], consumedTokens: markerParse.index + index, reason: `${fieldLabel(field)} does not contain a valid article.` };
-      }
+    if (field.kind === "article" && !fieldReadings(field, value, morphology).length) {
+      return notApplicable(pieces, markerParse.index + index, `${fieldLabel(field)} does not contain a valid article.`);
     }
     pieces.push({ label: fieldLabel(field), value });
   }
 
-  const articleGender = markerParse.gender ? null : suppliedArticleGender(syntax.fields, values);
-  if (articleGender) pieces.push({ label: "Gender from article", value: articleGender });
+  const genders = articleGenders(syntax.fields, values, morphology);
+  if (!markerParse.gender && genders?.size === 1) pieces.push({ label: "Gender from article", value: [...genders][0]! });
 
   if (values.length < syntax.fields.length) {
     return {
@@ -329,20 +292,27 @@ export function attemptNounSyntax(rawValue: string, syntax: NounSyntaxRule, morp
       candidates: [],
       consumedTokens: originalTokens.length,
       reason: "This syntax matches the input so far.",
+      values: [],
+      excludedBySpelling: false,
     };
   }
 
-  const genders = candidateGenders(markerParse.gender, syntax.fields, values);
-  if (!genders.length) {
-    const hasArticle = syntax.fields.some((field) => field.kind === "article");
-    const suppliedGender = suppliedArticleGender(syntax.fields, values);
-    const reason = hasArticle && !markerParse.gender && !suppliedGender
-      ? "The supplied article does not determine gender; add a gender marker before the answer fields."
-      : "The supplied gender and articles conflict.";
-    return { syntax, status: "not-applicable", pieces, missing: [], candidates: [], consumedTokens: originalTokens.length, reason };
+  let gender: NounGender | null = null;
+  if (markerParse.gender) {
+    if (genders && !genders.has(markerParse.gender)) return notApplicable(pieces, originalTokens.length, "The supplied gender and articles conflict.");
+    gender = markerParse.gender;
+  } else if (genders?.size === 1) {
+    gender = [...genders][0]!;
+  } else {
+    const reason = genders?.size === 0
+      ? "The supplied articles conflict about gender."
+      : "The supplied article does not determine gender; add a gender marker before the answer fields.";
+    return notApplicable(pieces, originalTokens.length, reason);
   }
 
-  const candidates = buildCandidates(syntax, morphology, genders, markerParse.tantum, values);
+  const candidates = buildCandidates(syntax, morphology, gender, markerParse.tantum, values);
+  const typed = typedNounForms(syntax, values);
+  const typedGroup = articleGroupForWord(typed.singular ?? typed.plural ?? "", morphology);
   return {
     syntax,
     status: "complete",
@@ -351,6 +321,8 @@ export function attemptNounSyntax(rawValue: string, syntax: NounSyntaxRule, morp
     candidates,
     consumedTokens: originalTokens.length,
     reason: candidates.length ? "Syntax is complete." : "Syntax is complete, but the supplied forms do not produce an allowed morphology candidate.",
+    values,
+    excludedBySpelling: Boolean(typedGroup && syntax.excludedArticleGroups.includes(typedGroup)),
   };
 }
 
@@ -359,7 +331,7 @@ export function analyzeNounInput(rawValue: string, morphology: NounMorphology, k
 }
 
 export function choosePreviewAttempt(attempts: NounSyntaxAttempt[]) {
-  const completeWithCandidates = attempts.filter((attempt) => attempt.status === "complete" && attempt.candidates.length);
+  const completeWithCandidates = attempts.filter((attempt) => attempt.status === "complete" && attempt.candidates.length && !attempt.excludedBySpelling);
   if (completeWithCandidates.length) return completeWithCandidates[0];
 
   const partial = attempts.filter((attempt) => attempt.status === "partial");
@@ -369,13 +341,53 @@ export function choosePreviewAttempt(attempts: NounSyntaxAttempt[]) {
   return attempts.find((attempt) => attempt.status === "complete") ?? null;
 }
 
+function sameText(left: string, right: string) {
+  return normalizeText(left) === normalizeText(right);
+}
+
+/** The card-aware half of verification: does this reading of the answer describe this card? */
+function candidateMatchesCard(candidate: NounSyntaxCandidate, attempt: NounSyntaxAttempt, card: NounCard, morphology: NounMorphology) {
+  const { details } = card;
+  if (candidate.definition.gender !== details.gender) return false;
+
+  const declension = details.declension;
+  if (candidate.definition.kind === "rule") {
+    if (declension.kind !== "rule" || declension.rule !== candidate.definition.rule || !sameText(declension.base, candidate.definition.base)) return false;
+  } else {
+    if (declension.kind !== "irregular") return false;
+    const typed = { singular: candidate.definition.singular, plural: candidate.definition.plural };
+    for (const number of ["singular", "plural"] as const) {
+      const stored = declension[number];
+      const answered = typed[number];
+      if (stored ? answered === null || !sameText(stored, answered) : answered !== null) return false;
+    }
+  }
+
+  const constraint = candidate.articleConstraint;
+  if (constraint.kind === "none") {
+    if (!articleProfilesEqual(details.articleProfile, nounArticleProfiles.none)) return false;
+  } else if (!constraint.capabilities.every((capability) => articleProfileAllows(details.articleProfile, capability))) {
+    return false;
+  }
+
+  const group = nounArticleGroup(card, morphology);
+  if (group && attempt.syntax.excludedArticleGroups.includes(group)) return false;
+
+  const forms = resolvedNounForms(card, morphology);
+  return attempt.syntax.fields.every((field, index) => {
+    if (field.kind !== "article") return true;
+    const formGroup = field.number === "singular" ? forms.singularGroup : forms.pluralGroup;
+    const expected = formGroup ? articleSetFor(morphology, formGroup, details.gender)?.[articleKey(field.definiteness, field.number)] : undefined;
+    return expected !== undefined && sameText(expected, attempt.values[index] ?? "");
+  });
+}
+
 export function evaluateNounAnswer(card: Flashcard, rawValue: string, morphology: NounMorphology, keywords: AnswerKeywords): NounAnswerEvaluation {
   if (card.type !== "noun") throw new Error("Noun evaluator requires a noun card.");
   const attempts = analyzeNounInput(rawValue, morphology, keywords);
   const completeAttempts = attempts.filter((attempt) => attempt.status === "complete");
   const candidates = completeAttempts.flatMap((attempt) => attempt.candidates);
-  const target = nounDefinitionForCard(card);
-  const matchingCandidates = candidates.filter((candidate) => candidateMatchesTarget(candidate, target));
+  const matchingCandidates = completeAttempts.flatMap((attempt) => attempt.candidates.filter((candidate) => candidateMatchesCard(candidate, attempt, card, morphology)));
   return {
     result: matchingCandidates.length ? "correct" : completeAttempts.length ? "wrong" : "invalid",
     attempts,

@@ -4,8 +4,9 @@ import {
   type NounBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
-import { articleProfileOptions, nounFormPhrases, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
-import type { NounMorphology } from "../cards/nounMorphology";
+import { articleProfileOptions, irregularRuleValue, nounFormPhrases, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
+import { irregularDeclensionName, type NounMorphology } from "../cards/nounMorphology";
+import type { NounDetails } from "../cards/types";
 
 export function SetField({
   knownSets,
@@ -43,6 +44,11 @@ export function TagsField({ value, onChange }: { value: string; onChange: (value
   );
 }
 
+function nounExceptionNote(details: NounDetails) {
+  const overrides = [details.articleGroups.singular && `sg. as ${details.articleGroups.singular}`, details.articleGroups.plural && `pl. as ${details.articleGroups.plural}`].filter(Boolean);
+  return overrides.length ? ` · articles: ${overrides.join(", ")}` : "";
+}
+
 export function NounDerivedPreview({ draft, morphology }: { draft: NounDraft; morphology: NounMorphology }) {
   if (!draft.singular.trim() && !draft.plural.trim()) return <span className="derived-preview empty">Forms appear as you type</span>;
   const resolved = resolveNounDraft(draft, morphology);
@@ -50,7 +56,7 @@ export function NounDerivedPreview({ draft, morphology }: { draft: NounDraft; mo
   const phrases = nounFormPhrases(resolved.forms);
   return <span className="derived-preview valid">
     <span className="derived-forms">{phrases.length ? phrases.map((phrase) => phrase.text).join(" · ") : [resolved.forms.singular, resolved.forms.plural].filter(Boolean).join(" · ")}</span>
-    <small>{resolved.inferred ? "auto: " : ""}{resolved.definition.rule}</small>
+    <small>{resolved.inferred ? "auto: " : ""}{resolved.forms.rule ?? irregularDeclensionName}{nounExceptionNote(resolved.details)}</small>
   </span>;
 }
 
@@ -58,6 +64,7 @@ export function NounRuleSelect({ value, morphology, onChange, label }: { value: 
   return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
     <option value="">Auto</option>
     {morphology.declensionRules.map((rule) => <option key={rule.name} value={rule.name}>{rule.name}</option>)}
+    <option value={irregularRuleValue}>{irregularDeclensionName}</option>
   </select>;
 }
 

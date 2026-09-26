@@ -58,52 +58,16 @@ Verb, adjective, and adverb typed verification use their current canonical store
 
 A canonical noun card stores:
 
-- `rule`, the unique name of its declension rule;
-- `base`;
+- `declension`: `{ kind: "rule", rule, base }` or, for irregular nouns, `{ kind: "irregular", singular, plural }`;
 - `gender`;
-- `articleProfile`, an object with Boolean `definiteSingular`, `definitePlural`, and `indefiniteSingular` capabilities.
+- `articleProfile`, an object with Boolean `definiteSingular`, `definitePlural`, and `indefiniteSingular` capabilities (four canonical combinations: all, definite singular only, definite plural only, none);
+- `articleGroups`, per-form article-group exceptions (`null` means the group comes from spelling).
 
-A noun card does not store top-level `italian`. Its singular and plural surface forms are generated from `rule` and `base` using the active noun morphology.
+A noun card does not store top-level `italian` or article strings. Regular forms are generated from the rule and base; articles come from the morphology's editable article groups, where each form's group is chosen by spelling patterns (`sC`, `iV`, `V`, …) unless the noun overrides it (for example plural `dei` in the `lo` group gives `gli dei`).
 
-Only four article-profile combinations are canonical:
+Declension rules, inference sets, syntax rules, and article groups use unique names as references, and the grammar editor cascades renames (rules into inference sets and nouns; inference sets into syntaxes; article groups into syntax exclusions and noun exceptions). `Irregular` is reserved as a rule name.
 
-```text
-definite singular  definite plural  indefinite singular
-true               true             true
-true               false            false
-false              true             false
-false              false            false
-```
-
-Article availability is independent from declension number availability. A two-number rule may therefore be paired with a profile whose only enabled capability is `definiteSingular`; the plural noun form still exists even though the card does not accept a definite plural article.
-
-Declension rules use their unique names as references. Their `forms` entries define number availability:
-
-```text
-singular + plural -> both numbers
-singular only     -> singular-only
-plural only       -> plural-only
-```
-
-Inference sets use unique names as references. Their `declensionRules` arrays contain declension-rule names. Syntax rules reference an inference set by name. Syntax-rule names are unique and are used directly for parser identity and diagnostics.
-
-The morphology editor cascades renames. A rule rename updates inference-set references in the draft and noun-card references on save. An inference-set rename updates syntax references in the draft. Duplicate names are rejected.
-
-Syntax rules do not store article or number profiles. Article constraints come from article fields. A definite singular field requires `articleProfile.definiteSingular`, a definite plural field requires `articleProfile.definitePlural`, and an indefinite singular field requires `articleProfile.indefiniteSingular`. A syntax with no article field requires the no-article profile and must require explicit gender plus a singular-only or plural-only marker.
-
-A noun field requires the inferred declension to support that surface number. A tantum marker is stronger and restricts inference to an exactly singular-only or plural-only rule.
-
-Examples:
-
-```text
-cetriolo: rule -o → -i, base cetriol, all three article capabilities
-specchio: rule -chio → -chi, base spec, all three article capabilities
-Venezia: rule Singular form is the base, base Venezia, no article capabilities
-```
-
-Article-bearing shorthand requires an article. Ambiguous `l'` does not determine gender, so the learner must also provide a gender marker. Articleless nouns use explicit gender and singular/plural-only markers, for example `f s Venezia`.
-
-Masculine nouns whose generated definite singular article is `lo` use the full-declension study policy. A shorthand such as `lo specchio` or `lo zaino` is therefore wrong even when the noun's declension rule is in `Learned shorthand`. For an ordinary two-number, all-articles noun, the accepted full form is shaped like `lo specchio gli specchi uno`. This policy is derived from the generated article rather than stored on individual noun cards.
+Typed verification builds card-blind readings of the answer, then compares them with the card: rule and base (or every irregular form), gender, article capabilities, the syntax's excluded article groups, and each typed article against the table. Irregular nouns are implicitly part of every inference set but only match answers that supply every form. The former hardcoded `lo` full-declension policy is now each shorthand syntax's default `excludedArticleGroups: ["lo"]`.
 
 See `docs/NOUN_MORPHOLOGY_AND_SYNTAX.md` for the detailed model.
 
@@ -111,13 +75,13 @@ See `docs/NOUN_MORPHOLOGY_AND_SYNTAX.md` for the detailed model.
 
 Parola does not contain a compatibility adapter for retired card formats.
 
-The external import bridge accepts only cards that already obey the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `rule`, `base`, `gender`, and structured `articleProfile` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
+The external import bridge accepts only cards that already obey the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `declension`, `gender`, structured `articleProfile`, and `articleGroups` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
 
 After validation, imported cards use the same `addBatch` and `CardStorage` persistence path as ordinary card creation.
 
 ## Automated validation
 
-`npm test` runs deterministic tests against the real noun parser/preview, synchronization logic, and external import contract. Noun coverage includes rule-derived number behavior, `lo`-class full-declension policy, article-derived gender, article capability matching, article profiles independent of declension number availability, ambiguous article gender, contradictory evidence, articleless nouns, zero-candidate complete syntax, candidate ordering, preview candidate scoping, and strict rejection of retired schemas.
+`npm test` runs deterministic tests against the real noun parser/preview, synchronization logic, and external import contract. Noun coverage includes rule-derived number behavior, the editable article table, irregular nouns, article-group exceptions, the `lo` shorthand exclusion, article-derived gender, article capability matching, article profiles independent of declension number availability, ambiguous article gender, contradictory evidence, articleless nouns, zero-candidate complete syntax, candidate ordering, preview candidate scoping, and strict rejection of retired schemas.
 
 Test files run serially because they share one temporary CommonJS output directory.
 
