@@ -13,7 +13,6 @@ import {
 } from "./storage";
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
-import { hasProductionInventory, readProductionInventory } from "./storage/productionInventory";
 import {
   cloneNounMorphology,
   defaultNounMorphology,
@@ -105,7 +104,6 @@ export default function Home() {
   const [mistakeOnlyKeys, setMistakeOnlyKeys] = useState<string[] | null>(null);
   const [mistakeTagName, setMistakeTagName] = useState("");
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
-  const [productionAvailable] = useState(hasProductionInventory);
   const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
 
   const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
@@ -564,25 +562,6 @@ export default function Home() {
     setSessionComplete(false);
   }
 
-  /** Prototype-only: copy the current Parola app's words into this build's separate storage. */
-  async function copyProductionInventory() {
-    if (cards.length && !window.confirm("Replace this prototype's words and grammar with a copy from the current Parola app? The current app is not changed.")) return;
-    setSyncWarning("");
-    try {
-      const state = readProductionInventory();
-      setSaveState("saving");
-      const saved = await storage.replaceInventory(state);
-      setCards(saved.cards);
-      setNounMorphology(saved.nounMorphology);
-      removeUnavailableInventoryTags(saved.cards);
-      resetStudyProgress();
-      setSaveState("saved");
-    } catch (error) {
-      setSaveState("failed");
-      setSyncWarning(error instanceof Error ? `Could not copy from the current app: ${error.message}` : "Could not copy from the current app.");
-    }
-  }
-
   async function syncNow() {
     if (!storage.syncNow) return;
     const nextState = await storage.syncNow();
@@ -631,7 +610,6 @@ export default function Home() {
         savingTag={saveState === "saving"}
         warning={syncWarning}
         onAddWords={() => setAdding(true)}
-        onCopyProduction={productionAvailable ? () => void copyProductionInventory() : undefined}
       />}
       {route === "words" && <WordsView
         loading={loadingCards}
@@ -657,7 +635,6 @@ export default function Home() {
         onBulkSet={bulkSet}
         onBulkDelete={bulkDelete}
         onAddWords={() => setAdding(true)}
-        onCopyProduction={productionAvailable ? () => void copyProductionInventory() : undefined}
       />}
       {route === "grammar" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
@@ -669,7 +646,6 @@ export default function Home() {
           storageProps={{ storage, endpoint: storageEndpoint, persistLocal, loadPolicy: syncLoadPolicy, onApply: applyStorageSettings, onSyncNow: syncNow }}
           keywords={answerKeywords}
           onKeywords={setAnswerKeywords}
-          onCopyProduction={productionAvailable ? () => void copyProductionInventory() : undefined}
         />
       </>}
     </AppShell>

@@ -214,7 +214,6 @@ export type StudyViewProps = {
   savingTag: boolean;
   warning: string;
   onAddWords: () => void;
-  onCopyProduction?: () => void;
 };
 
 export function StudyView(props: StudyViewProps) {
@@ -228,10 +227,7 @@ export function StudyView(props: StudyViewProps) {
     <div className="empty-state">
       <h2>No words yet</h2>
       <p>Add a few words and they’ll show up here as cards.</p>
-      <div className="button-row">
-        {props.onCopyProduction && <button type="button" className="primary-button" onClick={props.onCopyProduction}>Copy words from current Parola</button>}
-        <button type="button" className={props.onCopyProduction ? "neutral-button" : "primary-button"} onClick={props.onAddWords}><Icon name="plus" size={16} /> Add words</button>
-      </div>
+      <button type="button" className="primary-button" onClick={props.onAddWords}><Icon name="plus" size={16} /> Add words</button>
     </div>
   </section>;
 

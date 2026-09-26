@@ -115,7 +115,6 @@ export function WordsView({
   onBulkSet,
   onBulkDelete,
   onAddWords,
-  onCopyProduction,
 }: {
   loading: boolean;
   warning: string;
@@ -141,7 +140,6 @@ export function WordsView({
   onBulkSet: (ids: number[], setName: string | null) => Promise<boolean>;
   onBulkDelete: (ids: number[]) => Promise<boolean>;
   onAddWords: () => void;
-  onCopyProduction?: () => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -203,7 +201,7 @@ export function WordsView({
         {warning && <p className="sync-warning" role="status">{warning}</p>}
 
         {loading ? <div className="empty-state" role="status"><p>Loading your words…</p></div>
-          : !cards.length ? <div className="empty-state"><h2>No words yet</h2><p>Start with a handful of nouns or verbs from your current lesson.</p><div className="button-row">{onCopyProduction && <button type="button" className="primary-button" onClick={onCopyProduction}>Copy words from current Parola</button>}<button type="button" className={onCopyProduction ? "neutral-button" : "primary-button"} onClick={onAddWords}><Icon name="plus" size={16} /> Add words</button></div></div>
+          : !cards.length ? <div className="empty-state"><h2>No words yet</h2><p>Start with a handful of nouns or verbs from your current lesson.</p><button type="button" className="primary-button" onClick={onAddWords}><Icon name="plus" size={16} /> Add words</button></div>
             : !filteredCards.length ? <div className="empty-state"><h2>No matches</h2><p>Try a different search or clear the filters.</p></div>
               : <>
                 {selectedVisible.length > 0 && <BulkBar

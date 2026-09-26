@@ -482,7 +482,6 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .exceptions-box[open] { padding-bottom: 14px; }
 .exceptions-box summary { cursor: pointer; color: var(--muted); font-size: 13.5px; font-weight: 600; }
 .exceptions-box summary:hover { color: var(--text); }
-.prototype-note { border-color: rgba(139, 157, 255, .45); background: rgba(139, 157, 255, .06); grid-column: 1 / -1; }
 
 /* ---------- Settings ---------- */
 .settings-view { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 18px; align-items: start; }
