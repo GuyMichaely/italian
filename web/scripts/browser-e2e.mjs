@@ -118,9 +118,7 @@ try {
   assert.equal(persisted.cards[0].english, "mirror");
   assert.equal(Object.prototype.hasOwnProperty.call(persisted.cards[0], "italian"), false);
 
-  await page.getByRole("button", { name: "Adjust study setup" }).click();
   await page.getByRole("radio", { name: "Type the Italian" }).click();
-  await page.getByRole("button", { name: "Start studying" }).click();
 
   const answer = page.getByRole("textbox", { name: "Answer" });
   await answer.fill("lo");

@@ -100,7 +100,6 @@ export default function Home() {
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now() >>> 0);
   const [selectedInventoryTags, setSelectedInventoryTags] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<WordsTypeFilter>("all");
-  const [gridMode, setGridMode] = useState(false);
   const [query, setQuery] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -242,7 +241,7 @@ export default function Home() {
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
-      if (adding || editingCard || route !== "study" || setupOpen || !studyItem) return;
+      if (adding || editingCard || route !== "study" || !studyItem) return;
       if (typingItalian) {
         if (verificationResult && event.key === "Enter") {
           event.preventDefault();
@@ -296,8 +295,17 @@ export default function Home() {
     setSetup(next);
     writeStudySetup(next);
     setDirectionSeed((value) => value + 1);
-    setSetupOpen(false);
     resetStudyProgress();
+  }
+
+  /** Switching between typing and flipping keeps the current session and only resets the open card. */
+  function applyAnswerMode(typeToVerify: boolean) {
+    const next = { ...setup, typeToVerify };
+    setSetup(next);
+    writeStudySetup(next);
+    setRevealed(false);
+    setVerificationResult(null);
+    setSubmittedAnswer("");
   }
 
   function resetStudyProgress() {
@@ -563,6 +571,7 @@ export default function Home() {
         setupOpen={setupOpen}
         onSetupOpen={setSetupOpen}
         onApplySetup={applySetup}
+        onAnswerMode={applyAnswerMode}
         scopeOptions={studyScopeOptions}
         items={studyItems}
         current={current}
@@ -605,8 +614,6 @@ export default function Home() {
         selectedFilters={selectedInventoryTags}
         onToggleFilter={toggleInventoryTag}
         onClearFilters={() => setSelectedInventoryTags([])}
-        gridMode={gridMode}
-        onGridMode={setGridMode}
         onOpen={setEditingCard}
         onRemove={removeCard}
         onRemoveTag={(tag) => void removeTagFromExistence(tag)}

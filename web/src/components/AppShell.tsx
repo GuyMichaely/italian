@@ -25,7 +25,7 @@ export function AppShell({ route, syncing, syncLabel, saveState, onAdd, children
         </div>
       </div>
     </header>
-    <main className="content-frame">{children}</main>
+    <main className={`content-frame route-${route}`}>{children}</main>
     <nav className="bottom-nav" aria-label="Main">
       {navItems.map((item) => <a key={item.route} href={`#/${item.route}`} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined}><Icon name={item.icon} size={20} /><span>{item.label}</span></a>)}
     </nav>

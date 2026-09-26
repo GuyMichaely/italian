@@ -11,7 +11,7 @@ import {
   type AdverbBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
-import { articleProfileOptions, emptyNounDraft, nounCardFromDraft, nounDraftFromCard, type NounDraft } from "../cards/nounDraft";
+import { articleProfileOptions, emptyNounDraft, nounCardFromDraft, nounDraftForEditing, type NounDraft } from "../cards/nounDraft";
 import { standardAdjectivePattern } from "../study/logic";
 import { NounDerivedPreview, NounRuleSelect, SetField, TagsField } from "./CardEditorFields";
 import { Sheet } from "./Sheet";
@@ -21,15 +21,6 @@ function TextField({ label, value, onChange, autoFocus = false, placeholder, ita
     <span>{label}</span>
     <input value={value} onChange={(event) => onChange(event.target.value)} autoFocus={autoFocus} placeholder={placeholder} {...(italian ? { autoCapitalize: "none", spellCheck: false, lang: "it" } : {})} />
   </label>;
-}
-
-function initialNounDraft(card: Flashcard, morphology: NounMorphology): NounDraft {
-  if (card.type !== "noun") return emptyNounDraft();
-  try {
-    return nounDraftFromCard(card, morphology);
-  } catch {
-    return { ...emptyNounDraft(), english: card.english, rule: card.details.rule };
-  }
 }
 
 export function WordDrawer({
@@ -50,7 +41,7 @@ export function WordDrawer({
   const [formError, setFormError] = useState("");
   const [setName, setSetName] = useState(card.setName ?? "");
   const [tags, setTags] = useState(card.tags.join(", "));
-  const [noun, setNoun] = useState<NounDraft>(() => initialNounDraft(card, morphology));
+  const [noun, setNoun] = useState<NounDraft>(() => card.type === "noun" ? nounDraftForEditing(card, morphology) : emptyNounDraft());
   const [verb, setVerb] = useState<VerbBatchRow | null>(() => card.type === "verb" ? verbRowFromCard(card) : null);
   const [adjective, setAdjective] = useState<AdjectiveBatchRow | null>(() => card.type === "adjective" ? adjectiveRowFromCard(card) : null);
   const [adverb, setAdverb] = useState<AdverbBatchRow | null>(() => card.type === "adverb" ? adverbRowFromCard(card) : null);

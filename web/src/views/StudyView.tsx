@@ -33,52 +33,79 @@ function setupSummary(setup: StudySetup) {
   return [scope, prompt, answer];
 }
 
-function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (value: T) => void; label: string }) {
-  return <div className="segmented" role="radiogroup" aria-label={label}>
-    {options.map((option) => <button type="button" role="radio" aria-checked={value === option.value} key={option.value} className={value === option.value ? "active" : ""} onClick={() => onChange(option.value)}>{option.label}</button>)}
+type Option<T extends string> = { value: T; label: string; short?: string; description?: string };
+
+function OptionList<T extends string>({ value, options, onChange, label }: { value: T; options: Option<T>[]; onChange: (value: T) => void; label: string }) {
+  return <div className="option-list" role="radiogroup" aria-label={label}>
+    {options.map((option) => <button type="button" role="radio" aria-checked={value === option.value} key={option.value} className={value === option.value ? "active" : ""} onClick={() => onChange(option.value)}>
+      <span className="option-radio" aria-hidden="true" />
+      <span className="option-text"><span className="label-long">{option.label}</span><span className="label-short" aria-hidden="true">{option.short ?? option.label}</span>{option.description && <small>{option.description}</small>}</span>
+    </button>)}
   </div>;
+}
+
+function sessionShape(setup: StudySetup) {
+  const { typeToVerify: _answerMode, ...shape } = setup;
+  return JSON.stringify(shape);
 }
 
 function StudySetupPanel({
   cards,
   setup,
   options,
-  sessionStarted,
+  inProgress,
   onApply,
-  onCancel,
+  onAnswerMode,
+  onClose,
 }: {
   cards: Flashcard[];
   setup: StudySetup;
   options: StudyScopeOption[];
-  sessionStarted: boolean;
+  inProgress: boolean;
   onApply: (setup: StudySetup) => void;
-  onCancel: () => void;
+  onAnswerMode: (typeToVerify: boolean) => void;
+  onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(setup);
-  const count = studyItemCount(cards, draft);
+  // Mid-session changes are staged so the current session is never reset silently.
+  const [staged, setStaged] = useState<StudySetup | null>(null);
+  const shown = staged ? { ...staged, typeToVerify: setup.typeToVerify } : setup;
+  const count = studyItemCount(cards, shown);
   const groups = (["type", "set", "tag"] as const).map((kind) => ({ kind, options: options.filter((option) => option.kind === kind) })).filter((group) => group.options.length);
   const groupLabels = { type: "Parts of speech", set: "Sets", tag: "Tags" };
 
+  function change(patch: Partial<StudySetup>) {
+    const next = { ...shown, ...patch };
+    if (sessionShape(next) === sessionShape(setup)) setStaged(null);
+    else if (inProgress) setStaged(next);
+    else {
+      setStaged(null);
+      onApply(next);
+    }
+  }
+
   function toggleScope(key: string) {
-    setDraft((current) => ({
-      ...current,
-      selectedScopes: current.selectedScopes.includes(key) ? current.selectedScopes.filter((item) => item !== key) : [...current.selectedScopes, key],
-    }));
+    change({ selectedScopes: shown.selectedScopes.includes(key) ? shown.selectedScopes.filter((item) => item !== key) : [...shown.selectedScopes, key] });
   }
 
   return <section className="setup-panel" aria-label="Study setup">
+    <header className="setup-header">
+      <h2>Session</h2>
+      <span className="setup-count"><strong>{count}</strong> {count === 1 ? "card" : "cards"}</span>
+      <button type="button" className="text-button small narrow-only" onClick={onClose}>Done</button>
+    </header>
+
     <div className="setup-group">
       <h3>Words</h3>
-      <Segmented<ScopeMode> label="Which words" value={draft.scopeMode} onChange={(scopeMode) => setDraft((current) => ({ ...current, scopeMode }))} options={[
-        { value: "all", label: "All words" },
-        { value: "only", label: "Only…" },
-        { value: "exclude", label: "All except…" },
+      <OptionList<ScopeMode> label="Which words" value={shown.scopeMode} onChange={(scopeMode) => change({ scopeMode })} options={[
+        { value: "all", label: "All words", short: "All" },
+        { value: "only", label: "Only selected", short: "Only…" },
+        { value: "exclude", label: "All except selected", short: "Except…" },
       ]} />
-      {draft.scopeMode !== "all" && <div className="scope-groups">
+      {shown.scopeMode !== "all" && <div className="scope-groups">
         {groups.map((group) => <div className="scope-group" key={group.kind}>
           <span className="scope-group-label">{groupLabels[group.kind]}</span>
           <div className="chip-row">
-            {group.options.map((option) => <button type="button" key={option.key} className={`chip ${option.kind} ${option.kind === "type" ? option.key.slice(5) : ""} ${draft.selectedScopes.includes(option.key) ? "selected" : ""}`} aria-pressed={draft.selectedScopes.includes(option.key)} onClick={() => toggleScope(option.key)}>
+            {group.options.map((option) => <button type="button" key={option.key} className={`chip ${option.kind} ${option.kind === "type" ? option.key.slice(5) : ""} ${shown.selectedScopes.includes(option.key) ? "selected" : ""}`} aria-pressed={shown.selectedScopes.includes(option.key)} onClick={() => toggleScope(option.key)}>
               {option.kind === "tag" ? `#${option.label}` : option.label}
             </button>)}
           </div>
@@ -88,46 +115,45 @@ function StudySetupPanel({
 
     <div className="setup-group">
       <h3>Prompt</h3>
-      <Segmented<PromptMode> label="Prompt direction" value={draft.promptMode} onChange={(promptMode) => setDraft((current) => ({ ...current, promptMode }))} options={[
-        { value: "english", label: "English → Italian" },
-        { value: "italian", label: "Italian → English" },
-        { value: "both", label: "Both" },
+      <OptionList<PromptMode> label="Prompt direction" value={shown.promptMode} onChange={(promptMode) => change({ promptMode })} options={[
+        { value: "english", label: "English → Italian", short: "EN → IT" },
+        { value: "italian", label: "Italian → English", short: "IT → EN" },
+        { value: "both", label: "Both directions", short: "Both" },
       ]} />
-      {draft.promptMode === "both" && <div className="setup-sub">
-        <Segmented label="Directions per word" value={draft.oneDirectionPerWord ? "one" : "both"} onChange={(value) => setDraft((current) => ({ ...current, oneDirectionPerWord: value === "one" }))} options={[
-          { value: "both", label: "Each word both ways" },
-          { value: "one", label: "One random direction" },
+      {shown.promptMode === "both" && <div className="setup-sub">
+        <OptionList label="Directions per word" value={shown.oneDirectionPerWord ? "one" : "both"} onChange={(value) => change({ oneDirectionPerWord: value === "one" })} options={[
+          { value: "both", label: "Each word both ways", short: "Both ways" },
+          { value: "one", label: "One random direction per word", short: "One random" },
         ]} />
-        {!draft.oneDirectionPerWord && <label className="check-option">
-          <input type="checkbox" checked={draft.englishFirstWhenBoth} onChange={(event) => setDraft((current) => ({ ...current, englishFirstWhenBoth: event.target.checked }))} />
-          <span>Show each word’s English prompt before its Italian prompt</span>
+        {!shown.oneDirectionPerWord && <label className="check-option">
+          <input type="checkbox" checked={shown.englishFirstWhenBoth} onChange={(event) => change({ englishFirstWhenBoth: event.target.checked })} />
+          <span>English prompt before Italian prompt</span>
         </label>}
       </div>}
     </div>
 
     <div className="setup-group">
       <h3>Answer</h3>
-      <Segmented label="Answer mode" value={draft.typeToVerify ? "type" : "flip"} onChange={(value) => setDraft((current) => ({ ...current, typeToVerify: value === "type" }))} options={[
-        { value: "type", label: "Type the Italian" },
-        { value: "flip", label: "Flip cards" },
+      <OptionList label="Answer mode" value={setup.typeToVerify ? "type" : "flip"} onChange={(value) => onAnswerMode(value === "type")} options={[
+        { value: "type", label: "Type the Italian", short: "Type", description: setup.promptMode === "english" ? "Checked and parsed as you type" : "Italian prompts stay flip cards" },
+        { value: "flip", label: "Flip cards", short: "Flip", description: "Reveal, then mark right or wrong" },
       ]} />
-      <p className="setup-hint">{draft.typeToVerify
-        ? draft.promptMode === "english" ? "Parola checks your Italian and parses it as you type." : "Parola checks typed Italian; Italian prompts are always flip cards."
-        : "Reveal the answer, then mark yourself right or wrong."}</p>
     </div>
 
-    <footer className="setup-footer">
-      <span className="setup-count"><strong>{count}</strong> {count === 1 ? "card" : "cards"}</span>
-      {sessionStarted && <button type="button" className="text-button" onClick={onCancel}>Cancel</button>}
-      <button type="button" className="primary-button" disabled={!count} onClick={() => onApply(draft)}>{sessionStarted ? "Restart with these settings" : "Start studying"}</button>
-    </footer>
+    {staged && <footer className="setup-pending" role="status">
+      <p>{inProgress ? "These changes start a new session." : "Apply these changes?"}</p>
+      <div className="button-row">
+        <button type="button" className="text-button small" onClick={() => setStaged(null)}>Revert</button>
+        <button type="button" className="primary-button small" disabled={!count} onClick={() => { onApply(staged); setStaged(null); }}>{inProgress ? "Restart" : "Apply"}</button>
+      </div>
+    </footer>}
   </section>;
 }
 
 function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }: { current: number; total: number; session: SessionCounts; onAdjust: () => void; onRestart: () => void; setup: StudySetup }) {
   const done = session.right + session.wrong + session.skipped;
   return <div className="study-header">
-    <button type="button" className="setup-summary" onClick={onAdjust} aria-label="Adjust study setup">
+    <button type="button" className="setup-summary narrow-only" onClick={onAdjust} aria-label="Adjust study setup">
       <Icon name="sliders" size={16} />
       <span className="setup-summary-text">{setupSummary(setup).map((part, index) => <span key={index}>{part}</span>)}</span>
     </button>
@@ -161,6 +187,7 @@ export type StudyViewProps = {
   setupOpen: boolean;
   onSetupOpen: (open: boolean) => void;
   onApplySetup: (setup: StudySetup) => void;
+  onAnswerMode: (typeToVerify: boolean) => void;
   scopeOptions: StudyScopeOption[];
   items: StudyItem[];
   current: number;
@@ -204,16 +231,16 @@ export function StudyView(props: StudyViewProps) {
     </div>
   </section>;
 
-  if (props.setupOpen) return <section className="study-view">
-    <StudySetupPanel cards={props.cards} setup={props.setup} options={props.scopeOptions} sessionStarted={answered > 0 && !props.sessionComplete} onApply={props.onApplySetup} onCancel={() => props.onSetupOpen(false)} />
-  </section>;
-
   const total = props.items.length;
   const scored = props.session.right + props.session.wrong;
 
-  return <section className="study-view">
+  return <section className={`study-layout${props.setupOpen ? " setup-open" : ""}`}>
+    <aside className="study-sidebar">
+      <StudySetupPanel cards={props.cards} setup={props.setup} options={props.scopeOptions} inProgress={answered > 0 && !props.sessionComplete} onApply={props.onApplySetup} onAnswerMode={props.onAnswerMode} onClose={() => props.onSetupOpen(false)} />
+    </aside>
+    <div className="study-view">
     {props.warning && <p className="sync-warning" role="status">{props.warning}</p>}
-    {total > 0 && !props.sessionComplete && <ProgressHeader current={props.current} total={total} session={props.session} setup={props.setup} onAdjust={() => props.onSetupOpen(true)} onRestart={props.onRestart} />}
+    {total > 0 && !props.sessionComplete && <ProgressHeader current={props.current} total={total} session={props.session} setup={props.setup} onAdjust={() => props.onSetupOpen(!props.setupOpen)} onRestart={props.onRestart} />}
 
     {props.sessionComplete ? (
       <div className="session-complete">
@@ -231,7 +258,7 @@ export function StudyView(props: StudyViewProps) {
           </> : <>
             {props.missedItems.length > 0 && <button className="primary-button" onClick={props.onStudyMistakes}>Review {props.missedItems.length} {props.missedItems.length === 1 ? "mistake" : "mistakes"}</button>}
             <button className={props.missedItems.length ? "neutral-button" : "primary-button"} onClick={props.onRestart}>Study again</button>
-            <button className="text-button" onClick={() => props.onSetupOpen(true)}>Change setup</button>
+            <button className="text-button narrow-only" onClick={() => props.onSetupOpen(true)}>Change setup</button>
           </>}
         </div>
         {!props.reviewingMistakes && props.missedItems.length > 0 && <div className="mistake-tag-creator">
@@ -282,7 +309,7 @@ export function StudyView(props: StudyViewProps) {
         </article>
       )}
 
-      <div className="study-actions" key={`${studyItem.key}:${props.typing}:${props.verificationResult}:${props.revealed}`}>
+      <div className={`study-actions${props.typing ? " typing" : ""}`} key={`${studyItem.key}:${props.typing}:${props.verificationResult}:${props.revealed}`}>
         {props.typing ? (
           props.verificationResult
             ? <button className="primary-button wide" onClick={props.onAdvance}>Continue <kbd>Enter</kbd></button>
@@ -299,8 +326,9 @@ export function StudyView(props: StudyViewProps) {
       <div className="empty-state">
         <h2>No cards match this setup</h2>
         <p>{props.setup.scopeMode === "only" && !props.setup.selectedScopes.length ? "Choose at least one part of speech, set, or tag." : "Widen the selection or add words."}</p>
-        <button type="button" className="primary-button" onClick={() => props.onSetupOpen(true)}><Icon name="sliders" size={16} /> Adjust setup</button>
+        <button type="button" className="primary-button narrow-only" onClick={() => props.onSetupOpen(true)}><Icon name="sliders" size={16} /> Adjust setup</button>
       </div>
     )}
+    </div>
   </section>;
 }

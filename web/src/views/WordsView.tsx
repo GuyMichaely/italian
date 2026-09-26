@@ -1,27 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CardType, Flashcard } from "../cards/types";
-import { resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
-import { nounFormPhrases } from "../cards/nounDraft";
+import type { NounMorphology } from "../cards/nounMorphology";
 import { cardTypes, typeLabels } from "../cardTypes";
-import { italianHeadword } from "../components/CardAnswer";
-import { InventoryCardsEditor } from "../components/CardEditors";
 import { Icon } from "../components/Icons";
+import { WordsGrid } from "../components/WordsGrid";
 
 export type WordsTypeFilter = CardType | "all";
-
-function secondaryForms(card: Flashcard, morphology: NounMorphology) {
-  try {
-    if (card.type === "noun") {
-      const phrases = nounFormPhrases(resolvedNounForms(card, morphology));
-      return phrases.length ? phrases.map((phrase) => phrase.text).join(" · ") : "no articles";
-    }
-    if (card.type === "verb") return `${card.details.io}, ${card.details.tu}… · ${card.details.auxiliary} ${card.details.participle}`;
-    if (card.type === "adjective") return [card.details.feminineSingular, card.details.masculinePlural, card.details.femininePlural].join(" · ");
-    return "invariant";
-  } catch (error) {
-    return error instanceof Error ? error.message : "Invalid noun definition";
-  }
-}
 
 function FilterRail({
   sets,
@@ -103,8 +87,6 @@ export function WordsView({
   selectedFilters,
   onToggleFilter,
   onClearFilters,
-  gridMode,
-  onGridMode,
   onOpen,
   onRemove,
   onRemoveTag,
@@ -129,12 +111,10 @@ export function WordsView({
   selectedFilters: string[];
   onToggleFilter: (key: string) => void;
   onClearFilters: () => void;
-  gridMode: boolean;
-  onGridMode: (value: boolean) => void;
   onOpen: (card: Flashcard) => void;
   onRemove: (id: number) => void;
   onRemoveTag: (tag: string) => void;
-  onSaveGrid: (updated: Flashcard[], original: Flashcard[]) => Promise<boolean>;
+  onSaveGrid: (updated: Flashcard[]) => Promise<boolean>;
   onBulkTag: (ids: number[], tag: string) => Promise<boolean>;
   onBulkSet: (ids: number[], setName: string | null) => Promise<boolean>;
   onBulkDelete: (ids: number[]) => Promise<boolean>;
@@ -155,7 +135,6 @@ export function WordsView({
   const typeCounts = useMemo(() => Object.fromEntries(cardTypes.map((type) => [type, matchingCards.filter((card) => card.type === type).length])) as Record<CardType, number>, [matchingCards]);
   const visibleIds = new Set(filteredCards.map((card) => card.id));
   const selectedVisible = selectedIds.filter((id) => visibleIds.has(id));
-  const allVisibleSelected = filteredCards.length > 0 && selectedVisible.length === filteredCards.length;
 
   useEffect(() => {
     setSelectedIds((ids) => ids.filter((id) => cards.some((card) => card.id === id)));
@@ -163,6 +142,10 @@ export function WordsView({
 
   function toggleSelected(id: number) {
     setSelectedIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+  }
+
+  function selectAll(ids: number[], selected: boolean) {
+    setSelectedIds((current) => selected ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)));
   }
 
   async function runBulk(action: () => Promise<boolean>) {
@@ -178,12 +161,6 @@ export function WordsView({
         <h1>Words</h1>
         <p>{cards.length} {cards.length === 1 ? "word" : "words"}{filteredCards.length !== cards.length ? ` · ${filteredCards.length} shown` : ""}</p>
       </div>
-      <div className="page-header-actions">
-        <div className="view-toggle segmented compact" role="radiogroup" aria-label="Layout">
-          <button type="button" role="radio" aria-checked={!gridMode} className={!gridMode ? "active" : ""} onClick={() => onGridMode(false)}><Icon name="list" size={16} /> List</button>
-          <button type="button" role="radio" aria-checked={gridMode} className={gridMode ? "active" : ""} onClick={() => onGridMode(true)}><Icon name="grid" size={16} /> Grid</button>
-        </div>
-      </div>
     </header>
 
     <div className="words-layout">
@@ -196,54 +173,38 @@ export function WordsView({
           </label>
           <button type="button" className={`neutral-button filters-button${activeFilterCount ? " has-filters" : ""}`} onClick={() => setFiltersOpen(true)}><Icon name="filter" size={16} /> Filters{activeFilterCount ? ` · ${activeFilterCount}` : ""}</button>
         </div>
-        {!gridMode && <div className="segmented type-segmented scrollable" role="radiogroup" aria-label="Part of speech">
+        <div className="segmented type-segmented scrollable" role="radiogroup" aria-label="Part of speech">
           <button type="button" role="radio" aria-checked={typeFilter === "all"} className={typeFilter === "all" ? "active" : ""} onClick={() => onTypeFilter("all")}>All <span className="tab-count">{matchingCards.length}</span></button>
           {cardTypes.map((type) => <button type="button" role="radio" aria-checked={typeFilter === type} key={type} className={`${type} ${typeFilter === type ? "active" : ""}`} onClick={() => onTypeFilter(type)}>{typeLabels[type]}s <span className="tab-count">{typeCounts[type]}</span></button>)}
-        </div>}
+        </div>
         {warning && <p className="sync-warning" role="status">{warning}</p>}
 
         {loading ? <div className="empty-state" role="status"><p>Loading your words…</p></div>
           : !cards.length ? <div className="empty-state"><h2>No words yet</h2><p>Start with a handful of nouns or verbs from your current lesson.</p><button type="button" className="primary-button" onClick={onAddWords}><Icon name="plus" size={16} /> Add words</button></div>
-            : !(gridMode ? matchingCards : filteredCards).length ? <div className="empty-state"><h2>No matches</h2><p>Try a different search or clear the filters.</p></div>
-              : gridMode ? <InventoryCardsEditor
-                key={`${selectedFilters.join("|")}:${query}:${matchingCards.map((item) => item.id).join(",")}`}
-                cards={matchingCards}
-                knownSets={knownSets}
-                morphology={morphology}
-                onOpen={onOpen}
-                onRemove={onRemove}
-                onSave={onSaveGrid}
-                onExit={() => onGridMode(false)}
-              />
-                : <>
-                  {selectedVisible.length > 0 && <BulkBar
-                    count={selectedVisible.length}
-                    knownSets={knownSets}
-                    onTag={(tag) => void runBulk(() => onBulkTag(selectedVisible, tag))}
-                    onSet={(setName) => void runBulk(() => onBulkSet(selectedVisible, setName))}
-                    onDelete={() => { if (window.confirm(`Delete ${selectedVisible.length} ${selectedVisible.length === 1 ? "word" : "words"}? This cannot be undone.`)) void runBulk(() => onBulkDelete(selectedVisible)); }}
-                    onClear={() => setSelectedIds([])}
-                  />}
-                  <div className="word-list" role="table" aria-label="Words">
-                    <div className="word-list-head" role="row">
-                      <span role="columnheader" className="select-cell"><input type="checkbox" aria-label="Select all shown words" checked={allVisibleSelected} onChange={() => setSelectedIds(allVisibleSelected ? [] : filteredCards.map((card) => card.id))} /></span>
-                      <span role="columnheader">Italian</span>
-                      <span role="columnheader">English</span>
-                      <span role="columnheader">Set &amp; tags</span>
-                    </div>
-                    {filteredCards.map((card) => <div role="row" key={card.id} className={`word-row${selectedIds.includes(card.id) ? " selected" : ""}`}>
-                      <span role="cell" className="select-cell"><input type="checkbox" aria-label={`Select ${card.english}`} checked={selectedIds.includes(card.id)} onChange={() => toggleSelected(card.id)} /></span>
-                      <button type="button" role="cell" className="word-open" onClick={() => onOpen(card)} aria-label={`Edit ${card.english}`}>
-                        <span className="word-italian"><span className={`pos-dot ${card.type}`} title={typeLabels[card.type]} /><strong lang="it">{italianHeadword(card, morphology)}</strong><small lang="it">{secondaryForms(card, morphology)}</small></span>
-                        <span className="word-english">{card.english}<small>{typeLabels[card.type].toLowerCase()}</small></span>
-                        <span className="word-meta">
-                          {card.setName && <span className="chip set">{card.setName}</span>}
-                          {card.tags.map((tag) => <span className="chip tag" key={tag}>#{tag}</span>)}
-                        </span>
-                      </button>
-                    </div>)}
-                  </div>
-                </>}
+            : !filteredCards.length ? <div className="empty-state"><h2>No matches</h2><p>Try a different search or clear the filters.</p></div>
+              : <>
+                {selectedVisible.length > 0 && <BulkBar
+                  count={selectedVisible.length}
+                  knownSets={knownSets}
+                  onTag={(tag) => void runBulk(() => onBulkTag(selectedVisible, tag))}
+                  onSet={(setName) => void runBulk(() => onBulkSet(selectedVisible, setName))}
+                  onDelete={() => { if (window.confirm(`Delete ${selectedVisible.length} ${selectedVisible.length === 1 ? "word" : "words"}? This cannot be undone.`)) void runBulk(() => onBulkDelete(selectedVisible)); }}
+                  onClear={() => setSelectedIds([])}
+                />}
+              </>}
+        {!loading && cards.length > 0 && <WordsGrid
+          allCards={cards}
+          visibleCards={filteredCards}
+          tab={typeFilter}
+          knownSets={knownSets}
+          morphology={morphology}
+          selectedIds={selectedIds}
+          onToggleSelected={toggleSelected}
+          onSelectAll={selectAll}
+          onSave={onSaveGrid}
+          onOpen={onOpen}
+          onRemove={onRemove}
+        />}
       </div>
     </div>
 

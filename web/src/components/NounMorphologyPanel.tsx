@@ -68,7 +68,6 @@ function SyntaxPipeline({ syntax }: { syntax: NounSyntaxRule }) {
   </div>;
 }
 
-type MorphologyTab = "declensions" | "inference" | "syntax";
 
 function syntaxFieldValue(field: NounSyntaxField) {
   if (field.kind === "noun") return `noun:${field.number}`;
@@ -112,7 +111,6 @@ export function NounMorphologyPanel({
   const [sourceChanged, setSourceChanged] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<MorphologyTab>("declensions");
   const appliedSourceRef = useRef(nounSourceFingerprint(cards, morphology));
 
   useEffect(() => {
@@ -382,23 +380,24 @@ export function NounMorphologyPanel({
     }
   }
 
-  const tabs: { value: MorphologyTab; label: string; count: number }[] = [
-    { value: "declensions", label: "Declensions", count: draft.declensionRules.length },
-    { value: "inference", label: "Inference sets", count: draft.inferenceSets.length },
-    { value: "syntax", label: "Answer syntax", count: draft.syntaxRules.length },
+  const sections = [
+    { id: "declensions", label: "Declensions", count: draft.declensionRules.length },
+    { id: "inference-sets", label: "Inference sets", count: draft.inferenceSets.length },
+    { id: "answer-syntax", label: "Answer syntax", count: draft.syntaxRules.length },
   ];
 
   return <section className="noun-patterns-panel" aria-label="Noun morphology">
-    <div className="segmented tab-segmented" role="tablist" aria-label="Grammar section">
-      {tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.value} key={item.value} className={tab === item.value ? "active" : ""} onClick={() => setTab(item.value)}>{item.label} <span className="tab-count">{item.count}</span></button>)}
-    </div>
+    <nav className="jump-links" aria-label="Grammar sections">
+      {sections.map((section) => <a key={section.id} href={`#/grammar`} onClick={(event) => { event.preventDefault(); document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{section.label} <span className="tab-count">{section.count}</span></a>)}
+    </nav>
     <div className="noun-patterns-body">
       {sourceChanged && <div className="sync-warning" role="alert">
         <p>The noun inventory changed while this morphology draft had unsaved edits. The draft was preserved, but it cannot be saved over the newer inventory.</p>
         <button type="button" className="neutral-button" onClick={reloadCurrentSource}>Discard draft and reload current inventory</button>
       </div>}
 
-      {tab === "declensions" && <>
+      <section className="grammar-section" id="declensions" aria-labelledby="declensions-heading">
+      <h2 id="declensions-heading">Declensions</h2>
       <p className="section-intro">A rule turns a stored base into singular and/or plural forms. Leaving a form unsupported makes the rule singular-only or plural-only. Renaming a rule updates every noun and inference set that uses it.</p>
       <div className="noun-patterns-table-wrap">
         <table className="noun-patterns-table declension-rules-table">
@@ -412,9 +411,10 @@ export function NounMorphologyPanel({
         </table>
       </div>
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, declensionRules: [...current.declensionRules, newRule(current.declensionRules)] }))}>Add rule</button></div>
-      </>}
+      </section>
 
-      {tab === "inference" && <>
+      <section className="grammar-section" id="inference-sets" aria-labelledby="inference-heading">
+      <h2 id="inference-heading">Inference sets</h2>
       <p className="section-intro">Inference sets decide which declensions a shorthand answer may assume. Leave a rule out of <em>Learned shorthand</em> until you know it, and Parola will insist on the full form for those nouns.</p>
       {draft.inferenceSets.map((set, setIndex) => <div className="morphology-inference-set" key={`set:${setIndex}`}>
         <div className="noun-pattern-actions">
@@ -427,9 +427,10 @@ export function NounMorphologyPanel({
         </label>)}</div>
       </div>)}
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeMorphology((current) => ({ ...current, inferenceSets: [...current.inferenceSets, newInferenceSet(current.inferenceSets)] }))}>Add inference set</button></div>
-      </>}
+      </section>
 
-      {tab === "syntax" && <>
+      <section className="grammar-section" id="answer-syntax" aria-labelledby="syntax-heading">
+      <h2 id="syntax-heading">Answer syntax</h2>
       <p className="section-intro">Each syntax is one accepted shape for a typed noun answer. Article fields require the noun to take that article; a syntax without articles is for articleless nouns and needs explicit gender and singular/plural-only markers.</p>
       {draft.syntaxRules.map((syntax, syntaxIndex) => {
         const genderMarker = syntax.markers.find((marker) => marker.kind === "gender");
@@ -475,7 +476,7 @@ export function NounMorphologyPanel({
         </div>;
       })}
       <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={addSyntax}>Add syntax rule</button></div>
-      </>}
+      </section>
     </div>
     {(dirty || message || error) && <div className="grid-save-bar" role="region" aria-label="Grammar changes">
       {error ? <p className="form-error" role="alert">{error}</p> : message ? <p className="success-message" role="status">{message}</p> : <p>Unsaved grammar changes</p>}

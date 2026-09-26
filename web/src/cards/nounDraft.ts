@@ -143,6 +143,15 @@ export function nounDraftFromCard(card: NounCard, morphology: NounMorphology): N
   return automaticMatches ? draft : { ...draft, rule: definition.rule };
 }
 
+/** Like nounDraftFromCard, but still returns an editable draft for a noun whose stored rule is broken. */
+export function nounDraftForEditing(card: NounCard, morphology: NounMorphology): NounDraft {
+  try {
+    return nounDraftFromCard(card, morphology);
+  } catch {
+    return { ...emptyNounDraft(), english: card.english, gender: card.details.gender, singular: card.details.base, rule: card.details.rule };
+  }
+}
+
 /** Suggests a plural from the most specific two-number rule whose singular suffix matches. */
 export function suggestedPlural(singular: string, morphology: NounMorphology) {
   const word = singular.normalize("NFC").trim();

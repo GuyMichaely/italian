@@ -37,8 +37,8 @@ src/
 │   ├── verification.ts            answer verification for all card types
 │   └── logic.ts                   study-module public exports
 ├── views/
-│   ├── StudyView.tsx               setup panel, flip/typed cards, progress, session summary
-│   ├── WordsView.tsx               filterable word list, bulk actions, grid-editing mode
+│   ├── StudyView.tsx               setup sidebar (staged mid-session), flip/typed cards, summary
+│   ├── WordsView.tsx               filters, search, part-of-speech tabs, bulk actions
 │   ├── GrammarView.tsx             noun morphology page
 │   └── SettingsView.tsx            sync, backup/restore, answer keywords
 └── components/
@@ -46,7 +46,7 @@ src/
     ├── Sheet.tsx                   modal sheet / side drawer / phone bottom sheet
     ├── AddWordsSheet.tsx           batch word creation
     ├── WordDrawer.tsx              single-word editing
-    ├── InventoryCardsEditor.tsx    spreadsheet-style grid editor
+    ├── WordsGrid.tsx               editable word grid with sparse drafts that survive filtering
     ├── CardEditorFields.tsx        shared editor fields and batch row cells
     ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview
@@ -123,7 +123,7 @@ Inventory JSON export/import contains `cards` and `nounMorphology` without trans
 
 Changes to non-noun cards do not invalidate the morphology draft.
 
-Noun-to-declension assignment is not duplicated in this panel. Nouns are entered as surface forms (singular, plural, gender, article availability) through `cards/nounDraft.ts`, which infers or validates the declension rule and base; the Words grid mode still exposes rule and base directly.
+Noun-to-declension assignment is not duplicated in this panel. Nouns are entered as surface forms (singular, plural, gender, article availability) through `cards/nounDraft.ts`, which infers or validates the declension rule and base.
 
 ## External card import contract
 
