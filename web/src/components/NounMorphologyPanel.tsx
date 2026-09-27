@@ -517,7 +517,7 @@ export function NounMorphologyPanel({
 
   return <section className="noun-patterns-panel" aria-label="Noun morphology">
     <nav className="jump-links" aria-label="Grammar sections">
-      {sections.map((section) => <a key={section.id} href={`#/grammar`} onClick={(event) => { event.preventDefault(); document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{section.label} <span className="tab-count">{section.count}</span></a>)}
+      {sections.map((section) => <a key={section.id} href={`#/grammar`} onClick={(event) => { event.preventDefault(); document.getElementById(section.id)?.scrollIntoView({ behavior: "instant", block: "start" }); }}>{section.label} <span className="tab-count">{section.count}</span></a>)}
     </nav>
     <div className="noun-patterns-body">
       {sourceChanged && <div className="sync-warning" role="alert">
