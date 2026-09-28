@@ -30,6 +30,7 @@ A synchronization snapshot contains the complete inventory plus its last-change 
       "details": {
         "declension": { "kind": "rule", "rule": "-o → -i", "base": "ombrell" },
         "gender": "masculine",
+        "genderDiffersWithPlurality": false,
         "articleProfile": {
           "definiteSingular": true,
           "definitePlural": true,

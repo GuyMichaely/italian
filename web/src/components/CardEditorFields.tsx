@@ -46,8 +46,17 @@ export function TagsField({ value, onChange }: { value: string; onChange: (value
 
 function nounExceptionNote(details: NounDetails) {
   const overrides = [details.articleGroups.singular && `sg. as ${details.articleGroups.singular}`, details.articleGroups.plural && `pl. as ${details.articleGroups.plural}`].filter(Boolean);
-  return overrides.length ? ` · articles: ${overrides.join(", ")}` : "";
+  const gender = details.genderDiffersWithPlurality ? ` · plural ${details.gender === "masculine" ? "feminine" : "masculine"}` : "";
+  return `${gender}${overrides.length ? ` · articles: ${overrides.join(", ")}` : ""}`;
 }
+
+/** The batch grid's gender cell: the gender, and whether the plural takes the other one. */
+const batchGenderOptions = [
+  { value: "masculine", label: "M", gender: "masculine", differs: false },
+  { value: "feminine", label: "F", gender: "feminine", differs: false },
+  { value: "masculine-feminine", label: "M, pl. F", gender: "masculine", differs: true },
+  { value: "feminine-masculine", label: "F, pl. M", gender: "feminine", differs: true },
+] as const;
 
 export function NounDerivedPreview({ draft, morphology }: { draft: NounDraft; morphology: NounMorphology }) {
   if (!draft.singular.trim() && !draft.plural.trim()) return <span className="derived-preview empty">Forms appear as you type</span>;
@@ -87,7 +96,11 @@ export function NounBatchRowCells({
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(e) => onChange("english", e.target.value)} placeholder="the book" autoFocus={autoFocus} /></td>
     <td data-label="Singular"><input aria-label={`Row ${index + 1} singular`} value={row.singular} onChange={(e) => onChange("singular", e.target.value)} placeholder="libro" autoCapitalize="none" spellCheck={false} /></td>
     <td data-label="Plural"><input aria-label={`Row ${index + 1} plural`} className={row.pluralSuggested ? "suggested" : ""} value={row.plural} onChange={(e) => onChange("plural", e.target.value)} placeholder="libri" autoCapitalize="none" spellCheck={false} /></td>
-    <td data-label="Gender"><select aria-label={`Row ${index + 1} gender`} value={row.gender} onChange={(e) => onChange("gender", e.target.value as NounDraft["gender"])}><option value="masculine">M</option><option value="feminine">F</option></select></td>
+    <td data-label="Gender"><select aria-label={`Row ${index + 1} gender`} value={batchGenderOptions.find((option) => option.gender === row.gender && option.differs === row.genderDiffersWithPlurality)!.value} onChange={(e) => {
+      const option = batchGenderOptions.find((item) => item.value === e.target.value)!;
+      onChange("genderDiffersWithPlurality", option.differs);
+      onChange("gender", option.gender);
+    }}>{batchGenderOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>
     <td data-label="Articles"><select aria-label={`Row ${index + 1} articles`} value={row.articles} onChange={(e) => onChange("articles", e.target.value as NounDraft["articles"])}>{articleProfileOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>
     <td data-label="Rule"><NounRuleSelect label={`Row ${index + 1} declension rule`} value={row.rule} morphology={morphology} onChange={(value) => onChange("rule", value)} /></td>
     <td data-label="Forms" className="derived-cell"><NounDerivedPreview draft={row} morphology={morphology} /></td>

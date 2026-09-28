@@ -67,10 +67,10 @@ function lettersFromText(value: string) {
   return [...value.normalize("NFC").toLocaleLowerCase("it-IT")].filter((character) => !/[\s,]/u.test(character));
 }
 
-/** Nouns with an irregular declension or an article-group exception, for the Exceptions list. */
+/** Nouns that are irregular, change gender with plurality, or have an article-group exception, for the Exceptions list. */
 function exceptionalNouns(cards: Flashcard[]) {
   return cards.filter((card): card is NounCard => card.type === "noun"
-    && (card.details.declension.kind === "irregular" || Boolean(card.details.articleGroups.singular || card.details.articleGroups.plural)));
+    && (card.details.declension.kind === "irregular" || card.details.genderDiffersWithPlurality || Boolean(card.details.articleGroups.singular || card.details.articleGroups.plural)));
 }
 
 function nounSourceFingerprint(cards: Flashcard[], morphology: NounMorphology) {
@@ -370,12 +370,13 @@ export function NounMorphologyPanel({
 
       <section className="grammar-section" id="noun-exceptions" aria-labelledby="exceptions-heading">
       <h2 id="exceptions-heading">Exceptions</h2>
-      <p className="section-intro">Nouns that are irregular or override their article group. Set these in the word editor under Rule and Exceptions.</p>
+      <p className="section-intro">Nouns that are irregular, whose gender differs with plurality, or that override their article group. Set these in the word editor.</p>
       {exceptions.length ? <ul className="exception-list">{exceptions.map((card) => {
         let forms: ReturnType<typeof resolvedNounForms> | null = null;
         try { forms = resolvedNounForms(card, morphology); } catch { /* shown as-is */ }
         const notes = [
           card.details.declension.kind === "irregular" ? "irregular" : null,
+          card.details.genderDiffersWithPlurality ? `gender differs with plurality (plural ${card.details.gender === "masculine" ? "feminine" : "masculine"})` : null,
           card.details.articleGroups.singular ? `singular as ${card.details.articleGroups.singular}` : null,
           card.details.articleGroups.plural ? `plural as ${card.details.articleGroups.plural}` : null,
         ].filter(Boolean);

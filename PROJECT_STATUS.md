@@ -59,7 +59,8 @@ Verb, adjective, and adverb typed verification use their current canonical store
 A canonical noun card stores:
 
 - `declension`: `{ kind: "rule", rule, base }` or, for irregular nouns, `{ kind: "irregular", singular, plural }`;
-- `gender`;
+- `gender`, the singular's gender;
+- `genderDiffersWithPlurality`, true when the plural takes the other gender (`l’uovo` / `le uova`), which also requires both forms in word mode; a single gender marker gives the singular's gender, and `mf` / `fm` give each typed form's gender in the order typed;
 - `articleProfile`, an object with Boolean `definiteSingular`, `definitePlural`, and `indefiniteSingular` capabilities (four canonical combinations: all, definite singular only, definite plural only, none);
 - `articleGroups`, per-form article-group exceptions (`null` means the group comes from spelling).
 
@@ -67,7 +68,7 @@ A noun card does not store top-level `italian` or article strings. Regular forms
 
 Declension rules and article groups use unique names as references, and the grammar editor cascades renames (rules into nouns and drilled rules; article groups into noun exceptions). `Irregular` is reserved as a rule name. A declension rule can be limited to one gender; the defaults make the `-a → -e`, `-ca → -che`, and `-ga → -ghe` rules feminine and `-a → -i` masculine. A plural is predictable when the most specific matching rules (longest singular ending) agree on it.
 
-The former inference sets, answer-syntax rules, and `lo` full-declension exclusion are retired; `scripts/migrate-study-modes.mjs` converts inventories that use them.
+The former inference sets, answer-syntax rules, and `lo` full-declension exclusion are retired; `scripts/migrate-study-modes.mjs` converts inventories that use them. `scripts/migrate-gender-plurality.mjs` adds `genderDiffersWithPlurality: false` to the nouns of inventories from before that field.
 
 See `docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
@@ -75,7 +76,7 @@ See `docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
 Parola does not contain a compatibility adapter for retired card formats.
 
-The external import bridge accepts only cards that already obey the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `declension`, `gender`, structured `articleProfile`, and `articleGroups` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
+The external import bridge accepts only cards that already obey the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
 
 After validation, imported cards use the same `addBatch` and `CardStorage` persistence path as ordinary card creation.
 

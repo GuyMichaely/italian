@@ -24,7 +24,7 @@ function NounAnswer({ card, morphology }: { card: NounCard; morphology: NounMorp
   const phrases = nounFormPhrases(forms);
   return (
     <div className="answer-block">
-      <p className="answer-meta">{forms.gender} · {rule}</p>
+      <p className="answer-meta">{forms.gender}{forms.pluralGender !== forms.gender ? `, plural ${forms.pluralGender}` : ""} · {rule}</p>
       <p className="italian-word">{forms.singular || forms.plural}</p>
       {phrases.length
         ? <dl className="form-list">{phrases.map((phrase) => <div key={phrase.label}><dt>{phrase.label}</dt><dd lang="it">{phrase.text}</dd></div>)}</dl>

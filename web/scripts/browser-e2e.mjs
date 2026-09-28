@@ -52,6 +52,7 @@ const currentInventory = {
       details: {
         declension: { kind: "rule", rule: "-chio → -chi", base: "spec" },
         gender: "masculine",
+        genderDiffersWithPlurality: false,
         articleProfile: {
           definiteSingular: true,
           definitePlural: true,

@@ -47,6 +47,7 @@ export const irregularRuleValue = ":irregular";
 export type NounDraft = {
   english: string;
   gender: NounGender;
+  genderDiffersWithPlurality: boolean;
   singular: string;
   plural: string;
   articles: ArticleProfileOption;
@@ -60,7 +61,7 @@ export type ResolvedNounDraft =
   | { ok: false; error: string };
 
 export function emptyNounDraft(): NounDraft {
-  return { english: "", gender: "masculine", singular: "", plural: "", articles: "all", rule: "", singularGroup: "", pluralGroup: "" };
+  return { english: "", gender: "masculine", genderDiffersWithPlurality: false, singular: "", plural: "", articles: "all", rule: "", singularGroup: "", pluralGroup: "" };
 }
 
 function draftDeclension(draft: NounDraft, singular: string, plural: string, morphology: NounMorphology): { declension: NounDeclension } | { error: string } {
@@ -101,6 +102,7 @@ export function resolveNounDraft(draft: NounDraft, morphology: NounMorphology): 
   const details: NounDetails = {
     declension: result.declension,
     gender: draft.gender,
+    genderDiffersWithPlurality: draft.genderDiffersWithPlurality,
     articleProfile,
     articleGroups: { singular: draft.singularGroup || null, plural: draft.pluralGroup || null },
   };
@@ -134,6 +136,7 @@ export function nounDraftFromCard(card: NounCard, morphology: NounMorphology): N
   const draft: NounDraft = {
     english: card.english,
     gender: details.gender,
+    genderDiffersWithPlurality: details.genderDiffersWithPlurality,
     singular: forms.singular,
     plural: forms.plural,
     articles: articleProfileOption(details.articleProfile),
@@ -158,6 +161,7 @@ export function nounDraftForEditing(card: NounCard, morphology: NounMorphology):
       ...emptyNounDraft(),
       english: card.english,
       gender: card.details.gender,
+      genderDiffersWithPlurality: card.details.genderDiffersWithPlurality,
       singular: declension.kind === "rule" ? declension.base : declension.singular,
       plural: declension.kind === "rule" ? "" : declension.plural,
       rule: declension.kind === "rule" ? declension.rule : irregularRuleValue,

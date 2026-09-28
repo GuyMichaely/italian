@@ -119,15 +119,17 @@ export function normalizeCard(value: unknown): Flashcard {
     if (Object.prototype.hasOwnProperty.call(raw, "italian")) {
       throw new Error(`Noun card ${id} must not store a derived italian field.`);
     }
-    assertExactKeys(details, `Noun card ${id} details`, ["articleGroups", "articleProfile", "declension", "gender"]);
+    assertExactKeys(details, `Noun card ${id} details`, ["articleGroups", "articleProfile", "declension", "gender", "genderDiffersWithPlurality"]);
     const gender = details.gender;
     if (gender !== "masculine" && gender !== "feminine") throw new Error(`Noun card ${id} has an invalid gender.`);
+    if (typeof details.genderDiffersWithPlurality !== "boolean") throw new Error(`Noun card ${id} genderDiffersWithPlurality must be true or false.`);
     return {
       ...common,
       type: "noun",
       details: {
         declension: normalizeNounDeclension(details.declension, id),
         gender,
+        genderDiffersWithPlurality: details.genderDiffersWithPlurality,
         articleProfile: normalizeNounArticleProfile(details.articleProfile, `Noun card ${id} article profile`),
         articleGroups: normalizeArticleGroupOverrides(details.articleGroups, id),
       },

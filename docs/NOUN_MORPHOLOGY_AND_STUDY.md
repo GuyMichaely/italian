@@ -4,10 +4,11 @@ Parola keeps a noun's lexical definition separate from study preferences, which 
 
 ## Noun cards
 
-A noun card stores four facts:
+A noun card stores five facts:
 
 - `declension`, how its forms are produced: a declension `rule` and `base`, or an irregular noun's forms;
-- `gender`;
+- `gender`, the singular's gender (a plural-only noun's, the plural's);
+- `genderDiffersWithPlurality`, whether the plural takes the other gender (`l’uovo` / `le uova`); only a noun with both forms can set it;
 - `articleProfile`, an object containing the noun's three article capabilities;
 - `articleGroups`, per-form article-group exceptions (`null` means "from spelling").
 
@@ -22,6 +23,7 @@ A regular noun:
   "details": {
     "declension": { "kind": "rule", "rule": "-chio → -chi", "base": "spec" },
     "gender": "masculine",
+    "genderDiffersWithPlurality": false,
     "articleProfile": { "definiteSingular": true, "definitePlural": true, "indefiniteSingular": true },
     "articleGroups": { "singular": null, "plural": null }
   }
@@ -37,11 +39,30 @@ An irregular noun stores its forms outright; an empty form means the noun lacks 
   "details": {
     "declension": { "kind": "irregular", "singular": "dio", "plural": "dei" },
     "gender": "masculine",
+    "genderDiffersWithPlurality": false,
     "articleProfile": { "definiteSingular": true, "definitePlural": true, "indefiniteSingular": true },
     "articleGroups": { "singular": null, "plural": "lo" }
   }
 }
 ```
+
+A noun whose gender differs with plurality is one card, with the singular's gender:
+
+```json
+{
+  "type": "noun",
+  "english": "egg",
+  "details": {
+    "declension": { "kind": "irregular", "singular": "uovo", "plural": "uova" },
+    "gender": "masculine",
+    "genderDiffersWithPlurality": true,
+    "articleProfile": { "definiteSingular": true, "definitePlural": true, "indefiniteSingular": true },
+    "articleGroups": { "singular": null, "plural": null }
+  }
+}
+```
+
+Its plural articles come from the other gender (`l’uovo`, `un uovo`, `le uova`). The word editor calls the setting “Gender differs with plurality”; the Grammar page lists these nouns under Exceptions. Nouns with two plurals of different meaning (`i bracci` / `le braccia`) are one card per meaning.
 
 A noun card does not store top-level `italian`, generated forms of a regular noun, or article strings. Articles always come from the article table.
 
@@ -133,7 +154,7 @@ The inventory stores `studyPreferences` next to the cards and morphology, so the
 }
 ```
 
-- `answerKeywords` are the gender and singular-/plural-only markers typed in noun answers. They are single lowercase tokens and all different.
+- `answerKeywords` are the gender and singular-/plural-only markers typed in noun answers. They are single lowercase tokens and all different, and neither gender keyword pair (`mf`, `fm`) may equal a keyword.
 - `fullDeclensionRules` are declension rules still being drilled.
 - `fullDeclensionCards` are noun ids that always need both forms.
 
@@ -156,9 +177,23 @@ All three read the same answer format: gender and singular-/plural-only keywords
 With Words alone, the answer is the noun with or without an article: `il libro`, `i libri`, `un libro`, `m libro`, or both numbers `il libro i libri`.
 
 - Each form must be one of the noun's forms. An article is optional, but a typed article must be one the noun takes for that number (per its article profile); a form that takes no article must have none.
-- **Both forms** are required when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `fullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
+- **Both forms** are required when the gender differs with plurality, when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `fullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
 - **Singular-/plural-only marker** is required for a noun with only one form and wrong on a noun with both: `p i pantaloni`, `f s Venezia`.
 - **Gender marker** is required when the typed articles don't settle the gender (`m l’albero`; `gli alberi` needs none) and when there is no article (`m libro`). It is not required when the prompt shows the gender. A marker that disagrees with the noun is wrong.
+- **Gender differing with plurality**: each typed form's gender must be shown. A single marker gives the singular's gender. The two gender keywords together (`mf` or `fm`) give each typed form's gender in the order the forms are typed, and fit only these nouns. A plural article always shows the plural's gender.
+
+For `l’uovo` / `le uova`:
+
+| Answer | Result |
+|---|---|
+| `mf uovo uova`, `fm uova uovo`, `uovo uova mf` | right |
+| `un uovo le uova`, `m uovo le uova`, `mf l’uovo le uova` | right |
+| `fm uovo uova`, `mf uova uovo` | wrong: a form gets the other gender |
+| `m uovo uova` | wrong: nothing shows the plural is feminine |
+| `l’uovo le uova` | wrong: nothing shows the singular is masculine |
+| `mf uovo` | wrong: both forms are needed |
+
+`mf libro libri` is wrong: that noun's gender doesn't change.
 
 Leaving out the article skips practice of the article choice (`lo specchio`, not `il specchio`); studying Articles, alone or with Words, covers it.
 

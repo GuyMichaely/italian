@@ -68,6 +68,10 @@ export function normalizeAnswerKeywords(value: unknown): AnswerKeywords {
     return [key, keyword];
   })) as AnswerKeywords;
   if (new Set(Object.values(keywords)).size !== Object.keys(keywords).length) throw new Error("Each answer keyword must be different.");
+  const compounds = [keywords.masculine + keywords.feminine, keywords.feminine + keywords.masculine];
+  if (compounds[0] === compounds[1] || compounds.some((compound) => Object.values(keywords).includes(compound))) {
+    throw new Error(`The gender keywords together (“${compounds[0]}”, “${compounds[1]}”) must differ from every answer keyword.`);
+  }
   return keywords;
 }
 
@@ -116,7 +120,7 @@ export function prunedStudyPreferences(preferences: StudyPreferences, cards: Fla
   };
 }
 
-export type FullDeclensionReason = "irregular" | "unpredictable" | "rule" | "card";
+export type FullDeclensionReason = "gender" | "irregular" | "unpredictable" | "rule" | "card";
 
 /**
  * Why word mode needs every form of this noun, most intrinsic reason first; empty when one form
@@ -127,6 +131,7 @@ export function fullDeclensionReasons(card: NounCard, morphology: NounMorphology
   if (!forms.singular || !forms.plural) return [];
   const declension = card.details.declension;
   const reasons: FullDeclensionReason[] = [];
+  if (card.details.genderDiffersWithPlurality) reasons.push("gender");
   if (declension.kind === "irregular") reasons.push("irregular");
   else if (!pluralIsPredictable(forms, morphology)) reasons.push("unpredictable");
   if (declension.kind === "rule" && preferences.fullDeclensionRules.includes(declension.rule)) reasons.push("rule");
@@ -135,6 +140,7 @@ export function fullDeclensionReasons(card: NounCard, morphology: NounMorphology
 }
 
 export const fullDeclensionReasonLabels: Record<FullDeclensionReason, string> = {
+  gender: "its gender differs with plurality",
   irregular: "its declension is irregular",
   unpredictable: "the declension rules don’t predict its plural",
   rule: "you’re drilling its declension rule",

@@ -56,7 +56,9 @@ export type NounMorphology = {
 export type NounDefinition = NounDetails;
 
 export type ResolvedNounForms = {
+  /** The singular's gender (for a plural-only noun, the plural's). */
   gender: NounGender;
+  pluralGender: NounGender;
   articleProfile: NounArticleProfile;
   /** The declension rule's name, or null for an irregular noun. */
   rule: string | null;
@@ -332,6 +334,10 @@ export function nounDefinitionForCard(card: Flashcard): NounDefinition {
   return clone(card.details);
 }
 
+export function otherGender(gender: NounGender): NounGender {
+  return gender === "masculine" ? "feminine" : "masculine";
+}
+
 export function resolveNounDetails(details: NounDetails, morphology: NounMorphology, label = "Noun"): ResolvedNounForms {
   const { singular, plural } = declensionForms(details.declension, morphology, label);
   if (details.declension.kind === "rule") {
@@ -340,6 +346,8 @@ export function resolveNounDetails(details: NounDetails, morphology: NounMorphol
     if (rule && !ruleAllowsGender(rule, details.gender)) throw new Error(`${label} is ${details.gender}, but “${rule.name}” is only for ${rule.gender} nouns.`);
   }
   if (!singular && !plural) throw new Error(`${label} has neither a singular nor a plural form.`);
+  if (details.genderDiffersWithPlurality && !(singular && plural)) throw new Error(`${label} can only differ in gender with plurality if it has both a singular and a plural.`);
+  const pluralGender = details.genderDiffersWithPlurality ? otherGender(details.gender) : details.gender;
   if (!articleProfileCompatibleWithForms(details.articleProfile, { singular, plural })) {
     throw new Error(`${label} has an article profile that requires a noun form it does not have.`);
   }
@@ -357,9 +365,10 @@ export function resolveNounDetails(details: NounDetails, morphology: NounMorphol
   const singularGroup = groupFor(singular, profile.definiteSingular || profile.indefiniteSingular, details.articleGroups.singular);
   const pluralGroup = groupFor(plural, profile.definitePlural, details.articleGroups.plural);
   const singularArticles = singularGroup ? articleSetFor(morphology, singularGroup, details.gender) : null;
-  const pluralArticles = pluralGroup ? articleSetFor(morphology, pluralGroup, details.gender) : null;
+  const pluralArticles = pluralGroup ? articleSetFor(morphology, pluralGroup, pluralGender) : null;
   return {
     gender: details.gender,
+    pluralGender,
     articleProfile: profile,
     rule: details.declension.kind === "rule" ? details.declension.rule : null,
     numberMode: singular && plural ? "both" : singular ? "singular" : "plural",

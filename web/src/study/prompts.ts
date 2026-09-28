@@ -29,11 +29,12 @@ export const genderAbbreviations: Record<NounGender, string> = { masculine: "m",
 
 /**
  * The Italian forms article mode shows: the singular, or the plural for a plural-only noun, plus
- * the plural of an irregular noun, whose plural article can't be worked out from the singular.
+ * the plural of an irregular noun or one whose gender differs with plurality, whose plural article
+ * can't be worked out from the singular.
  */
 export function articlePromptForms(card: NounCard, morphology: NounMorphology) {
   const forms = resolvedNounForms(card, morphology);
   const showsSingular = Boolean(forms.singular && (forms.definiteSingularArticle || forms.indefiniteArticle));
-  const showsPlural = Boolean(forms.plural && forms.definitePluralArticle && (!showsSingular || card.details.declension.kind === "irregular"));
+  const showsPlural = Boolean(forms.plural && forms.definitePluralArticle && (!showsSingular || card.details.declension.kind === "irregular" || card.details.genderDiffersWithPlurality));
   return [showsSingular ? forms.singular : null, showsPlural ? forms.plural : null].filter((form): form is string => Boolean(form));
 }

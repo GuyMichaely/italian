@@ -25,7 +25,10 @@ export type NounArticleGroupOverrides = {
 
 export type NounDetails = {
   declension: NounDeclension;
+  /** The singular's gender; also the plural's unless genderDiffersWithPlurality. */
   gender: NounGender;
+  /** The plural takes the other gender (l’uovo / le uova). Only for nouns with both forms. */
+  genderDiffersWithPlurality: boolean;
   articleProfile: NounArticleProfile;
   articleGroups: NounArticleGroupOverrides;
 };

@@ -178,12 +178,14 @@ function normalizeCard(value, { requireId = false } = {}) {
 
   if (type === "noun") {
     if (Object.prototype.hasOwnProperty.call(value, "italian")) throw new Error("Noun cards must not store a derived italian field.");
-    assertExactKeys(rawDetails, "Noun card details", ["articleGroups", "articleProfile", "declension", "gender"]);
+    assertExactKeys(rawDetails, "Noun card details", ["articleGroups", "articleProfile", "declension", "gender", "genderDiffersWithPlurality"]);
     const gender = rawDetails.gender;
     if (gender !== "masculine" && gender !== "feminine") throw new Error("Noun card needs a masculine or feminine gender.");
+    if (typeof rawDetails.genderDiffersWithPlurality !== "boolean") throw new Error("Noun card genderDiffersWithPlurality must be true or false.");
     details = {
       declension: normalizeNounDeclension(rawDetails.declension),
       gender,
+      genderDiffersWithPlurality: rawDetails.genderDiffersWithPlurality,
       articleProfile: normalizeNounArticleProfile(rawDetails.articleProfile),
       articleGroups: normalizeArticleGroupOverrides(rawDetails.articleGroups),
     };
@@ -321,6 +323,10 @@ function normalizeAnswerKeywords(value) {
     return [key, keyword];
   }));
   if (new Set(Object.values(keywords)).size !== 4) throw new Error("Each answer keyword must be different.");
+  const compounds = [keywords.masculine + keywords.feminine, keywords.feminine + keywords.masculine];
+  if (compounds[0] === compounds[1] || compounds.some((compound) => Object.values(keywords).includes(compound))) {
+    throw new Error(`The gender keywords together (“${compounds[0]}”, “${compounds[1]}”) must differ from every answer keyword.`);
+  }
   return keywords;
 }
 
@@ -377,6 +383,9 @@ function validateState(cards, nounMorphology, studyPreferences) {
     }
     if (!articleProfileCompatibleWithForms(card.details.articleProfile, forms)) {
       throw new Error(`${label} has an article profile that requires a noun form it does not have.`);
+    }
+    if (card.details.genderDiffersWithPlurality && !(forms.singular && forms.plural)) {
+      throw new Error(`${label} can only differ in gender with plurality if it has both a singular and a plural.`);
     }
     for (const group of [articleGroups.singular, articleGroups.plural]) {
       if (group !== null && !groupNames.has(group)) throw new Error(`${label} references unknown article group ${group}.`);

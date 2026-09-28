@@ -53,6 +53,7 @@ function nounCard({
   base,
   irregular,
   gender = "masculine",
+  genderDiffersWithPlurality = false,
   articleProfile = nounArticleProfiles.all,
   articleGroups = { singular: null, plural: null },
   id = nextId++,
@@ -66,6 +67,7 @@ function nounCard({
     details: {
       declension: irregular ? { kind: "irregular", ...irregular } : { kind: "rule", rule, base },
       gender,
+      genderDiffersWithPlurality,
       articleProfile,
       articleGroups,
     },
@@ -337,6 +339,66 @@ test("word answers parse without the card and report incomplete input", () => {
   const preview = analyzeAnswerSyntax({ card, mode: "word" }, "l'albero", keywords, defaultNounMorphology);
   assert.equal(preview.status, "complete");
   assert.deepEqual(preview.pieces.map((piece) => piece.label), ["Article", "Noun"]);
+});
+
+/* ---------- Gender differing with plurality ---------- */
+
+function uovo() {
+  return nounCard({ english: "egg", irregular: { singular: "uovo", plural: "uova" }, genderDiffersWithPlurality: true });
+}
+
+test("a noun whose gender differs with plurality takes each number's articles", () => {
+  const forms = resolvedNounForms(uovo(), defaultNounMorphology);
+  assert.equal(forms.gender, "masculine");
+  assert.equal(forms.pluralGender, "feminine");
+  assert.deepEqual([forms.definiteSingularArticle, forms.definitePluralArticle, forms.indefiniteArticle], ["l’", "le", "un"]);
+  assert.deepEqual(fullDeclensionReasons(uovo(), defaultNounMorphology, defaultStudyPreferences), ["gender", "irregular"]);
+  assert.throws(
+    () => resolvedNounForms(nounCard({ english: "wedding", rule: rules.pluralBase, base: "nozze", gender: "feminine", genderDiffersWithPlurality: true, articleProfile: nounArticleProfiles.definitePluralOnly }), defaultNounMorphology),
+    /both a singular and a plural/,
+  );
+});
+
+test("gender markers for both numbers follow the order the forms are typed", () => {
+  const accepted = ["mf uovo uova", "fm uova uovo", "uovo uova mf", "un uovo le uova", "le uova un uovo", "m uovo le uova", "mf l'uovo le uova", "m l'uovo le uova"];
+  for (const answer of accepted) assert.equal(word(uovo(), answer).correct, true, answer);
+  const rejected = {
+    "fm uovo uova": /“uovo” is masculine/,
+    "mf uova uovo": /“uova” is feminine/,
+    "m uovo uova": /plural’s gender/,
+    "l'uovo le uova": /singular’s gender/,
+    "mf uovo": /gender differs with plurality/,
+    "mf un uovo gli uova": /isn’t the article for “uova”/,
+    "f uova uovo": /The singular is masculine/,
+  };
+  for (const [answer, problem] of Object.entries(rejected)) {
+    const result = word(uovo(), answer);
+    assert.equal(result.correct, false, answer);
+    assert.match(result.problems.join(" "), problem, answer);
+  }
+  // The prompt gives the singular's gender only.
+  assert.equal(word(uovo(), "l'uovo le uova", { genderGiven: true }).correct, true);
+  assert.equal(word(uovo(), "uovo uova", { genderGiven: true }).correct, false);
+
+  const libro = nounCard({ english: "book", rule: rules.oI, base: "libr" });
+  assert.match(word(libro, "mf libro libri").problems.join(" "), /doesn’t differ with plurality/);
+  assert.equal(word(libro, "m libro libri").correct, true);
+});
+
+test("with every article the gender change needs no marker, but a typed one must be right", () => {
+  assert.equal(both(uovo(), "l'uovo le uova un").correct, true);
+  assert.equal(both(uovo(), "fm le uova un uovo l'").correct, true);
+  assert.equal(both(uovo(), "fm l'uovo le uova un").correct, false);
+  assert.equal(both(uovo(), "l'uovo gli uova un").correct, false);
+  assert.equal(article(uovo(), "le un l'").correct, true);
+  assert.deepEqual(articlePromptForms(uovo(), defaultNounMorphology), ["uovo", "uova"]);
+});
+
+test("gender keywords together must not collide with another keyword", () => {
+  assert.throws(
+    () => normalizeStudyPreferences({ ...defaultStudyPreferences, answerKeywords: { masculine: "m", feminine: "f", singularOnly: "mf", pluralOnly: "p" } }),
+    /gender keywords together/,
+  );
 });
 
 /* ---------- Article mode ---------- */

@@ -39,6 +39,7 @@ function canonicalNoun(overrides = {}) {
     details: {
       declension: { kind: "rule", rule: "-chio → -chi", base: "spec" },
       gender: "masculine",
+      genderDiffersWithPlurality: false,
       articleProfile: nounArticleProfiles.all,
       articleGroups: { singular: null, plural: null },
     },
@@ -116,6 +117,7 @@ test("extension imports reject noun article profiles unsupported by their declen
     details: {
       declension: { kind: "rule", rule: "Plural form is the base", base: "vestiti" },
       gender: "masculine",
+      genderDiffersWithPlurality: false,
       articleProfile: nounArticleProfiles.all,
       articleGroups: { singular: null, plural: null },
     },

@@ -105,7 +105,8 @@ export type NounAnswerMode = "word" | "article" | "wordWithArticles";
 export type NounAnswerEntry = { article: string | null; noun: string | null };
 
 export type ParsedNounAnswer = ParseResult & {
-  gender: NounGender | null;
+  /** One gender (the singular's), two from a compound marker like “mf” (one per typed form, in order), or none. */
+  genders: NounGender[];
   tantum: NounFormNumber | null;
   entries: NounAnswerEntry[];
 };
@@ -115,13 +116,17 @@ export type ParsedNounAnswer = ParseResult & {
  * anywhere, then articles and forms in any order, each form going with the article before it.
  */
 export function parseNounAnswer(rawValue: string, morphology: NounMorphology, keywords: AnswerKeywords, mode: NounAnswerMode): ParsedNounAnswer {
-  const result: ParsedNounAnswer = { status: "complete", message: "", pieces: [], gender: null, tantum: null, entries: [] };
+  const result: ParsedNounAnswer = { status: "complete", message: "", pieces: [], genders: [], tantum: null, entries: [] };
   const fail = (status: "incomplete" | "invalid", message: string) => ({ ...result, status, message });
   if (!rawValue.trim()) return { ...result, status: "empty" };
 
-  const markers: Record<string, { kind: "gender"; value: NounGender } | { kind: "tantum"; value: NounFormNumber }> = {
-    [normalizeText(keywords.masculine)]: { kind: "gender", value: "masculine" },
-    [normalizeText(keywords.feminine)]: { kind: "gender", value: "feminine" },
+  const masculine = normalizeText(keywords.masculine);
+  const feminine = normalizeText(keywords.feminine);
+  const markers: Record<string, { kind: "gender"; value: NounGender[] } | { kind: "tantum"; value: NounFormNumber }> = {
+    [masculine]: { kind: "gender", value: ["masculine"] },
+    [feminine]: { kind: "gender", value: ["feminine"] },
+    [masculine + feminine]: { kind: "gender", value: ["masculine", "feminine"] },
+    [feminine + masculine]: { kind: "gender", value: ["feminine", "masculine"] },
     [normalizeText(keywords.singularOnly)]: { kind: "tantum", value: "singular" },
     [normalizeText(keywords.pluralOnly)]: { kind: "tantum", value: "plural" },
   };
@@ -133,9 +138,9 @@ export function parseNounAnswer(rawValue: string, morphology: NounMorphology, ke
       continue;
     }
     if (marker.kind === "gender") {
-      if (result.gender) return fail("invalid", "Type one gender marker at most.");
-      result.gender = marker.value;
-      result.pieces.push({ label: "Gender", value: marker.value });
+      if (result.genders.length) return fail("invalid", "Type one gender marker at most.");
+      result.genders = marker.value;
+      result.pieces.push({ label: marker.value.length === 1 ? "Gender" : "Genders", value: marker.value.join(", then ") });
     } else {
       if (result.tantum) return fail("invalid", "Type one singular-only or plural-only marker at most.");
       result.tantum = marker.value;
@@ -207,9 +212,11 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
   const formNumbers = (noun: string) => existing.filter((number) => sameText(forms[number], noun));
   const problems: string[] = [];
   const filled = new Set<ArticleSlotKey>();
-  /** Numbers whose form was typed correctly. */
-  const given = new Set<NounFormNumber>();
-  const shownGenders: Set<NounGender>[] = [];
+  /** Numbers whose form was typed correctly, in the order they first appear. */
+  const given: NounFormNumber[] = [];
+  const give = (number: NounFormNumber) => { if (!given.includes(number)) given.push(number); };
+  /** The genders each typed article allows, and the number it was read for (null when unknown). */
+  const shownGenders: { number: NounFormNumber | null; genders: Set<NounGender> }[] = [];
 
   for (const { article, noun } of parsed.entries) {
     if (!article) {
@@ -219,7 +226,7 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
         continue;
       }
       // A noun whose forms are spelled alike (la città, le città) fills whichever number is still missing.
-      given.add(numbers.find((number) => !given.has(number)) ?? numbers[0]!);
+      give(numbers.find((number) => !given.includes(number)) ?? numbers[0]!);
       continue;
     }
 
@@ -232,12 +239,12 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
         continue;
       }
       filled.add(slot.key);
-      shownGenders.push(articleGenders(article, slotNumber(slot), morphology));
+      shownGenders.push({ number: slotNumber(slot), genders: articleGenders(article, slotNumber(slot), morphology) });
       if (!noun) continue;
       if (sameText(slot.noun, noun)) {
-        given.add(slotNumber(slot));
+        give(slotNumber(slot));
       } else if (formNumbers(noun).length) {
-        formNumbers(noun).forEach((number) => given.add(number));
+        formNumbers(noun).forEach(give);
         problems.push(`“${noun}” doesn’t go with “${article}”.`);
       } else {
         problems.push(`“${noun}” isn’t a form of this word.`);
@@ -246,12 +253,13 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
     }
 
     const numbers = noun ? formNumbers(noun) : [];
-    shownGenders.push(articleGenders(article, numbers.length === 1 ? numbers[0]! : null, morphology));
+    const number = numbers.length === 1 ? numbers[0]! : null;
+    shownGenders.push({ number, genders: articleGenders(article, number, morphology) });
     if (!numbers.length) {
       problems.push(`“${article}” isn’t one of this word’s articles.`);
       if (noun) problems.push(`“${noun}” isn’t a form of this word.`);
     } else {
-      numbers.forEach((number) => given.add(number));
+      numbers.forEach(give);
       problems.push(slots.some((slot) => numbers.includes(slotNumber(slot)))
         ? `“${article}” isn’t the article for “${noun}”.`
         : `“${noun}” doesn’t take an article.`);
@@ -265,7 +273,7 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
 
   if (mode !== "article") {
     const reasons = fullDeclensionReasons(card, morphology, preferences);
-    if (reasons.length && existing.some((number) => !given.has(number))) {
+    if (reasons.length && existing.some((number) => !given.includes(number))) {
       problems.push(`Give both the singular and the plural: ${fullDeclensionReasonLabels[reasons[0]!]}.`);
     }
   }
@@ -280,18 +288,68 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
     problems.push(`This word has both a singular and a plural, so it takes no “${parsed.tantum === "singular" ? keywords.singularOnly : keywords.pluralOnly}”.`);
   }
 
-  // Likewise every article together shows the gender; in word mode an article or a marker must.
-  if (parsed.gender) {
-    if (parsed.gender !== card.details.gender) problems.push(`This word is ${card.details.gender}.`);
-  } else if (mode === "word" && !context.genderGiven) {
-    const genders = shownGenders.length
-      ? (["masculine", "feminine"] as const).filter((gender) => shownGenders.every((set) => set.has(gender)))
-      : null;
-    if (!genders || genders.length !== 1) {
-      problems.push(`Add “${keywords.masculine}” or “${keywords.feminine}”: ${genders ? "the article doesn’t show the gender" : "without an article nothing shows the gender"}.`);
-    }
-  }
-
+  problems.push(...genderProblems(card, forms, parsed.genders, given, shownGenders, context));
   return { correct: !problems.length, problems };
 }
 
+/**
+ * A typed gender marker must be right: a single one names the singular's gender (the only gender of
+ * most nouns); a compound one like “mf” names each typed form's gender in the order typed, and only
+ * fits a noun whose gender differs with plurality. In word mode each typed form's gender must also
+ * be shown, by a marker, the prompt, or an article that allows only one gender. With every article
+ * typed (the other modes) the articles show it.
+ */
+function genderProblems(
+  card: NounCard,
+  forms: ResolvedNounForms,
+  markers: NounGender[],
+  given: NounFormNumber[],
+  shownGenders: { number: NounFormNumber | null; genders: Set<NounGender> }[],
+  context: NounCheckContext,
+) {
+  const keywords = context.preferences.answerKeywords;
+  const genderOf = (number: NounFormNumber) => number === "plural" ? forms.pluralGender : forms.gender;
+  const differs = card.details.genderDiffersWithPlurality;
+  const compounds = `“${keywords.masculine}${keywords.feminine}” or “${keywords.feminine}${keywords.masculine}”`;
+  const problems: string[] = [];
+  /** Numbers whose gender a marker states. */
+  const marked = new Set<NounFormNumber>();
+
+  if (markers.length === 1) {
+    if (markers[0] !== forms.gender) problems.push(differs ? `The singular is ${forms.gender}; a single gender marker gives the singular’s gender.` : `This word is ${forms.gender}.`);
+    marked.add(forms.numberMode === "plural" ? "plural" : "singular");
+  } else if (markers.length === 2) {
+    const typed = markers.map((gender) => keywords[gender]).join("");
+    if (!differs) {
+      problems.push(`This word’s gender doesn’t differ with plurality, so “${typed}” doesn’t fit; use “${keywords[forms.gender]}”.`);
+    } else if (given.length !== 2) {
+      problems.push(`“${typed}” gives two genders, one for each form; type both the singular and the plural.`);
+    } else {
+      given.forEach((number, index) => {
+        if (markers[index] !== genderOf(number)) problems.push(`“${forms[number]}” is ${genderOf(number)}, not ${markers[index]}.`);
+        marked.add(number);
+      });
+    }
+  }
+
+  if (context.mode !== "word") return problems;
+  const shows = (number: NounFormNumber | null) => {
+    const sets = shownGenders.filter((entry) => number === null || entry.number === null || entry.number === number).map((entry) => entry.genders);
+    if (!sets.length) return false;
+    return (["masculine", "feminine"] as const).filter((gender) => sets.every((set) => set.has(gender))).length === 1;
+  };
+
+  if (!differs) {
+    if (!markers.length && !context.genderGiven && !shows(null)) {
+      problems.push(`Add “${keywords.masculine}” or “${keywords.feminine}”: ${shownGenders.length ? "the article doesn’t show the gender" : "without an article nothing shows the gender"}.`);
+    }
+    return problems;
+  }
+  if (given.includes("singular") && !marked.has("singular") && !context.genderGiven && !shows("singular")) {
+    problems.push(`Show the singular’s gender: add “${keywords.masculine}”, “${keywords.feminine}”, ${compounds}, or use an article that shows it.`);
+  }
+  if (given.includes("plural") && !marked.has("plural") && !shows("plural")) {
+    problems.push(`Show the plural’s gender: type its article, or add ${compounds}.`);
+  }
+  return problems;
+}

@@ -115,7 +115,7 @@ export function WordDrawer({
           </div>
           <div className="field-row">
             <div className="field">
-              <span>Gender</span>
+              <span>{noun.genderDiffersWithPlurality ? "Singular gender" : "Gender"}</span>
               <div className="segmented compact" role="radiogroup" aria-label="Gender">
                 {(["masculine", "feminine"] as const).map((gender) => <button type="button" role="radio" aria-checked={noun.gender === gender} key={gender} className={noun.gender === gender ? "active" : ""} onClick={() => setNoun((draft) => ({ ...draft, gender }))}>{gender === "masculine" ? "Masculine" : "Feminine"}</button>)}
               </div>
@@ -127,6 +127,10 @@ export function WordDrawer({
               </select>
             </label>
           </div>
+          <label className="check-option">
+            <input type="checkbox" checked={noun.genderDiffersWithPlurality} onChange={(event) => setNoun((draft) => ({ ...draft, genderDiffersWithPlurality: event.target.checked }))} />
+            <span><strong>Gender differs with plurality</strong><small>{noun.genderDiffersWithPlurality ? `The plural is ${noun.gender === "masculine" ? "feminine" : "masculine"}, as in l’uovo / le uova.` : "Like l’uovo / le uova: the plural takes the other gender."}</small></span>
+          </label>
           <label className="field">
             <span>Declension rule{noun.rule === irregularRuleValue ? " · forms are stored exactly as typed" : ""}</span>
             <NounRuleSelect label="Declension rule" value={noun.rule} morphology={morphology} onChange={(rule) => setNoun((draft) => ({ ...draft, rule }))} />
