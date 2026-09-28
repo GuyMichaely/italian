@@ -158,8 +158,8 @@ function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }:
       <span className="setup-summary-text">{setupSummary(setup).map((part, index) => <span key={index}>{part}</span>)}</span>
     </button>
     <div className="progress-row">
-      <span className="progress-count">{Math.min(current + 1, total)} / {total}</span>
       <span className="progress-tally" aria-label={`${session.right} right, ${session.wrong} wrong`}><b className="right">{session.right}</b><b className="wrong">{session.wrong}</b></span>
+      <span className="progress-count">{Math.min(current + 1, total)} / {total}</span>
       <button type="button" className="icon-button" onClick={onRestart} aria-label="Reshuffle and restart" title="Reshuffle and restart"><Icon name="restart" size={16} /></button>
     </div>
   </div>;
