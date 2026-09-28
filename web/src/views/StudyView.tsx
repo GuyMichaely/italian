@@ -13,7 +13,6 @@ import {
   studyItemCount,
   type PromptMode,
   type ScopeMode,
-  type StudyMode,
   type StudySetup,
 } from "../study/setup";
 
@@ -31,10 +30,10 @@ function setupSummary(setup: StudySetup) {
   const scope = setup.scopeMode === "all" || !labels.length
     ? setup.scopeMode === "only" ? "Nothing selected" : "All words"
     : `${setup.scopeMode === "only" ? "" : "All except "}${labels.join(", ")}`;
-  if (setup.studyMode === "articles") return [scope, "Articles", setup.typeToVerify ? "Typing" : "Flip cards"];
+  if (!setup.studyWords) return [scope, "Articles", setup.typeToVerify ? "Typing" : "Flip cards"];
   const prompt = setup.promptMode === "both" && setup.oneDirectionPerWord ? "Mixed directions" : promptModeLabels[setup.promptMode];
   const answer = setup.promptMode === "italian" || !setup.typeToVerify ? "Flip cards" : setup.promptMode === "both" ? "Typing (EN prompts)" : "Typing";
-  return [scope, prompt, answer];
+  return [scope, setup.studyArticles ? `${prompt} + articles` : prompt, answer];
 }
 
 type Option<T extends string> = { value: T; label: string; short?: string; description?: string };
@@ -76,7 +75,7 @@ function StudySetupPanel({
   const [staged, setStaged] = useState<StudySetup | null>(null);
   const shown = staged ? { ...staged, typeToVerify: setup.typeToVerify } : setup;
   const count = studyItemCount(cards, shown, morphology);
-  const articles = shown.studyMode === "articles";
+  const articlesOnly = !shown.studyWords;
   const groups = (["type", "set", "tag"] as const).map((kind) => ({ kind, options: options.filter((option) => option.kind === kind) })).filter((group) => group.options.length);
   const groupLabels = { type: "Parts of speech", set: "Sets", tag: "Tags" };
 
@@ -97,16 +96,22 @@ function StudySetupPanel({
   return <section className="setup-panel" aria-label="Study setup">
     <header className="setup-header">
       <h2>Session</h2>
-      <span className="setup-count"><strong>{count}</strong> {articles ? count === 1 ? "noun" : "nouns" : count === 1 ? "card" : "cards"}</span>
+      <span className="setup-count"><strong>{count}</strong> {articlesOnly ? count === 1 ? "noun" : "nouns" : count === 1 ? "card" : "cards"}</span>
       <button type="button" className="text-button small narrow-only" onClick={onClose}>Done</button>
     </header>
 
-    <div className="setup-group">
-      <h3>Mode</h3>
-      <OptionList<StudyMode> label="Study mode" value={shown.studyMode} onChange={(studyMode) => change({ studyMode })} options={[
-        { value: "words", label: "Words", description: "Recall each word from its prompt" },
-        { value: "articles", label: "Articles", description: "Endless drill of noun articles" },
-      ]} />
+    <div className="setup-group" role="group" aria-label="Study">
+      <h3>Study</h3>
+      <div className="study-options">
+        <label className="check-option">
+          <input type="checkbox" checked={shown.studyWords} disabled={!shown.studyArticles} onChange={(event) => change({ studyWords: event.target.checked })} />
+          <span><strong>Words</strong><small>Recall each word from its prompt</small></span>
+        </label>
+        <label className="check-option">
+          <input type="checkbox" checked={shown.studyArticles} disabled={!shown.studyWords} onChange={(event) => change({ studyArticles: event.target.checked })} />
+          <span><strong>Articles</strong><small>{shown.studyWords ? "English prompts for nouns also ask for every article" : "Type every article of each noun from its Italian"}</small></span>
+        </label>
+      </div>
     </div>
 
     <div className="setup-group">
@@ -128,7 +133,7 @@ function StudySetupPanel({
       </div>}
     </div>
 
-    {!articles && <div className="setup-group">
+    {!articlesOnly && <div className="setup-group">
       <h3>Prompt</h3>
       <OptionList<PromptMode> label="Prompt direction" value={shown.promptMode} onChange={(promptMode) => change({ promptMode })} options={[
         { value: "english", label: "English → Italian", short: "EN → IT" },
@@ -150,7 +155,7 @@ function StudySetupPanel({
     <div className="setup-group">
       <h3>Answer</h3>
       <OptionList label="Answer mode" value={setup.typeToVerify ? "type" : "flip"} onChange={(value) => onAnswerMode(value === "type")} options={[
-        { value: "type", label: articles ? "Type the articles" : "Type the Italian", short: "Type", description: articles || setup.promptMode === "english" ? "Checked and parsed as you type" : "Italian prompts stay flip cards" },
+        { value: "type", label: articlesOnly ? "Type the articles" : "Type the Italian", short: "Type", description: articlesOnly || shown.promptMode === "english" ? "Checked and parsed as you type" : "Italian prompts stay flip cards" },
         { value: "flip", label: "Flip cards", short: "Flip", description: "Reveal, then mark right or wrong" },
       ]} />
     </div>
@@ -165,7 +170,7 @@ function StudySetupPanel({
   </section>;
 }
 
-function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }: { current: number; total: number | null; session: SessionCounts; onAdjust: () => void; onRestart: () => void; setup: StudySetup }) {
+function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }: { current: number; total: number; session: SessionCounts; onAdjust: () => void; onRestart: () => void; setup: StudySetup }) {
   return <div className="study-header">
     <button type="button" className="setup-summary narrow-only" onClick={onAdjust} aria-label="Adjust study setup">
       <Icon name="sliders" size={16} />
@@ -173,7 +178,7 @@ function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }:
     </button>
     <div className="progress-row">
       <span className="progress-tally" aria-label={`${session.right} right, ${session.wrong} wrong`}><b className="right">{session.right}</b><b className="wrong">{session.wrong}</b></span>
-      <span className="progress-count">{total === null ? `#${current + 1}` : `${Math.min(current + 1, total)} / ${total}`}</span>
+      <span className="progress-count">{Math.min(current + 1, total)} / {total}</span>
       <button type="button" className="icon-button" onClick={onRestart} aria-label="Reshuffle and restart" title="Reshuffle and restart"><Icon name="restart" size={16} /></button>
     </div>
   </div>;
@@ -182,7 +187,7 @@ function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }:
 function CardTop({ item }: { item: StudyItem }) {
   return <div className="study-card-top">
     <span className={`pos-badge ${item.card.type}`}>{typeLabels[item.card.type]}</span>
-    <span className="card-direction">{item.mode === "article" ? "Articles" : item.promptLanguage === "english" ? "English → Italian" : "Italian → English"}</span>
+    <span className="card-direction">{item.mode === "article" ? "Articles" : item.promptLanguage === "english" ? item.mode === "wordWithArticles" ? "English → Italian + articles" : "English → Italian" : "Italian → English"}</span>
     {item.card.setName && <span className="card-set">{item.card.setName}</span>}
   </div>;
 }
@@ -208,8 +213,7 @@ export type StudyViewProps = {
   onApplySetup: (setup: StudySetup) => void;
   onAnswerMode: (typeToVerify: boolean) => void;
   scopeOptions: StudyScopeOption[];
-  /** Null for the endless articles drill. */
-  total: number | null;
+  total: number;
   current: number;
   studyItem: StudyItem | null;
   typing: boolean;
@@ -263,7 +267,7 @@ export function StudyView(props: StudyViewProps) {
     <div className="study-view">
     {props.warning && <p className="sync-warning" role="status">{props.warning}</p>}
     {props.activeReviewSetId !== null && !props.sessionComplete && <p className="review-round-label">Review set {props.activeReviewSetId}</p>}
-    {(total === null ? Boolean(studyItem) : total > 0) && !props.sessionComplete && <ProgressHeader current={props.current} total={total} session={props.session} setup={props.setup} onAdjust={() => props.onSetupOpen(!props.setupOpen)} onRestart={props.onRestart} />}
+    {total > 0 && !props.sessionComplete && <ProgressHeader current={props.current} total={total} session={props.session} setup={props.setup} onAdjust={() => props.onSetupOpen(!props.setupOpen)} onRestart={props.onRestart} />}
 
     {props.sessionComplete ? (
       <div className="session-complete">
@@ -349,7 +353,7 @@ export function StudyView(props: StudyViewProps) {
       </div>
     </> : (
       <div className="empty-state">
-        <h2>{props.setup.studyMode === "articles" ? "No nouns with articles match this setup" : "No cards match this setup"}</h2>
+        <h2>{!props.setup.studyWords ? "No nouns with articles match this setup" : "No cards match this setup"}</h2>
         <p>{props.setup.scopeMode === "only" && !props.setup.selectedScopes.length ? "Choose at least one part of speech, set, or tag." : "Widen the selection or add words."}</p>
         <button type="button" className="primary-button narrow-only" onClick={() => props.onSetupOpen(true)}><Icon name="sliders" size={16} /> Adjust setup</button>
       </div>

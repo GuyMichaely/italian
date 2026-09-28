@@ -133,38 +133,56 @@ The inventory stores `studyPreferences` next to the cards and morphology, so the
 }
 ```
 
-- `answerKeywords` are the gender and singular-/plural-only markers typed in word mode. They are single lowercase tokens and all different.
+- `answerKeywords` are the gender and singular-/plural-only markers typed in noun answers. They are single lowercase tokens and all different.
 - `fullDeclensionRules` are declension rules still being drilled.
 - `fullDeclensionCards` are noun ids that always need both forms.
 
 Neither list changes what a word is. References to deleted nouns or rules are dropped whenever the inventory is saved.
 
-## Word mode
+## Study modes
 
-Word mode prompts in English and the answer is the noun with an article: `il libro`, `i libri`, `un libro`, or both numbers `il libro i libri`. Keywords can go anywhere in the answer.
+The study sidebar has two checkboxes, **Words** and **Articles**; at least one stays checked. Every combination is a round over the cards in scope, shuffled the same way:
 
-- Each form must be one of the noun's forms, preceded by an article the noun takes for that number (per its article profile), or by no article when it takes none.
-- **Both forms** are required when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `fullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural.
+| Checked | Prompts | A noun's answer |
+|---|---|---|
+| Words | every card, in the chosen directions | the noun, articles optional (word answers below) |
+| Articles | nouns that take at least one article, in Italian | every article the noun takes; forms optional |
+| Both | every card, in the chosen directions | English prompts for nouns that take articles: every article plus the forms word answers need. Italian prompts and other words are as in Words |
+
+All three read the same answer format: gender and singular-/plural-only keywords anywhere, then articles and noun forms **in any order**, each form going with the article just before it. `lo specchio gli specchi uno`, `uno lo specchio gli`, and `gli uno lo` are all read the same way. A typed article is matched to whichever of the noun's articles it is; with the default table a noun's three articles are always different, so the order carries no information. Any form or marker that is typed must be right.
+
+### Word answers
+
+With Words alone, the answer is the noun with or without an article: `il libro`, `i libri`, `un libro`, `m libro`, or both numbers `il libro i libri`.
+
+- Each form must be one of the noun's forms. An article is optional, but a typed article must be one the noun takes for that number (per its article profile); a form that takes no article must have none.
+- **Both forms** are required when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `fullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
 - **Singular-/plural-only marker** is required for a noun with only one form and wrong on a noun with both: `p i pantaloni`, `f s Venezia`.
-- **Gender marker** is required when the typed articles don't settle the gender (`m l’albero`; `gli alberi` needs none) and when there is no article at all. It is not required when the prompt shows the gender. A marker that disagrees with the noun is wrong.
+- **Gender marker** is required when the typed articles don't settle the gender (`m l’albero`; `gli alberi` needs none) and when there is no article (`m libro`). It is not required when the prompt shows the gender. A marker that disagrees with the noun is wrong.
 
-The live preview reads the answer without looking at the card (markers, articles, and nouns, plus whether an article still needs its noun), so it never reveals the answer. After checking, a wrong answer lists what was wrong.
+Leaving out the article skips practice of the article choice (`lo specchio`, not `il specchio`); studying Articles, alone or with Words, covers it.
 
-## Article mode
+### Article answers
 
-Article mode is an endless drill over the nouns in scope that take at least one article. It prompts with the Italian form (the singular, or the plural of a plural-only noun, plus the plural of an irregular noun) and the answer is the articles the noun takes, in order: definite singular, definite plural, indefinite. Each article can be followed by its noun form, which must then be right:
+With Articles alone, the prompt is the Italian form (the singular, or the plural of a plural-only noun, plus the plural of an irregular noun) and the answer is every article the noun takes: definite singular, definite plural, and indefinite, in any order. Each article can be followed by its noun form:
 
 ```text
-specchio   -> lo gli uno   or   lo specchio gli specchi uno specchio
+specchio   -> lo gli uno   or   uno specchio lo specchio gli specchi
 nozze      -> le
 dio / dei  -> il gli un
 ```
 
-Words are drawn by class so that rare article patterns get practice. A class is a gender plus the exact articles taken. A class whose nouns all fall in one article group with several start patterns (masculine `lo / gli / uno`: `sC`, `z`, `gn`, `ps`, …) is split by pattern. Each draw picks a class uniformly, then a pattern within it, then a noun, avoiding an immediate repeat.
+A missing article, an extra one, or a form that doesn't go with its article is wrong.
+
+### Words and articles together
+
+With both checked, an English prompt for a noun that takes articles needs every article, as above, plus the forms a word answer needs (one, or both when the noun needs the full declension): `il libro i un`, `lo specchio gli specchi uno` when `-chio → -chi` is drilled. The full set of articles shows the gender and which numbers exist, so neither marker is needed.
+
+The live preview reads the answer without looking at the card (markers, articles, and nouns, plus whether an article still needs its noun), so it never reveals the answer. After checking, a wrong answer lists what was wrong.
 
 ## Nouns taking both genders
 
-A noun that takes both genders is two cards (`il collega` / `la collega`, `il cantante` / `la cantante`). When two nouns share an English prompt, or an Italian headword in Italian prompts and article mode, but differ in gender, the prompt shows the gender, e.g. `colleague (m)`.
+A noun that takes both genders is two cards (`il collega` / `la collega`, `il cantante` / `la cantante`). When two nouns share an English prompt, or an Italian headword in Italian prompts and article prompts, but differ in gender, the prompt shows the gender, e.g. `colleague (m)`.
 
 ## Names as references
 

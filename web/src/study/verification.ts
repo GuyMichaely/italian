@@ -1,6 +1,6 @@
 import type { Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
-import { checkArticleAnswer, checkWordAnswer, type AnswerCheck } from "./nounAnswers";
+import { checkNounAnswer, type AnswerCheck } from "./nounAnswers";
 import type { StudyItem } from "./order";
 import type { StudyPreferences } from "./preferences";
 
@@ -54,9 +54,7 @@ export function matchesExpected(actual: string[], expected: string[]) {
 export function checkTypedAnswer(item: StudyItem, rawValue: string, morphology: NounMorphology, preferences: StudyPreferences): AnswerCheck {
   const { card } = item;
   if (card.type === "noun") {
-    return item.mode === "article"
-      ? checkArticleAnswer(card, rawValue, morphology)
-      : checkWordAnswer(card, rawValue, { morphology, preferences, genderGiven: item.promptGender !== null });
+    return checkNounAnswer(card, rawValue, { mode: item.mode, morphology, preferences, genderGiven: item.promptGender !== null });
   }
   return { correct: verifyPowerAnswer(card, rawValue), problems: [] };
 }

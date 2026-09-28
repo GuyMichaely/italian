@@ -100,9 +100,10 @@ export function ItalianVerificationForm({ item, preferences, morphology, onResul
   }
 
   const placeholder = item.mode === "article" ? "il i un"
-    : card.type === "noun" ? "il libro"
-      : card.type === "verb" ? "parlare parlo parli parla …"
-        : card.type === "adjective" ? "bello" : "molto";
+    : item.mode === "wordWithArticles" ? "il libro i un"
+        : card.type === "noun" ? "il libro"
+          : card.type === "verb" ? "parlare parlo parli parla …"
+            : card.type === "adjective" ? "bello" : "molto";
 
   return (
     <form className={`answer-form${syntaxRejected ? " syntax-rejected" : ""}`} onSubmit={submit}>

@@ -4,7 +4,7 @@ import {
   whitespaceParts,
   type StudyItem,
 } from "../study/logic";
-import { parseArticleAnswer, parseWordAnswer } from "../study/nounAnswers";
+import { parseNounAnswer, type NounAnswerMode } from "../study/nounAnswers";
 import type { AnswerKeywords } from "../study/preferences";
 
 type ParsePiece = {
@@ -34,6 +34,18 @@ function labeledPieces(values: string[], labels: string[]) {
   }));
 }
 
+const nounSyntaxNames: Record<NounAnswerMode, string> = {
+  word: "Noun",
+  article: "Articles",
+  wordWithArticles: "Noun with every article",
+};
+
+const nounAnswerHints: Record<NounAnswerMode, string> = {
+  word: "Type the Italian. The fields Parola recognizes will appear here.",
+  article: "Type every article the noun takes, in any order: definite singular, definite plural, indefinite.",
+  wordWithArticles: "Type the noun with every article it takes, in any order: definite singular, definite plural, indefinite.",
+};
+
 /** How the typed answer reads so far, without revealing anything about the prompted card. */
 export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawValue: string, keywords: AnswerKeywords, morphology: NounMorphology): AnswerSyntaxAnalysis {
   const { card } = item;
@@ -52,7 +64,7 @@ export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawV
   const unclosedQuote = (trimmed.match(/"/g)?.length ?? 0) % 2 === 1;
 
   if (card.type === "noun") {
-    const parsed = item.mode === "article" ? parseArticleAnswer(trimmed, morphology) : parseWordAnswer(trimmed, morphology, keywords);
+    const parsed = parseNounAnswer(trimmed, morphology, keywords, item.mode);
     const status: AnswerSyntaxStatus = parsed.status === "incomplete" ? "partial" : parsed.status === "empty" ? "empty" : parsed.status;
     return {
       pieces: parsed.pieces,
@@ -60,7 +72,7 @@ export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawV
       status,
       checkable: status === "complete",
       missing: [],
-      syntaxName: item.mode === "article" ? "Articles" : "Noun",
+      syntaxName: nounSyntaxNames[item.mode],
     };
   }
 
@@ -128,7 +140,7 @@ const statusLabels: Record<AnswerSyntaxStatus, string> = {
 
 export function AnswerParsePreview({ item, value, keywords, morphology }: { item: Pick<StudyItem, "card" | "mode">; value: string; keywords: AnswerKeywords; morphology: NounMorphology }) {
   const preview = analyzeAnswerSyntax(item, value, keywords, morphology);
-  if (preview.status === "empty") return <div className="parse-preview syntax-empty" aria-live="polite"><p className="parse-hint">{item.mode === "article" ? "Type the articles in order: definite singular, definite plural, indefinite." : "Type the Italian. The fields Parola recognizes will appear here."}</p></div>;
+  if (preview.status === "empty") return <div className="parse-preview syntax-empty" aria-live="polite"><p className="parse-hint">{item.card.type === "noun" ? nounAnswerHints[item.mode] : nounAnswerHints.word}</p></div>;
   return (
     <div className={`parse-preview syntax-${preview.status}`} aria-live="polite">
       {preview.pieces.length > 0 && <div className="parse-tokens">

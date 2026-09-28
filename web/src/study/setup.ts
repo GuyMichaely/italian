@@ -1,16 +1,16 @@
 import type { CardType, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import { storageKey } from "../storage/keys";
-import { takesArticles } from "./nounAnswers";
+import { buildStudyItems } from "./order";
 
 export type PromptLanguage = "english" | "italian";
 export type PromptMode = PromptLanguage | "both";
 export type ScopeMode = "all" | "only" | "exclude";
-/** Words: recall each word from a prompt. Articles: an endless drill of noun articles. */
-export type StudyMode = "words" | "articles";
-
 export type StudySetup = {
-  studyMode: StudyMode;
+  /** Recall each word from its prompt. At least one of studyWords and studyArticles is on. */
+  studyWords: boolean;
+  /** Ask nouns for every article they take; alone, from an Italian prompt. */
+  studyArticles: boolean;
   scopeMode: ScopeMode;
   /** Scope keys shaped like `type:noun`, `set:Basics`, or `tag:tricky`. */
   selectedScopes: string[];
@@ -21,7 +21,8 @@ export type StudySetup = {
 };
 
 export const defaultStudySetup: StudySetup = {
-  studyMode: "words",
+  studyWords: true,
+  studyArticles: false,
   scopeMode: "all",
   selectedScopes: [],
   promptMode: "english",
@@ -36,8 +37,10 @@ export function readStudySetup(): StudySetup {
   if (typeof window === "undefined") return defaultStudySetup;
   try {
     const parsed = JSON.parse(window.localStorage.getItem(studySetupKey) ?? "{}") as Partial<StudySetup>;
+    const studyArticles = parsed.studyArticles === true;
     return {
-      studyMode: parsed.studyMode === "articles" ? "articles" : "words",
+      studyWords: parsed.studyWords !== false || !studyArticles,
+      studyArticles,
       scopeMode: parsed.scopeMode === "only" || parsed.scopeMode === "exclude" ? parsed.scopeMode : "all",
       selectedScopes: Array.isArray(parsed.selectedScopes) ? parsed.selectedScopes.filter((item): item is string => typeof item === "string") : [],
       promptMode: parsed.promptMode === "italian" || parsed.promptMode === "both" ? parsed.promptMode : "english",
@@ -71,11 +74,9 @@ export function cardsInScope(cards: Flashcard[], setup: Pick<StudySetup, "scopeM
   });
 }
 
-/** Prompts in one words round, or the nouns the endless articles drill draws from. */
+/** Prompts in one round. */
 export function studyItemCount(cards: Flashcard[], setup: StudySetup, morphology: NounMorphology) {
-  const scoped = cardsInScope(cards, setup);
-  if (setup.studyMode === "articles") return scoped.filter((card) => takesArticles(card, morphology)).length;
-  return setup.promptMode === "both" && !setup.oneDirectionPerWord ? scoped.length * 2 : scoped.length;
+  return buildStudyItems(cardsInScope(cards, setup), cards, setup, morphology, 0).length;
 }
 
 export function scopeKeyLabel(key: string, typeLabels: Record<CardType, string>) {

@@ -30,7 +30,7 @@ See `docs/REMOTE_API.md` for the sync endpoint contract.
 
 ## Noun morphology
 
-Noun cards store a declension (a rule and base, or irregular forms), gender, article profile, and article-group exceptions. Declension rules, optionally limited to one gender, generate noun forms; the article table gives each form its articles. Study has a word mode (English prompt, type the noun with an article) and an endless article mode (Italian prompt, type its articles).
+Noun cards store a declension (a rule and base, or irregular forms), gender, article profile, and article-group exceptions. Declension rules, optionally limited to one gender, generate noun forms; the article table gives each form its articles. Study has two checkboxes: Words (type the noun, with an article or a gender marker) and Articles (type every article a noun takes, in any order); checking both asks English-prompted nouns for the word and all its articles.
 
 See `../docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the model and how answers are checked.
 

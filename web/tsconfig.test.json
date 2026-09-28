@@ -10,7 +10,7 @@
   "include": [
     "src/cards/nounMorphology.ts",
     "src/study/nounAnswers.ts",
-    "src/study/articleDrill.ts",
+    "src/study/order.ts",
     "src/study/prompts.ts",
     "src/storage/inventoryState.ts",
     "src/study/reviews.ts",

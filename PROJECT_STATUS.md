@@ -50,7 +50,7 @@ The prompted card determines the expected part of speech; the learner does not t
 
 Study supports English, Italian, or both prompt directions; optional typed Italian verification; one direction per word; English-first ordering when both directions are studied; scope filtering by part of speech, set, or tag; mistake review; and creation of mistake tags.
 
-Nouns have two study modes. Word mode prompts in English; the answer is the noun with an article, one form or both, plus gender and singular-/plural-only keywords (default `m`, `f`, `s`, `p`) where needed. Both forms are required for irregular nouns, nouns whose plural the rules don't predict, nouns using a drilled rule, and nouns marked individually. Article mode is an endless drill that prompts with the Italian form and asks for the articles in order, drawing uniformly by article class. The live preview is card-blind; a wrong answer lists what was wrong. Answer keywords, drilled rules, and marked nouns are `studyPreferences` in the inventory, so they sync with it. Nouns taking both genders are two cards, and shared prompts show `(m)`/`(f)`.
+Study has two checkboxes, Words and Articles, and at least one stays checked. Words prompts each card in the chosen directions; a noun's answer is the noun, one form or both, with an optional article, plus gender and singular-/plural-only keywords (default `m`, `f`, `s`, `p`) where nothing else shows them. Both forms are required for irregular nouns, nouns whose plural the rules don't predict, nouns using a drilled rule, and nouns marked individually. Articles alone prompts each noun that takes an article with its Italian form and asks for every article it takes. With both checked, English prompts for such nouns ask for every article plus the forms a word answer needs. Articles and forms can be typed in any order, and every combination is a shuffled round over the cards in scope. The live preview is card-blind; a wrong answer lists what was wrong. Answer keywords, drilled rules, and marked nouns are `studyPreferences` in the inventory, so they sync with it. Nouns taking both genders are two cards, and shared prompts show `(m)`/`(f)`.
 
 Verb, adjective, and adverb typed verification use their current canonical stored forms. Regular adjective shorthand is supported where the stored adjective matches the standard pattern.
 
@@ -81,7 +81,7 @@ After validation, imported cards use the same `addBatch` and `CardStorage` persi
 
 ## Automated validation
 
-`npm test` runs deterministic tests against the real noun answer checking and preview, the article drill, study preferences, and the external import contract. Noun coverage includes rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word- and article-mode checking, markers, article profiles, prompt gender hints, and strict rejection of retired schemas.
+`npm test` runs deterministic tests against the real noun answer checking and preview, study item building, study preferences, and the external import contract. Noun coverage includes rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word, article, and combined answer checking, markers, article profiles, prompt gender hints, and strict rejection of retired schemas.
 
 Test files run serially because they share one temporary CommonJS output directory.
 

@@ -124,7 +124,7 @@ try {
 
   const answer = page.getByRole("textbox", { name: "Answer" });
   await answer.fill("lo");
-  const stillNeeded = page.locator(".answer-parse-message").filter({ hasText: "Type the noun after the article." });
+  const stillNeeded = page.locator(".answer-parse-message").filter({ hasText: "Type the noun after its article." });
   await stillNeeded.waitFor({ state: "visible" });
 
   await answer.fill("lo specchio");
@@ -133,14 +133,22 @@ try {
 
   await page.getByRole("button", { name: /Continue/ }).click();
   await page.getByRole("heading", { name: "Session complete" }).waitFor({ state: "visible" });
-  await page.getByRole("radio", { name: /^Articles/ }).click();
+  await page.getByRole("checkbox", { name: /^Articles/ }).check();
+  await page.getByRole("heading", { name: "mirror" }).waitFor({ state: "visible" });
+  await page.getByRole("textbox", { name: "Answer" }).fill("uno lo specchio gli");
+  await page.getByRole("button", { name: "Check answer" }).click();
+  await page.getByRole("status").filter({ hasText: "Correct" }).waitFor({ state: "visible" });
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("heading", { name: "Session complete" }).waitFor({ state: "visible" });
+  await page.getByRole("checkbox", { name: /^Words/ }).uncheck();
   await page.getByRole("heading", { name: "specchio" }).waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: "Answer" }).fill("lo gli uno");
+  await page.getByRole("textbox", { name: "Answer" }).fill("gli uno lo");
   await page.getByRole("button", { name: "Check answer" }).click();
   await page.getByRole("status").filter({ hasText: "Correct" }).waitFor({ state: "visible" });
 
   assert.deepEqual(pageErrors, [], `Unexpected page errors: ${pageErrors.map(String).join("\n")}`);
-  console.log("Browser E2E passed: stale inventory replacement, noun prompt metadata, word-mode checking, and the article drill.");
+  console.log("Browser E2E passed: stale inventory replacement, noun prompt metadata, word-mode checking, words with articles, and articles alone.");
 } catch (error) {
   await mkdir("test-results", { recursive: true });
   if (page) {

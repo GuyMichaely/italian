@@ -31,6 +31,7 @@ import {
   type ExtensionImportResult,
 } from "./extensionImport";
 import {
+  buildStudyItems,
   shuffled,
   withEnglishPromptFirst,
   type StudyItem,
@@ -40,12 +41,9 @@ import {
   cardsInScope,
   readStudySetup,
   writeStudySetup,
-  type PromptLanguage,
   type StudySetup,
 } from "./study/setup";
-import { articleDrillPool, drawArticleCard } from "./study/articleDrill";
 import { cloneStudyPreferences, defaultStudyPreferences, prunedStudyPreferences, type StudyPreferences } from "./study/preferences";
-import { promptGender } from "./study/prompts";
 import { StudyView, type StudyScopeOption } from "./views/StudyView";
 import { appendMistakeReviewSet, availableReviewItems, type MistakeReviewSet } from "./study/reviews";
 import { WordsView, type WordsTypeFilter } from "./views/WordsView";
@@ -93,7 +91,6 @@ export default function Home() {
   const [submittedAnswer, setSubmittedAnswer] = useState("");
   const [submittedProblems, setSubmittedProblems] = useState<string[]>([]);
   const [studyPreferences, setStudyPreferences] = useState<StudyPreferences>(() => cloneStudyPreferences(defaultStudyPreferences));
-  const [articleItems, setArticleItems] = useState<StudyItem[]>([]);
   const [directionSeed, setDirectionSeed] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now() >>> 0);
   const [selectedInventoryTags, setSelectedInventoryTags] = useState<string[]>([]);
@@ -110,8 +107,7 @@ export default function Home() {
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
   const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
 
-  const { studyMode, promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
-  const articleMode = studyMode === "articles";
+  const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
   const tags = useMemo(() => Array.from(new Set(cards.flatMap((card) => card.tags))).sort((a, b) => a.localeCompare(b)), [cards]);
   const suggestedMistakeTagName = useMemo(() => {
@@ -125,32 +121,16 @@ export default function Home() {
     ...tags.map((tag) => ({ key: `tag:${tag}`, label: tag, kind: "tag" as const })),
   ], [setNames, tags]);
   const scopedCards = useMemo(() => cardsInScope(cards, setup), [cards, setup]);
-  const allStudyItems = useMemo(() => scopedCards.flatMap((card): StudyItem[] => {
-    const item = (promptLanguage: PromptLanguage): StudyItem => ({
-      key: `${card.id}:${promptLanguage}`,
-      card,
-      mode: "word",
-      promptLanguage,
-      promptGender: promptGender(card, cards, promptLanguage, nounMorphology),
-    });
-    if (promptMode === "english" || promptMode === "italian") return [item(promptMode)];
-    if (oneDirectionPerWord) return [item(Math.abs((card.id * 31) + directionSeed) % 2 === 0 ? "english" : "italian")];
-    return [item("english"), item("italian")];
-  }), [cards, directionSeed, nounMorphology, oneDirectionPerWord, promptMode, scopedCards]);
-  const articlePool = useMemo(() => articleDrillPool(scopedCards, nounMorphology), [nounMorphology, scopedCards]);
+  const allStudyItems = useMemo(() => buildStudyItems(scopedCards, cards, setup, nounMorphology, directionSeed), [cards, directionSeed, nounMorphology, scopedCards, setup]);
   const availableReviewSets = useMemo(() => reviewSets.map((set) => ({ ...set, items: availableReviewItems(set, cards) })), [reviewSets, cards]);
   const activeReviewSet = availableReviewSets.find((set) => set.id === activeReviewSetId);
   const studyItems = useMemo(() => {
-    if (articleMode) return articleItems;
     const randomized = shuffled(activeReviewSet ? activeReviewSet.items : allStudyItems, shuffleSeed);
     return englishFirstWhenBoth && promptMode === "both" && !oneDirectionPerWord
       ? withEnglishPromptFirst(randomized)
       : randomized;
-  }, [allStudyItems, articleItems, articleMode, englishFirstWhenBoth, activeReviewSet, oneDirectionPerWord, promptMode, shuffleSeed]);
-  // The drill always shows its latest draw, so resets of `current` elsewhere never replay an answered prompt.
-  const studyItem = articleMode
-    ? articleItems.at(-1) ?? null
-    : !sessionComplete && studyItems.length && current < studyItems.length ? studyItems[current] : null;
+  }, [allStudyItems, englishFirstWhenBoth, activeReviewSet, oneDirectionPerWord, promptMode, shuffleSeed]);
+  const studyItem = !sessionComplete && studyItems.length && current < studyItems.length ? studyItems[current] : null;
   const typingItalian = Boolean(typeToVerify && (studyItem?.mode === "article" || studyItem?.promptLanguage === "english"));
   const missedItems = useMemo(() => mistakeKeys
     .map((key) => studyItems.find((item) => item.key === key))
@@ -182,13 +162,6 @@ export default function Home() {
       .finally(() => { if (active) setLoadingCards(false); });
     return () => { active = false; };
   }, [storage]);
-
-  // The articles drill has no fixed deck: it starts with one draw and draws again after each answer.
-  useEffect(() => {
-    if (!articleMode || articleItems.length) return;
-    const card = drawArticleCard(articlePool, null);
-    if (card) setArticleItems([articleItem(card, 0)]);
-  });
 
   useEffect(() => {
     function reply(result: ExtensionImportResult) {
@@ -274,10 +247,6 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKey);
   });
 
-  function articleItem(card: Flashcard, index: number): StudyItem {
-    return { key: `${card.id}:article:${index}`, card, mode: "article", promptLanguage: "italian", promptGender: promptGender(card, cards, "italian", nounMorphology) };
-  }
-
   function rate(result: "right" | "wrong" | "skipped") {
     if (!studyItems.length || !studyItem) return;
     setSession((value) => ({ ...value, [result]: value[result] + 1 }));
@@ -303,10 +272,7 @@ export default function Home() {
 
   function advanceStudy(completedMistakeKeys: string[]) {
     if (!studyItem) return;
-    if (articleMode) {
-      const card = drawArticleCard(articlePool, studyItem.card.id);
-      if (card) setArticleItems((items) => [...items, articleItem(card, items.length)]);
-    } else if (current + 1 >= studyItems.length) {
+    if (current + 1 >= studyItems.length) {
       const missed = studyItems.filter((item) => completedMistakeKeys.includes(item.key));
       setReviewSets((sets) => appendMistakeReviewSet(sets, missed, activeReviewSetId));
       setSessionComplete(true);
@@ -343,7 +309,6 @@ export default function Home() {
   }
 
   function resetStudyRound() {
-    setArticleItems([]);
     setShuffleSeed((value) => value + 1);
     setCurrent(0);
     setRevealed(false);
@@ -650,8 +615,8 @@ export default function Home() {
         onApplySetup={applySetup}
         onAnswerMode={applyAnswerMode}
         scopeOptions={studyScopeOptions}
-        total={articleMode ? null : studyItems.length}
-        current={articleMode ? articleItems.length - 1 : current}
+        total={studyItems.length}
+        current={current}
         studyItem={studyItem}
         typing={typingItalian}
         revealed={revealed}

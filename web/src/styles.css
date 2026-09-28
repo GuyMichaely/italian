@@ -64,6 +64,7 @@ textarea { resize: vertical; font-family: var(--mono); font-size: 13px; line-hei
 
 .check-option { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; color: var(--muted); font-size: 14px; }
 .check-option input { margin-top: 2px; }
+.check-option:has(input:disabled) { cursor: default; }
 .check-option strong { display: block; color: var(--text); font-weight: 580; }
 .check-option small { display: block; color: var(--faint); font-size: 12.5px; }
 

@@ -19,16 +19,15 @@ const {
 } = require(path.join(testDist, "cards", "nounMorphology.js"));
 const {
   articleSlots,
-  checkArticleAnswer,
-  checkWordAnswer,
-  parseWordAnswer,
+  checkNounAnswer,
+  parseNounAnswer,
 } = require(path.join(testDist, "study", "nounAnswers.js"));
 const {
   defaultStudyPreferences,
   fullDeclensionReasons,
   normalizeStudyPreferences,
 } = require(path.join(testDist, "study", "preferences.js"));
-const { articleDrillPool, drawArticleCard } = require(path.join(testDist, "study", "articleDrill.js"));
+const { buildStudyItems } = require(path.join(testDist, "study", "order.js"));
 const { articlePromptForms, promptGender } = require(path.join(testDist, "study", "prompts.js"));
 const { analyzeAnswerSyntax } = require(path.join(testDist, "components", "AnswerParsePreview.js"));
 const { consistentInventoryState, parseInventoryState } = require(path.join(testDist, "storage", "inventoryState.js"));
@@ -73,12 +72,16 @@ function nounCard({
   };
 }
 
-function word(card, answer, { morphology = defaultNounMorphology, preferences = defaultStudyPreferences, genderGiven = false } = {}) {
-  return checkWordAnswer(card, answer, { morphology, preferences, genderGiven });
+function word(card, answer, { mode = "word", morphology = defaultNounMorphology, preferences = defaultStudyPreferences, genderGiven = false } = {}) {
+  return checkNounAnswer(card, answer, { mode, morphology, preferences, genderGiven });
 }
 
 function article(card, answer, morphology = defaultNounMorphology) {
-  return checkArticleAnswer(card, answer, morphology);
+  return checkNounAnswer(card, answer, { mode: "article", morphology, preferences: defaultStudyPreferences, genderGiven: false });
+}
+
+function both(card, answer, options = {}) {
+  return word(card, answer, { ...options, mode: "wordWithArticles" });
 }
 
 /* ---------- Morphology ---------- */
@@ -189,7 +192,8 @@ test("one form with a fitting article answers a predictable noun", () => {
   const card = nounCard({ english: "cucumber", rule: rules.oI, base: "cetriol" });
   for (const answer of ["il cetriolo", "i cetrioli", "un cetriolo", "il cetriolo i cetrioli"]) assert.equal(word(card, answer).correct, true, answer);
   assert.equal(word(card, "lo cetriolo").correct, false);
-  assert.equal(word(card, "cetriolo").correct, false);
+  assert.equal(word(card, "il cetriolo un cetriolo i cetrioli").correct, true);
+  assert.equal(word(card, "il un cetriolo").correct, true);
   assert.equal(word(card, "il cetriola").correct, false);
 });
 
@@ -208,6 +212,21 @@ test("an elided article needs a gender marker unless the prompt gives the gender
   assert.equal(word(card, "f l'albero").correct, false);
   assert.equal(word(card, "gli alberi").correct, true);
   assert.equal(word(card, "l'albero", { genderGiven: true }).correct, true);
+});
+
+test("a gender marker can stand in for the article", () => {
+  const card = nounCard({ english: "cucumber", rule: rules.oI, base: "cetriol" });
+  assert.equal(word(card, "m cetriolo").correct, true);
+  assert.equal(word(card, "cetrioli m").correct, true);
+  const bare = word(card, "cetriolo");
+  assert.equal(bare.correct, false);
+  assert.match(bare.problems.join(" "), /nothing shows the gender/);
+  assert.equal(word(card, "f cetriolo").correct, false);
+  assert.equal(word(card, "m lo cetriolo").correct, false);
+
+  const citta = nounCard({ english: "city", rule: rules.identity, base: "città", gender: "feminine" });
+  assert.equal(word(citta, "f città città").correct, true);
+  assert.equal(word(citta, "f città").correct, true);
 });
 
 test("an explicit gender that disagrees with the noun is wrong", () => {
@@ -301,12 +320,18 @@ test("articles come from the editable article table", () => {
 });
 
 test("word answers parse without the card and report incomplete input", () => {
-  assert.equal(parseWordAnswer("il", defaultNounMorphology, keywords).status, "incomplete");
-  assert.equal(parseWordAnswer("m f il libro", defaultNounMorphology, keywords).status, "invalid");
-  assert.equal(parseWordAnswer("il i libro", defaultNounMorphology, keywords).status, "invalid");
-  const parsed = parseWordAnswer("m l'albero", defaultNounMorphology, keywords);
+  const parse = (answer, mode = "word") => parseNounAnswer(answer, defaultNounMorphology, keywords, mode);
+  assert.equal(parse("il").status, "incomplete");
+  assert.equal(parse("il un").status, "incomplete");
+  assert.equal(parse("m f il libro").status, "invalid");
+  assert.equal(parse("libro libri libri").status, "invalid");
+  assert.equal(parse("il lo la i").status, "invalid");
+  assert.deepEqual(parse("il i libro").entries, [{ article: "il", noun: null }, { article: "i", noun: "libro" }]);
+  const parsed = parse("m l'albero");
   assert.equal(parsed.status, "complete");
-  assert.deepEqual(parsed.phrases, [{ article: "l'", noun: "albero" }]);
+  assert.deepEqual(parsed.entries, [{ article: "l'", noun: "albero" }]);
+  assert.equal(parse("il i un", "article").status, "complete");
+  assert.equal(parse("libro il", "article").status, "invalid");
 
   const card = nounCard({ english: "tree", rule: rules.oI, base: "alber" });
   const preview = analyzeAnswerSyntax({ card, mode: "word" }, "l'albero", keywords, defaultNounMorphology);
@@ -316,10 +341,15 @@ test("word answers parse without the card and report incomplete input", () => {
 
 /* ---------- Article mode ---------- */
 
-test("article answers list the articles in order, with optional nouns", () => {
+test("article answers take the articles in any order, with optional nouns", () => {
   const specchio = nounCard({ english: "mirror", rule: rules.chioChi, base: "spec" });
   assert.deepEqual(articleSlots(specchio, defaultNounMorphology).map((slot) => slot.article), ["lo", "gli", "uno"]);
   assert.equal(article(specchio, "lo gli uno").correct, true);
+  assert.equal(article(specchio, "uno lo gli").correct, true);
+  assert.equal(article(specchio, "gli specchi uno lo specchio").correct, true);
+  assert.equal(article(specchio, "lo lo gli uno").correct, false);
+  assert.equal(article(specchio, "lo specchi gli uno").correct, false);
+  assert.match(article(specchio, "uno lo").problems.join(" "), /Missing the definite plural article/);
   assert.equal(article(specchio, "lo specchio gli specchi uno specchio").correct, true);
   assert.equal(article(specchio, "lo gli").correct, false);
   assert.equal(article(specchio, "il i un").correct, false);
@@ -327,6 +357,7 @@ test("article answers list the articles in order, with optional nouns", () => {
 
   const amica = nounCard({ english: "friend", rule: rules.caChe, base: "ami", gender: "feminine" });
   assert.equal(article(amica, "l' le un'").correct, true);
+  assert.equal(article(amica, "un' le l'").correct, true);
   assert.equal(article(amica, "l'amica le amiche un'amica").correct, true);
   assert.equal(article(amica, "l' gli un").correct, false);
 });
@@ -341,26 +372,45 @@ test("article answers only ask for the articles a noun takes", () => {
   assert.deepEqual(articlePromptForms(dio, defaultNounMorphology), ["dio", "dei"]);
 });
 
-test("the article drill splits a single-group class by start pattern", () => {
-  const cards = [
-    nounCard({ english: "mirror", rule: rules.chioChi, base: "spec" }),
-    nounCard({ english: "backpack", rule: rules.oI, base: "zain" }),
-    nounCard({ english: "gnome", rule: rules.oI, base: "gnom" }),
-    nounCard({ english: "book", rule: rules.oI, base: "libr" }),
-    nounCard({ english: "house", rule: rules.aE, base: "cas", gender: "feminine" }),
-    nounCard({ english: "aunt", rule: rules.aE, base: "zi", gender: "feminine" }),
-    nounCard({ english: "Venice", rule: rules.singularBase, base: "Venezia", gender: "feminine", articleProfile: nounArticleProfiles.none }),
-  ];
-  const pool = articleDrillPool(cards, defaultNounMorphology);
-  // lo/gli/uno split into sC, z, gn; il/i/un whole; la/le/una spans two groups so stays whole; Venice takes no articles.
-  const shape = pool.map((buckets) => buckets.map((bucket) => bucket.map((card) => card.english).sort()));
-  assert.equal(pool.length, 3);
-  assert.ok(shape.some((buckets) => buckets.length === 3));
-  assert.ok(shape.some((buckets) => buckets.length === 1 && buckets[0].join() === "aunt,house"));
+/* ---------- Words and articles together ---------- */
 
-  const drawn = drawArticleCard(pool, cards[0].id, () => 0);
-  assert.ok(drawn);
-  assert.notEqual(drawn.id, cards[0].id);
+test("words with articles need every article plus the forms word mode asks for", () => {
+  const cetriolo = nounCard({ english: "cucumber", rule: rules.oI, base: "cetriol" });
+  assert.equal(both(cetriolo, "il cetriolo i un").correct, true);
+  assert.equal(both(cetriolo, "un i il cetriolo").correct, true);
+  assert.equal(both(cetriolo, "il un i").correct, false);
+  assert.match(both(cetriolo, "il cetriolo i").problems.join(" "), /Missing the indefinite article/);
+  assert.equal(both(cetriolo, "m il cetriolo i un").correct, true);
+  assert.equal(both(cetriolo, "f il cetriolo i un").correct, false);
+
+  // Every article shows the gender and which forms exist, so no markers are needed.
+  const albero = nounCard({ english: "tree", rule: rules.oI, base: "alber" });
+  assert.equal(both(albero, "l'albero gli un").correct, true);
+  const nozze = nounCard({ english: "wedding", rule: rules.pluralBase, base: "nozze", gender: "feminine", articleProfile: nounArticleProfiles.definitePluralOnly });
+  assert.equal(both(nozze, "le nozze").correct, true);
+  assert.equal(both(nozze, "s le nozze").correct, false);
+
+  const specchio = nounCard({ english: "mirror", rule: rules.chioChi, base: "spec" });
+  const drilling = { ...defaultStudyPreferences, fullDeclensionRules: [rules.chioChi] };
+  assert.equal(both(specchio, "lo specchio gli uno", { preferences: drilling }).correct, false);
+  assert.equal(both(specchio, "lo specchio gli specchi uno", { preferences: drilling }).correct, true);
+});
+
+test("study items follow the chosen modes", () => {
+  const libro = nounCard({ english: "book", rule: rules.oI, base: "libr" });
+  const venezia = nounCard({ english: "Venice", rule: rules.singularBase, base: "Venezia", gender: "feminine", articleProfile: nounArticleProfiles.none });
+  const verb = { id: 99, type: "verb", english: "to speak", italian: "parlare", setName: null, tags: [], details: {} };
+  const cards = [libro, venezia, verb];
+  const setup = { studyWords: true, studyArticles: false, scopeMode: "all", selectedScopes: [], promptMode: "both", typeToVerify: true, oneDirectionPerWord: false, englishFirstWhenBoth: false };
+  const modes = (patch) => buildStudyItems(cards, cards, { ...setup, ...patch }, defaultNounMorphology, 0).map((item) => `${item.card.english}:${item.promptLanguage}:${item.mode}`);
+
+  assert.equal(modes({}).every((key) => key.endsWith(":word")), true);
+  assert.deepEqual(modes({ studyWords: false, studyArticles: true }), ["book:italian:article"]);
+  assert.deepEqual(modes({ studyArticles: true }), [
+    "book:english:wordWithArticles", "book:italian:word",
+    "Venice:english:word", "Venice:italian:word",
+    "to speak:english:word", "to speak:italian:word",
+  ]);
 });
 
 /* ---------- Prompts and preferences ---------- */
