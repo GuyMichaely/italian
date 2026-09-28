@@ -194,12 +194,7 @@ button.chip.selected { background: var(--accent-soft); border-color: var(--accen
 .setup-summary-text { display: flex; flex-wrap: wrap; gap: 2px 0; min-width: 0; }
 .setup-summary-text span:not(:last-child)::after { content: "·"; margin: 0 8px; color: var(--faint); }
 .progress-row { display: flex; align-items: center; gap: 12px; }
-.progress-track { flex: 1; display: flex; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
-.progress-track span { height: 100%; transition: width .25s ease; }
-.progress-right { background: var(--right); }
-.progress-wrong { background: var(--wrong); }
-.progress-skipped { background: var(--faint); }
-.progress-count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.progress-count { margin-right: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .progress-tally { display: flex; gap: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .progress-tally b { font-weight: 650; }
 .right { color: var(--right); }
@@ -208,7 +203,6 @@ button.chip.selected { background: var(--accent-soft); border-color: var(--accen
 .progress-tally b.wrong::before { content: "✗ "; }
 
 .study-card { position: relative; display: grid; gap: 18px; padding: 22px 26px 26px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, var(--surface-2), var(--surface)); box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 12px 40px rgba(0,0,0,.28); transition: border-color .2s; }
-.study-card::before { content: ""; position: absolute; left: 26px; right: 26px; top: 0; height: 2px; border-radius: 0 0 2px 2px; background: var(--pos); opacity: .8; }
 .study-card.result-correct { border-color: rgba(95,207,142,.55); }
 .study-card.result-wrong { border-color: rgba(239,112,112,.55); }
 .study-card-top { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12.5px; }
@@ -313,6 +307,14 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .missed-list .italian { font-size: 18px; }
 .missed-list .english { color: var(--muted); }
 .completion-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.review-round-label { margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+.review-sets { display: grid; gap: 8px; width: min(440px, 100%); text-align: left; }
+.review-sets h3 { font-size: 16px; }
+.review-sets p, .review-sets small { color: var(--muted); font-size: 12.5px; }
+.review-sets ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.review-sets li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.review-sets li > div { display: grid; gap: 3px; }
+.review-sets button { flex-shrink: 0; }
 .mistake-tag-creator { display: flex; align-items: flex-end; gap: 8px; width: min(440px, 100%); padding-top: 16px; border-top: 1px solid var(--line); text-align: left; }
 .mistake-tag-creator .field { flex: 1; }
 
@@ -552,7 +554,6 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
   .page-header h1 { font-size: 28px; }
 
   .study-card { padding: 18px 16px 20px; border-radius: 16px; }
-  .study-card::before { left: 16px; right: 16px; }
   .flip-surface { min-height: 48vh; }
   .result-compare { grid-template-columns: minmax(0, 1fr); }
   .study-actions:not(.typing) { position: sticky; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 4; padding: 10px 0 4px; margin-top: 8px; background: linear-gradient(transparent, var(--bg) 30%); }

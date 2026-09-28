@@ -63,6 +63,8 @@ The shared card base does not require `italian`. Noun cards omit that property b
 
 `App.tsx` owns cross-cutting application state, including the current card collection and active noun morphology. Morphology is passed explicitly to study and editor code rather than stored in a second runtime singleton.
 
+Each completed study round with wrong answers adds a numbered mistake review set. Earlier sets remain replayable, including after returning to the full session; replaying a set can produce another set without replacing its parent. Sets preserve the failed prompt directions and resolve current card data on replay. This history lives in app memory and clears when the session setup changes or the page reloads. Switching between typing and flipping preserves it.
+
 English-to-Italian typed verification always uses the prompted card's known part of speech. There is no part-of-speech answer prefix. The English prompt displays the part of speech directly. The parser preview does not repeat it.
 
 ## Noun morphology and syntax

@@ -5,6 +5,7 @@ import { typeLabels } from "../cardTypes";
 import { CardAnswer, ItalianVerificationForm, NounAnswerDiagnostic, italianHeadword } from "../components/CardAnswer";
 import { Icon } from "../components/Icons";
 import type { StudyItem } from "../study/logic";
+import type { MistakeReviewSet } from "../study/reviews";
 import {
   scopeKeyLabel,
   studyItemCount,
@@ -151,18 +152,12 @@ function StudySetupPanel({
 }
 
 function ProgressHeader({ current, total, session, onAdjust, onRestart, setup }: { current: number; total: number; session: SessionCounts; onAdjust: () => void; onRestart: () => void; setup: StudySetup }) {
-  const done = session.right + session.wrong + session.skipped;
   return <div className="study-header">
     <button type="button" className="setup-summary narrow-only" onClick={onAdjust} aria-label="Adjust study setup">
       <Icon name="sliders" size={16} />
       <span className="setup-summary-text">{setupSummary(setup).map((part, index) => <span key={index}>{part}</span>)}</span>
     </button>
     <div className="progress-row">
-      <div className="progress-track" role="progressbar" aria-label="Session progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
-        <span className="progress-right" style={{ width: `${(session.right / total) * 100}%` }} />
-        <span className="progress-wrong" style={{ width: `${(session.wrong / total) * 100}%` }} />
-        <span className="progress-skipped" style={{ width: `${(session.skipped / total) * 100}%` }} />
-      </div>
       <span className="progress-count">{Math.min(current + 1, total)} / {total}</span>
       <span className="progress-tally" aria-label={`${session.right} right, ${session.wrong} wrong`}><b className="right">{session.right}</b><b className="wrong">{session.wrong}</b></span>
       <button type="button" className="icon-button" onClick={onRestart} aria-label="Reshuffle and restart" title="Reshuffle and restart"><Icon name="restart" size={16} /></button>
@@ -202,11 +197,12 @@ export type StudyViewProps = {
   onRate: (result: "right" | "wrong" | "skipped") => void;
   session: SessionCounts;
   sessionComplete: boolean;
-  reviewingMistakes: boolean;
+  activeReviewSetId: number | null;
+  reviewSets: MistakeReviewSet[];
   missedItems: StudyItem[];
   onRestart: () => void;
   onReturnToOriginal: () => void;
-  onStudyMistakes: () => void;
+  onStudyMistakes: (id: number) => void;
   mistakeTagName: string;
   onMistakeTagName: (value: string) => void;
   onCreateMistakeTag: () => void;
@@ -240,28 +236,33 @@ export function StudyView(props: StudyViewProps) {
     </aside>
     <div className="study-view">
     {props.warning && <p className="sync-warning" role="status">{props.warning}</p>}
+    {props.activeReviewSetId !== null && !props.sessionComplete && <p className="review-round-label">Review set {props.activeReviewSetId}</p>}
     {total > 0 && !props.sessionComplete && <ProgressHeader current={props.current} total={total} session={props.session} setup={props.setup} onAdjust={() => props.onSetupOpen(!props.setupOpen)} onRestart={props.onRestart} />}
 
     {props.sessionComplete ? (
       <div className="session-complete">
         {scored > 0 && <div className="score-ring" style={{ ["--score" as string]: `${(props.session.right / scored) * 360}deg` }}><span>{Math.round((props.session.right / scored) * 100)}%</span></div>}
-        <h2>{props.reviewingMistakes ? "Mistake review complete" : "Session complete"}</h2>
+        <h2>{props.activeReviewSetId !== null ? `Review set ${props.activeReviewSetId} complete` : "Session complete"}</h2>
         <p className="score-breakdown"><b className="right">{props.session.right} right</b> · <b className="wrong">{props.session.wrong} wrong</b> · {props.session.skipped} skipped</p>
         {props.missedItems.length > 0 && <div className="missed-list">
-          <h3>To review</h3>
+          <h3>Mistakes this round</h3>
           <ul>{props.missedItems.map((item) => <li key={item.key}><span className="italian" lang="it">{italianHeadword(item.card, morphology)}</span><span className="english">{item.card.english}</span></li>)}</ul>
         </div>}
+        {props.reviewSets.length > 0 && <section className="review-sets" aria-label="Mistake review sets">
+          <h3>Review sets</h3>
+          <p>Each round’s mistakes stay available until you change the session setup or reload.</p>
+          <ul>{props.reviewSets.map((set, index) => <li key={set.id}>
+            <div><strong>Set {set.id} · {set.items.length} {set.items.length === 1 ? "card" : "cards"}</strong><small>{set.sourceSetId === null ? "From the full session" : `From review set ${set.sourceSetId}`}</small></div>
+            <button type="button" className={`${index === props.reviewSets.length - 1 ? "primary-button" : "neutral-button"} small`} disabled={!set.items.length} aria-label={`Review set ${set.id}, ${set.items.length} ${set.items.length === 1 ? "card" : "cards"}`} onClick={() => props.onStudyMistakes(set.id)}>Review{set.id === props.activeReviewSetId ? " again" : ""}</button>
+          </li>)}</ul>
+        </section>}
         <div className="completion-actions">
-          {props.reviewingMistakes ? <>
-            <button className="primary-button" onClick={props.onRestart}>Review these again</button>
-            <button className="neutral-button" onClick={props.onReturnToOriginal}>Back to full session</button>
-          </> : <>
-            {props.missedItems.length > 0 && <button className="primary-button" onClick={props.onStudyMistakes}>Review {props.missedItems.length} {props.missedItems.length === 1 ? "mistake" : "mistakes"}</button>}
-            <button className={props.missedItems.length ? "neutral-button" : "primary-button"} onClick={props.onRestart}>Study again</button>
-            <button className="text-button narrow-only" onClick={() => props.onSetupOpen(true)}>Change setup</button>
-          </>}
+          {props.activeReviewSetId !== null
+            ? <button className="neutral-button" onClick={props.onReturnToOriginal}>Back to full session</button>
+            : <button className={props.reviewSets.length ? "neutral-button" : "primary-button"} onClick={props.onRestart}>Study again</button>}
+          <button className="text-button narrow-only" onClick={() => props.onSetupOpen(true)}>Change setup</button>
         </div>
-        {!props.reviewingMistakes && props.missedItems.length > 0 && <div className="mistake-tag-creator">
+        {props.missedItems.length > 0 && <div className="mistake-tag-creator">
           {props.createdMistakeTagName
             ? <p className="success-message" role="status">Tagged your mistakes <strong>#{props.createdMistakeTagName}</strong></p>
             : <>

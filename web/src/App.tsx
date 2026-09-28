@@ -47,6 +47,7 @@ import {
   type StudySetup,
 } from "./study/setup";
 import { StudyView, type StudyScopeOption } from "./views/StudyView";
+import { appendMistakeReviewSet, availableReviewItems, type MistakeReviewSet } from "./study/reviews";
 import { WordsView, type WordsTypeFilter } from "./views/WordsView";
 import { GrammarView } from "./views/GrammarView";
 import { SettingsView } from "./views/SettingsView";
@@ -101,7 +102,8 @@ export default function Home() {
   const [session, setSession] = useState({ right: 0, wrong: 0, skipped: 0 });
   const [sessionComplete, setSessionComplete] = useState(false);
   const [mistakeKeys, setMistakeKeys] = useState<string[]>([]);
-  const [mistakeOnlyKeys, setMistakeOnlyKeys] = useState<string[] | null>(null);
+  const [reviewSets, setReviewSets] = useState<MistakeReviewSet[]>([]);
+  const [activeReviewSetId, setActiveReviewSetId] = useState<number | null>(null);
   const [mistakeTagName, setMistakeTagName] = useState("");
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
   const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
@@ -133,14 +135,14 @@ export default function Home() {
       { key: `${card.id}:italian`, card, promptLanguage: "italian" },
     ];
   }), [directionSeed, oneDirectionPerWord, promptMode, scopedCards]);
+  const availableReviewSets = useMemo(() => reviewSets.map((set) => ({ ...set, items: availableReviewItems(set, cards) })), [reviewSets, cards]);
+  const activeReviewSet = availableReviewSets.find((set) => set.id === activeReviewSetId);
   const studyItems = useMemo(() => {
-    const randomized = shuffled(mistakeOnlyKeys
-      ? mistakeOnlyKeys.map((key) => allStudyItems.find((item) => item.key === key)).filter((item): item is StudyItem => Boolean(item))
-      : allStudyItems, shuffleSeed);
+    const randomized = shuffled(activeReviewSet ? activeReviewSet.items : allStudyItems, shuffleSeed);
     return englishFirstWhenBoth && promptMode === "both" && !oneDirectionPerWord
       ? withEnglishPromptFirst(randomized)
       : randomized;
-  }, [allStudyItems, englishFirstWhenBoth, mistakeOnlyKeys, oneDirectionPerWord, promptMode, shuffleSeed]);
+  }, [allStudyItems, englishFirstWhenBoth, activeReviewSet, oneDirectionPerWord, promptMode, shuffleSeed]);
   const studyItem = !sessionComplete && studyItems.length && current < studyItems.length ? studyItems[current] : null;
   const typingItalian = Boolean(typeToVerify && studyItem?.promptLanguage === "english");
   const missedItems = useMemo(() => mistakeKeys
@@ -264,8 +266,9 @@ export default function Home() {
   function rate(result: "right" | "wrong" | "skipped") {
     if (!studyItems.length || !studyItem) return;
     setSession((value) => ({ ...value, [result]: value[result] + 1 }));
-    if (result === "wrong") setMistakeKeys((items) => items.includes(studyItem.key) ? items : [...items, studyItem.key]);
-    advanceCard();
+    const nextMistakeKeys = result === "wrong" && !mistakeKeys.includes(studyItem.key) ? [...mistakeKeys, studyItem.key] : mistakeKeys;
+    setMistakeKeys(nextMistakeKeys);
+    advanceStudy(nextMistakeKeys);
   }
 
   function verifyItalian(correct: boolean, answer: string) {
@@ -279,7 +282,16 @@ export default function Home() {
   }
 
   function advanceCard() {
-    if (current + 1 >= studyItems.length) setSessionComplete(true);
+    advanceStudy(mistakeKeys);
+  }
+
+  function advanceStudy(completedMistakeKeys: string[]) {
+    if (!studyItem) return;
+    if (current + 1 >= studyItems.length) {
+      const missed = studyItems.filter((item) => completedMistakeKeys.includes(item.key));
+      setReviewSets((sets) => appendMistakeReviewSet(sets, missed, activeReviewSetId));
+      setSessionComplete(true);
+    }
     else setCurrent((value) => value + 1);
     setRevealed(false);
     setVerificationResult(null);
@@ -304,6 +316,12 @@ export default function Home() {
   }
 
   function resetStudyProgress() {
+    setReviewSets([]);
+    setActiveReviewSetId(null);
+    resetStudyRound();
+  }
+
+  function resetStudyRound() {
     setShuffleSeed((value) => value + 1);
     setCurrent(0);
     setRevealed(false);
@@ -311,7 +329,6 @@ export default function Home() {
     setSubmittedAnswer("");
     setSessionComplete(false);
     setMistakeKeys([]);
-    setMistakeOnlyKeys(null);
     setMistakeTagName("");
     setCreatedMistakeTagName("");
     setSession({ right: 0, wrong: 0, skipped: 0 });
@@ -330,38 +347,20 @@ export default function Home() {
   }
 
   function restartCurrentStudy() {
-    if (!mistakeOnlyKeys) setDirectionSeed((value) => value + 1);
-    setShuffleSeed((value) => value + 1);
-    setCurrent(0);
-    setRevealed(false);
-    setVerificationResult(null);
-    setSubmittedAnswer("");
-    setSessionComplete(false);
-    setMistakeKeys([]);
-    setMistakeTagName("");
-    setCreatedMistakeTagName("");
-    setSession({ right: 0, wrong: 0, skipped: 0 });
+    if (activeReviewSetId === null) setDirectionSeed((value) => value + 1);
+    resetStudyRound();
   }
 
   function returnToOriginalStudy() {
-    setMistakeOnlyKeys(null);
+    setActiveReviewSetId(null);
     setDirectionSeed((value) => value + 1);
-    restartCurrentStudy();
+    resetStudyRound();
   }
 
-  function studyMistakes() {
-    if (!mistakeKeys.length) return;
-    setMistakeOnlyKeys([...mistakeKeys]);
-    setShuffleSeed((value) => value + 1);
-    setCurrent(0);
-    setRevealed(false);
-    setVerificationResult(null);
-    setSubmittedAnswer("");
-    setSessionComplete(false);
-    setMistakeKeys([]);
-    setMistakeTagName("");
-    setCreatedMistakeTagName("");
-    setSession({ right: 0, wrong: 0, skipped: 0 });
+  function studyMistakes(id: number) {
+    if (!availableReviewSets.find((set) => set.id === id)?.items.length) return;
+    setActiveReviewSetId(id);
+    resetStudyRound();
   }
 
   /** Commits a complete card list through one inventory replacement, restoring the previous list on failure. */
@@ -598,7 +597,8 @@ export default function Home() {
         onRate={rate}
         session={session}
         sessionComplete={sessionComplete}
-        reviewingMistakes={Boolean(mistakeOnlyKeys)}
+        activeReviewSetId={activeReviewSetId}
+        reviewSets={availableReviewSets}
         missedItems={missedItems}
         onRestart={restartCurrentStudy}
         onReturnToOriginal={returnToOriginalStudy}
