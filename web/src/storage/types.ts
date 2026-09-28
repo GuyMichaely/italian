@@ -1,9 +1,11 @@
 import type { Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
+import type { StudyPreferences } from "../study/preferences";
 
 export type InventoryState = {
   cards: Flashcard[];
   nounMorphology: NounMorphology;
+  studyPreferences: StudyPreferences;
 };
 
 export interface CardStorage {

@@ -67,14 +67,14 @@ export function StorageSettingsPanel({
     setTransferBusy(true);
     try {
       const inventory = await currentInventory();
-      const blob = new Blob([serializeInventory(inventory.cards, inventory.nounMorphology)], { type: "application/json" });
+      const blob = new Blob([serializeInventory(inventory)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `parola-inventory-${new Date().toISOString().slice(0, 10)}.json`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setTransferMessage(`Exported ${inventory.cards.length} ${inventory.cards.length === 1 ? "card" : "cards"} with noun morphology.`);
+      setTransferMessage(`Exported ${inventory.cards.length} ${inventory.cards.length === 1 ? "card" : "cards"} with noun morphology and study preferences.`);
     } catch (caught) {
       setTransferError(caught instanceof Error ? caught.message : "Inventory could not be exported.");
     } finally {
@@ -89,7 +89,7 @@ export function StorageSettingsPanel({
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is not available in this browser context.");
       const inventory = await currentInventory();
-      await navigator.clipboard.writeText(serializeInventory(inventory.cards, inventory.nounMorphology));
+      await navigator.clipboard.writeText(serializeInventory(inventory));
       setTransferMessage(`Copied ${inventory.cards.length} ${inventory.cards.length === 1 ? "card" : "cards"} with noun morphology to the clipboard.`);
     } catch (caught) {
       setTransferError(caught instanceof Error ? caught.message : "Inventory could not be copied.");
@@ -100,14 +100,14 @@ export function StorageSettingsPanel({
 
   async function replaceWithImportedInventory(imported: ReturnType<typeof parseInventory>, sourceDescription: string) {
     const confirmed = window.confirm(
-      `Replace the current inventory with the ${imported.cards.length}-card inventory ${sourceDescription}?\n\nThis replaces cards and noun morphology and will sync remotely when sync is configured.`,
+      `Replace the current inventory with the ${imported.cards.length}-card inventory ${sourceDescription}?\n\nThis replaces cards, noun morphology, and study preferences and will sync remotely when sync is configured.`,
     );
     if (!confirmed) {
       setTransferMessage("Import canceled; the current inventory was not changed.");
       return;
     }
     const saved = await replaceInventory(storage, imported);
-    setTransferMessage(`Imported ${saved.cards.length} ${saved.cards.length === 1 ? "card" : "cards"} with noun morphology. Reloading Parola…`);
+    setTransferMessage(`Imported ${saved.cards.length} ${saved.cards.length === 1 ? "card" : "cards"} with noun morphology and study preferences. Reloading Parola…`);
     window.location.reload();
   }
 
@@ -207,7 +207,7 @@ export function StorageSettingsPanel({
     <section className="settings-section" aria-labelledby="backup-heading">
       <div className="settings-section-heading">
         <h2 id="backup-heading">Backup &amp; restore</h2>
-        <p>Export your words and grammar rules as JSON, or replace everything from a backup.</p>
+        <p>Export your words, grammar rules, and study preferences as JSON, or replace everything from a backup.</p>
       </div>
       <div className="button-row start">
         <button type="button" className="neutral-button" onClick={() => void exportInventory()} disabled={saving || transferBusy}>Download backup</button>
@@ -228,7 +228,7 @@ export function StorageSettingsPanel({
           <textarea
             value={importText}
             onChange={(event) => setImportText(event.target.value)}
-            placeholder={'{\n  "cards": [...],\n  "nounMorphology": { ... }\n}'}
+            placeholder={'{\n  "cards": [...],\n  "nounMorphology": { ... },\n  "studyPreferences": { ... }\n}'}
             rows={6}
             disabled={saving || transferBusy}
             spellCheck={false}

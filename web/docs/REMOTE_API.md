@@ -28,14 +28,14 @@ A synchronization snapshot contains the complete inventory plus its last-change 
       "setName": null,
       "tags": [],
       "details": {
-        "rule": "-o → -i",
-        "base": "ombrell",
+        "declension": { "kind": "rule", "rule": "-o → -i", "base": "ombrell" },
         "gender": "masculine",
         "articleProfile": {
           "definiteSingular": true,
           "definitePlural": true,
           "indefiniteSingular": true
-        }
+        },
+        "articleGroups": { "singular": null, "plural": null }
       }
     }
   ],
@@ -43,42 +43,39 @@ A synchronization snapshot contains the complete inventory plus its last-change 
     "declensionRules": [
       {
         "name": "-o → -i",
+        "gender": null,
         "forms": {
           "singular": { "suffix": "o" },
           "plural": { "suffix": "i" }
         }
       }
     ],
-    "inferenceSets": [
+    "articleLetters": { "vowels": ["a", "e", "i", "o", "u"], "consonants": ["b", "c", "d", "…"] },
+    "articleGroups": [
       {
-        "name": "Learned shorthand",
-        "declensionRules": ["-o → -i"]
-      }
-    ],
-    "syntaxRules": [
-      {
-        "name": "Definite singular article + noun",
-        "markers": [{ "kind": "gender", "required": false }],
-        "markerOrder": "any",
-        "fields": [
-          { "kind": "article", "definiteness": "definite", "number": "singular" },
-          { "kind": "noun", "number": "singular" }
-        ],
-        "inferenceSet": "Learned shorthand"
+        "name": "consonant",
+        "startsWith": ["C"],
+        "masculine": { "definiteSingular": "il", "definitePlural": "i", "indefiniteSingular": "un" },
+        "feminine": { "definiteSingular": "la", "definitePlural": "le", "indefiniteSingular": "una" }
       }
     ]
+  },
+  "studyPreferences": {
+    "answerKeywords": { "masculine": "m", "feminine": "f", "singularOnly": "s", "pluralOnly": "p" },
+    "fullDeclensionRules": [],
+    "fullDeclensionCards": [123]
   },
   "updatedAt": "2026-08-20T03:00:00.000Z"
 }
 ```
 
-Noun cards do not contain a top-level `italian` property. Their Italian surface forms are generated from `details.rule`, `details.base`, and the accompanying noun morphology.
+Noun cards do not contain a top-level `italian` property. Their Italian surface forms are generated from `details.declension` and the accompanying noun morphology.
 
 Noun `articleProfile` has three named Boolean properties: `definiteSingular`, `definitePlural`, and `indefiniteSingular`. The accepted combinations are all three `true`, definite singular only, definite plural only, or all three `false`.
 
-Declension-rule names and inference-set names are references. They must be unique within their collections. Noun number availability is derived from the referenced rule's `forms`: both entries means both numbers; only one entry means singular-only or plural-only. Article availability is independent from that number availability.
+Declension-rule names and article-group names are references and must be unique within their collections. Noun number availability is derived from the referenced rule's `forms`: both entries means both numbers; only one entry means singular-only or plural-only. Article availability is independent from that number availability. A rule's `gender` is `"masculine"`, `"feminine"`, or `null`; a noun cannot use a rule limited to the other gender.
 
-Syntax rules do not store article or number modes. Article constraints are derived from article fields; a syntax with no article field represents articleless nouns and must require explicit gender plus a singular-only or plural-only marker.
+`studyPreferences` holds the answer keywords (four distinct single tokens), the declension-rule names being drilled, and the noun card ids that always need both forms in word mode. Every name and id must exist; deleting a card through `DELETE /cards` removes its id.
 
 `updatedAt` must be a valid timestamp. Parola uses it for snapshot-level last-write-wins synchronization. It does not merge individual cards or morphology definitions.
 
@@ -109,6 +106,7 @@ If the server state is newer, return HTTP `409` with the current server snapshot
   "state": {
     "cards": [ ... ],
     "nounMorphology": { ... },
+    "studyPreferences": { ... },
     "updatedAt": "2026-08-20T03:05:00.000Z"
   }
 }
@@ -116,9 +114,9 @@ If the server state is newer, return HTTP `409` with the current server snapshot
 
 If timestamps are equal but snapshots differ, also return `409` rather than arbitrarily overwriting one copy.
 
-The service should reject a noun card whose `details.rule` does not match a declension-rule name in the accompanying `nounMorphology.declensionRules` collection. It should also reject an article capability that requires a noun form the referenced rule does not provide.
+The service should reject a noun card whose `details.declension.rule` does not match a declension-rule name in the accompanying `nounMorphology.declensionRules` collection. It should also reject an article capability that requires a noun form the referenced rule does not provide.
 
-The canonical schema is strict. Stored noun `italian`, retired noun `articleMode`, string article-profile encodings, and syntax `articleMode`/`numberMode` properties are not accepted.
+The canonical schema is strict. Stored noun `italian`, retired noun `articleMode`, string article-profile encodings, and the retired `inferenceSets`/`syntaxRules` morphology collections are not accepted.
 
 ## Errors
 

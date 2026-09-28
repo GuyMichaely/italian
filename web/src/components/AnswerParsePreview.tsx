@@ -1,11 +1,11 @@
-import type { Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import {
   standardAdjectivePattern,
   whitespaceParts,
+  type StudyItem,
 } from "../study/logic";
-import { analyzeNounInput, choosePreviewAttempt } from "../study/nounSyntax";
-import type { AnswerKeywords } from "../study/setup";
+import { parseArticleAnswer, parseWordAnswer } from "../study/nounAnswers";
+import type { AnswerKeywords } from "../study/preferences";
 
 type ParsePiece = {
   label: string;
@@ -20,7 +20,6 @@ export type AnswerSyntaxAnalysis = {
   status: AnswerSyntaxStatus;
   checkable: boolean;
   missing: string[];
-  candidateNames: string[];
   syntaxName: string | null;
 };
 
@@ -35,7 +34,9 @@ function labeledPieces(values: string[], labels: string[]) {
   }));
 }
 
-export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords: AnswerKeywords, morphology: NounMorphology): AnswerSyntaxAnalysis {
+/** How the typed answer reads so far, without revealing anything about the prompted card. */
+export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawValue: string, keywords: AnswerKeywords, morphology: NounMorphology): AnswerSyntaxAnalysis {
+  const { card } = item;
   const trimmed = rawValue.normalize("NFC").trim();
   if (!trimmed) {
     return {
@@ -44,7 +45,6 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
       status: "empty",
       checkable: false,
       missing: [],
-      candidateNames: [],
       syntaxName: null,
     };
   }
@@ -52,41 +52,15 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
   const unclosedQuote = (trimmed.match(/"/g)?.length ?? 0) % 2 === 1;
 
   if (card.type === "noun") {
-    const attempts = analyzeNounInput(trimmed, morphology, keywords);
-    const selected = choosePreviewAttempt(attempts);
-    const hasCompleteSyntax = attempts.some((attempt) => attempt.status === "complete");
-    const candidateNames = selected
-      ? Array.from(new Set(selected.candidates.map((candidate) => candidate.declensionRule)))
-      : [];
-
-    if (!selected) {
-      return {
-        pieces: [],
-        message: "No noun syntax recognizes this input.",
-        status: "invalid",
-        checkable: false,
-        missing: [],
-        candidateNames,
-        syntaxName: null,
-      };
-    }
-
-    let status: AnswerSyntaxStatus = selected.status === "partial" ? "partial" : "complete";
-    let message = selected.status === "complete" ? "Noun syntax is complete." : selected.reason;
-    let missing = selected.missing;
-    if (unclosedQuote) {
-      status = "partial";
-      missing = [...missing, "Closing quote"];
-      message = "The quoted field is still open.";
-    }
+    const parsed = item.mode === "article" ? parseArticleAnswer(trimmed, morphology) : parseWordAnswer(trimmed, morphology, keywords);
+    const status: AnswerSyntaxStatus = parsed.status === "incomplete" ? "partial" : parsed.status === "empty" ? "empty" : parsed.status;
     return {
-      pieces: selected.pieces,
-      message,
+      pieces: parsed.pieces,
+      message: parsed.message,
       status,
-      checkable: hasCompleteSyntax && !unclosedQuote,
-      missing,
-      candidateNames,
-      syntaxName: selected.syntax.name,
+      checkable: status === "complete",
+      missing: [],
+      syntaxName: item.mode === "article" ? "Articles" : "Noun",
     };
   }
 
@@ -101,7 +75,6 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
       status: finalStatus,
       checkable: finalStatus === "complete",
       missing: unclosedQuote ? [...labels.slice(values.length), "Closing quote"] : labels.slice(values.length),
-      candidateNames: [],
       syntaxName: "Full verb",
     };
   }
@@ -118,7 +91,6 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
         status,
         checkable: status === "complete",
         missing: unclosedQuote ? ["Closing quote"] : [],
-        candidateNames: ["Regular adjective"],
         syntaxName: "Regular adjective shorthand",
       };
     }
@@ -130,7 +102,6 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
       status: finalStatus,
       checkable: finalStatus === "complete",
       missing: unclosedQuote ? [...labels.slice(values.length), "Closing quote"] : labels.slice(values.length),
-      candidateNames: [],
       syntaxName: "Full adjective",
     };
   }
@@ -144,7 +115,6 @@ export function analyzeAnswerSyntax(card: Flashcard, rawValue: string, keywords:
     status: finalStatus,
     checkable: finalStatus === "complete",
     missing: unclosedQuote ? ["Closing quote"] : [],
-    candidateNames: [],
     syntaxName: "Invariant adverb",
   };
 }
@@ -156,9 +126,9 @@ const statusLabels: Record<AnswerSyntaxStatus, string> = {
   invalid: "Not recognized",
 };
 
-export function AnswerParsePreview({ card, value, keywords, morphology }: { card: Flashcard; value: string; keywords: AnswerKeywords; morphology: NounMorphology }) {
-  const preview = analyzeAnswerSyntax(card, value, keywords, morphology);
-  if (preview.status === "empty") return <div className="parse-preview syntax-empty" aria-live="polite"><p className="parse-hint">Type the Italian. The fields Parola recognizes will appear here.</p></div>;
+export function AnswerParsePreview({ item, value, keywords, morphology }: { item: Pick<StudyItem, "card" | "mode">; value: string; keywords: AnswerKeywords; morphology: NounMorphology }) {
+  const preview = analyzeAnswerSyntax(item, value, keywords, morphology);
+  if (preview.status === "empty") return <div className="parse-preview syntax-empty" aria-live="polite"><p className="parse-hint">{item.mode === "article" ? "Type the articles in order: definite singular, definite plural, indefinite." : "Type the Italian. The fields Parola recognizes will appear here."}</p></div>;
   return (
     <div className={`parse-preview syntax-${preview.status}`} aria-live="polite">
       {preview.pieces.length > 0 && <div className="parse-tokens">
@@ -171,9 +141,8 @@ export function AnswerParsePreview({ card, value, keywords, morphology }: { card
         <span className="parse-status-label"><i aria-hidden="true" />{statusLabels[preview.status]}</span>
         {preview.syntaxName && <span className="parse-syntax">{preview.syntaxName}</span>}
       </p>
-      {preview.status === "invalid" && <p className="parse-line answer-parse-message">{preview.message}</p>}
+      {(preview.status === "invalid" || (preview.status === "partial" && !preview.missing.length)) && preview.message && <p className="parse-line answer-parse-message">{preview.message}</p>}
       {preview.missing.length > 0 && <p className="parse-line answer-parse-message"><strong>Still needed:</strong> {preview.missing.join(" · ")}</p>}
-      {preview.candidateNames.length > 0 && <p className="parse-line answer-parse-message"><strong>Possible declensions:</strong> {preview.candidateNames.join(" · ")}</p>}
     </div>
   );
 }

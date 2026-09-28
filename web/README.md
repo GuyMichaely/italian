@@ -30,15 +30,15 @@ See `docs/REMOTE_API.md` for the sync endpoint contract.
 
 ## Noun morphology
 
-Noun cards store a base, their actual declension rule, gender, number behavior, and article behavior. Declension rules generate noun forms and recognize typed forms. Syntax rules describe accepted answer structures. Inference sets control which declensions each shorthand syntax may infer.
+Noun cards store a declension (a rule and base, or irregular forms), gender, article profile, and article-group exceptions. Declension rules, optionally limited to one gender, generate noun forms; the article table gives each form its articles. Study has a word mode (English prompt, type the noun with an article) and an endless article mode (Italian prompt, type its articles).
 
-See `../docs/NOUN_MORPHOLOGY_AND_SYNTAX.md` for the model and candidate-evaluation rules.
+See `../docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the model and how answers are checked.
 
 ## Inventory transfer
 
 **Storage & sync** can export/download the inventory, copy it to the clipboard, import a JSON file, or replace the inventory from pasted JSON.
 
-The inventory JSON payload contains `cards` and `nounMorphology`; export-format/version/timestamp metadata is not added.
+The inventory JSON payload contains `cards`, `nounMorphology`, and `studyPreferences`; export-format/version/timestamp metadata is not added.
 
 ## Development
 

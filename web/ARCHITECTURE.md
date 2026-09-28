@@ -28,19 +28,22 @@ src/
 │   ├── types.ts                   discriminated Flashcard union and typed detail schemas
 │   ├── editorModel.ts             batch-entry rows, drafts, and card construction
 │   ├── nounDraft.ts               the one noun-entry model: surface forms → rule, base, articles
-│   └── nounMorphology.ts          noun rules, syntax rules, inference sets, generation
-├── storage/                       inventory persistence, sync, import/export (unchanged by the UI)
+│   └── nounMorphology.ts          declension rules, article table, generation, plural prediction
+├── storage/                       inventory persistence, sync, import/export (cards, morphology, study preferences)
 ├── study/
-│   ├── setup.ts                   study setup, scope filtering, answer keywords, persistence
+│   ├── setup.ts                   study setup (mode, scope, prompts), persistence
 │   ├── order.ts                   study-item ordering/shuffling
-│   ├── nounSyntax.ts              candidate-based noun syntax evaluation
+│   ├── nounAnswers.ts             word- and article-mode answer parsing and checking
+│   ├── preferences.ts             synced study preferences; when a noun needs both forms
+│   ├── articleDrill.ts            article-mode classes and draws
+│   ├── prompts.ts                 prompt gender hints and article-mode prompt forms
 │   ├── verification.ts            answer verification for all card types
 │   └── logic.ts                   study-module public exports
 ├── views/
 │   ├── StudyView.tsx               setup sidebar (staged mid-session), flip/typed cards, summary
 │   ├── WordsView.tsx               filters, search, part-of-speech tabs, bulk actions
 │   ├── GrammarView.tsx             noun morphology page
-│   └── SettingsView.tsx            sync, backup/restore, answer keywords
+│   └── SettingsView.tsx            sync, backup/restore, answer keywords, drilled rules
 └── components/
     ├── AppShell.tsx                top navigation (desktop) and bottom tab bar (phone)
     ├── Sheet.tsx                   modal sheet / side drawer / phone bottom sheet
@@ -50,7 +53,7 @@ src/
     ├── CardEditorFields.tsx        shared editor fields and batch row cells
     ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview
-    ├── NounMorphologyPanel.tsx     declensions, inference sets, and syntax editing
+    ├── NounMorphologyPanel.tsx     declension and article-table editing
     ├── StorageSettingsPanel.tsx    sync and inventory-transfer settings
     ├── AnswerKeywordSettings.tsx   noun marker keyword settings
     ├── SaveIndicator.tsx           persistence status UI
@@ -67,27 +70,21 @@ Each completed study round with wrong answers adds a numbered mistake review set
 
 English-to-Italian typed verification always uses the prompted card's known part of speech. There is no part-of-speech answer prefix. The English prompt displays the part of speech directly. The parser preview does not repeat it.
 
-## Noun morphology and syntax
+## Noun morphology and noun study
 
 A noun card stores `declension` (a declension rule and base, or an irregular noun's singular/plural forms), `gender`, `articleProfile` (three Boolean article capabilities in one of four combinations), and `articleGroups` (per-form article-group exceptions). Forms and articles are never stored: `resolveNounDetails` generates forms from the declension and looks articles up in the morphology's article groups.
 
-`NounMorphology` holds `declensionRules`, `inferenceSets`, `syntaxRules`, `articleLetters` (the vowel and consonant lists behind the `V` and `C` pattern tokens), and `articleGroups`. An article group has spelling patterns and masculine/feminine article sets; a form belongs to the first group, top to bottom, whose pattern matches. There is no catch-all: a form that needs an article and matches nothing is a validation error unless the noun sets an exception. The same table answers "which article does this form take" and, read in reverse (`articleReadings`), "what does this typed article say about definiteness, number, and gender". Elided articles are recognized from table entries ending in an apostrophe.
+`NounMorphology` holds `declensionRules` (each optionally limited to one gender), `articleLetters` (the vowel and consonant lists behind the `V` and `C` pattern tokens), and `articleGroups`. An article group has spelling patterns and masculine/feminine article sets; a form belongs to the first group, top to bottom, whose pattern matches. There is no catch-all: a form that needs an article and matches nothing is a validation error unless the noun sets an exception. The same table answers "which article does this form take" and, read in reverse (`articleReadings`), "what does this typed article say about definiteness, number, and gender". Elided articles are recognized from table entries ending in an apostrophe.
 
-A syntax rule stores markers, ordered fields, an inference-set reference, and `excludedArticleGroups`. Article fields declare definiteness and number and assert the matching article capability; a syntax without article fields asserts the no-article profile and must require gender and singular/plural-only markers.
+Study (`study/nounAnswers.ts`) has two noun modes. Word mode parses markers and article + noun phrases without the card (the live preview uses only this), then checks them against the card: each noun is one of its forms with an article its profile allows, both forms are given when `study/preferences.ts` says the noun needs them (irregular, unpredictable plural, drilled rule, or marked word), a single-form noun carries its singular-/plural-only marker, and a gender marker is present when the articles don't settle gender. Article mode checks the ordered articles (and optional noun forms) the noun takes. `study/articleDrill.ts` groups nouns into classes by gender and articles, split by start pattern within a single-group class, and draws uniformly by class. `study/prompts.ts` adds `(m)`/`(f)` to prompts shared by nouns of different genders.
 
-Verification (`study/nounSyntax.ts`) has two halves. The card-blind half tries every syntax, reads markers and articles through the table, and turns the typed noun forms into readings: one per inference-set rule that recovers a single base, plus an `Irregular` reading when the answer supplies every form. The live preview uses only this half, steering away from syntaxes whose exclusions the typed word's spelling hits. The card-aware half matches a reading when its rule and base (or irregular forms) and gender equal the card's, the card's article profile allows the syntax's article fields, the card's article group is not excluded, and every typed article equals the table's article for the card's form group, gender, definiteness, and number.
-
-Outcomes: a matching reading is correct; otherwise a structurally complete syntax is wrong; no complete syntax is invalid or incomplete.
-
-The grammar editor cascades renames through name references and rejects duplicates. `cards/nounDraft.ts` is the single noun-entry model for Add words, the word drawer, and the grid: surface forms plus an optional rule (Auto, a named rule, or Irregular) and optional article-group exceptions.
-
-See `../docs/NOUN_MORPHOLOGY_AND_SYNTAX.md` for the detailed model.
+See `../docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
 ## Storage and sync
 
 Cards and noun morphology form one logical `InventoryState`. `App` loads them with one `readInventory()` call. Whole-inventory operations use `replaceInventory()` so card definitions and morphology are validated and saved together.
 
-Local snapshots contain `cards`, `nounMorphology`, and an internal `updatedAt`. Remote synchronized snapshots contain the same three values. `nounMorphology` contains declension rules, inference sets, and syntax rules.
+Local snapshots contain `cards`, `nounMorphology`, `studyPreferences`, and an internal `updatedAt`. Remote synchronized snapshots contain the same four values. `studyPreferences` holds the answer keywords, drilled declension rules, and nouns that always need both forms; references to deleted nouns or rules are pruned on every save.
 
 Inventory validation checks relationships between cards and morphology. Every noun must reference an existing rule, and enabled article capabilities must have the necessary noun forms. There is no stored noun surface form to cross-check because morphology is the source of truth.
 
@@ -95,7 +92,7 @@ Bulk inventory edits and mass tag changes are committed as one inventory replace
 
 Both local and remote sides carry an inventory-level `updatedAt` timestamp. When they differ, the later timestamp wins. Local changes automatically push remotely when sync is configured. The user can choose whether a synchronized local copy persists between browser sessions and whether startup mismatches reconcile automatically or wait for an explicit Sync now action.
 
-Inventory JSON export/import contains `cards` and `nounMorphology` without transport metadata.
+Inventory JSON export/import contains `cards`, `nounMorphology`, and `studyPreferences` without transport metadata.
 
 ## Morphology editing
 
@@ -119,7 +116,7 @@ This boundary is not a migration layer.
 
 `npm test` compiles parser, preview, synchronization, and import-validation modules into temporary CommonJS test output and runs deterministic Node tests against the real source modules. Test files run serially so their shared temporary CommonJS package marker cannot race.
 
-The noun suite covers rule-derived number behavior, the editable article table, irregular nouns, article-group exceptions, the `lo` shorthand exclusion, article-derived gender, article capability matching, profile/declension independence, ambiguous article gender, contradictory evidence, articleless nouns, zero-candidate complete syntax, candidate specificity ordering, strict morphology schema validation, and live-preview candidate scoping. The sync suite covers automatic newer-remote reconciliation, newer-local push, ask-first reconciliation, non-persistent local mode, and offline fallback. Import tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected.
+The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article-mode checking, the article drill classes, prompt gender hints, and study-preference validation and pruning. The sync suite covers automatic newer-remote reconciliation, newer-local push, ask-first reconciliation, non-persistent local mode, and offline fallback. Import tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected.
 
 These synchronization tests verify decision logic without mutating a deployed inventory. A live browser-to-API smoke test remains the environment-level check for endpoint configuration, CORS/networking, and deployed persistence.
 

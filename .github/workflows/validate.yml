@@ -58,6 +58,7 @@ jobs:
         run: |
           node --check scripts/migrate-article-profiles.mjs
           node --check scripts/migrate-noun-declensions.mjs
+          node --check scripts/migrate-study-modes.mjs
 
       - name: Check extension syntax
         working-directory: extension

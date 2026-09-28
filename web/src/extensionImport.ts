@@ -1,7 +1,7 @@
 import type { Flashcard } from "./cards/types";
 import type { NounMorphology } from "./cards/nounMorphology";
 import { normalizeCard } from "./storage/cardCodec";
-import { assertInventoryState } from "./storage/inventoryState";
+import { assertCardsFitMorphology } from "./storage/inventoryState";
 
 export const extensionImportRequestType = "parola-extension-import";
 export const extensionImportResultType = "parola-extension-import-result";
@@ -40,6 +40,6 @@ export function parseExtensionImportRequest(value: unknown): ExtensionImportRequ
 
 export function extensionCandidatesToCards(values: unknown[], morphology: NounMorphology): Flashcard[] {
   const cards = values.map(normalizeCard);
-  assertInventoryState({ cards, nounMorphology: morphology });
+  assertCardsFitMorphology(cards, morphology);
   return cards;
 }

@@ -12,7 +12,6 @@ const paths = {
   cross: "M6 6l12 12M18 6L6 18",
   skip: "M5 5l8 7-8 7zM17 5v14",
   sliders: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
-  help: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
   restart: "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4",
   tag: "M3 12V4h8l9 9-8 8zM7.5 8h.01",
   pencil: "M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4",

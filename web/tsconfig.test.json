@@ -9,7 +9,10 @@
   },
   "include": [
     "src/cards/nounMorphology.ts",
-    "src/study/nounSyntax.ts",
+    "src/study/nounAnswers.ts",
+    "src/study/articleDrill.ts",
+    "src/study/prompts.ts",
+    "src/storage/inventoryState.ts",
     "src/study/reviews.ts",
     "src/components/AnswerParsePreview.tsx",
     "src/storage/sync.ts",

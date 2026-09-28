@@ -1,6 +1,6 @@
 # Parola project status
 
-_Last updated: 2026-08-21_
+_Last updated: 2026-09-28_
 
 This is the durable checkpoint for the current Parola architecture, project decisions, and next steps.
 
@@ -32,7 +32,7 @@ Cards and noun morphology form one logical inventory. Browser persistence stores
 - The server rejects stale snapshot writes.
 - Startup can reconcile automatically or wait for explicit **Sync now**.
 - Browser persistence can be disabled while remote sync remains active for the session.
-- Manual inventory export/import contains `cards` and `nounMorphology`, without sync transport metadata.
+- Manual inventory export/import contains `cards`, `nounMorphology`, and `studyPreferences`, without sync transport metadata.
 
 Deterministic tests cover newer-remote reconciliation, newer-local push, ask-first behavior, non-persistent local mode, and offline fallback. A real browser-to-Azure smoke test remains an environment-level verification task rather than missing synchronization logic.
 
@@ -50,7 +50,7 @@ The prompted card determines the expected part of speech; the learner does not t
 
 Study supports English, Italian, or both prompt directions; optional typed Italian verification; one direction per word; English-first ordering when both directions are studied; scope filtering by part of speech, set, or tag; mistake review; and creation of mistake tags.
 
-Noun typed verification uses configurable gender/tantum keywords and a candidate-based syntax parser. Default markers are `m`, `f`, `s`, and `p`. Syntax validity is separate from answer correctness. The live parse preview shows structural interpretation without revealing which candidate matches the prompted card before submission. When an article supplies unambiguous gender, such as `lo`, the preview displays that inferred gender.
+Nouns have two study modes. Word mode prompts in English; the answer is the noun with an article, one form or both, plus gender and singular-/plural-only keywords (default `m`, `f`, `s`, `p`) where needed. Both forms are required for irregular nouns, nouns whose plural the rules don't predict, nouns using a drilled rule, and nouns marked individually. Article mode is an endless drill that prompts with the Italian form and asks for the articles in order, drawing uniformly by article class. The live preview is card-blind; a wrong answer lists what was wrong. Answer keywords, drilled rules, and marked nouns are `studyPreferences` in the inventory, so they sync with it. Nouns taking both genders are two cards, and shared prompts show `(m)`/`(f)`.
 
 Verb, adjective, and adverb typed verification use their current canonical stored forms. Regular adjective shorthand is supported where the stored adjective matches the standard pattern.
 
@@ -65,11 +65,11 @@ A canonical noun card stores:
 
 A noun card does not store top-level `italian` or article strings. Regular forms are generated from the rule and base; articles come from the morphology's editable article groups, where each form's group is the first group, top to bottom, whose spelling pattern matches (`sC`, `iV`, `V`, `C`, …, with `V` and `C` defined by editable vowel and consonant lists) unless the noun overrides it (for example plural `dei` in the `lo` group gives `gli dei`).
 
-Declension rules, inference sets, syntax rules, and article groups use unique names as references, and the grammar editor cascades renames (rules into inference sets and nouns; inference sets into syntaxes; article groups into syntax exclusions and noun exceptions). `Irregular` is reserved as a rule name.
+Declension rules and article groups use unique names as references, and the grammar editor cascades renames (rules into nouns and drilled rules; article groups into noun exceptions). `Irregular` is reserved as a rule name. A declension rule can be limited to one gender; the defaults make the `-a → -e`, `-ca → -che`, and `-ga → -ghe` rules feminine and `-a → -i` masculine. A plural is predictable when the most specific matching rules (longest singular ending) agree on it.
 
-Typed verification builds card-blind readings of the answer, then compares them with the card: rule and base (or every irregular form), gender, article capabilities, the syntax's excluded article groups, and each typed article against the table. Irregular nouns are implicitly part of every inference set but only match answers that supply every form. The former hardcoded `lo` full-declension policy is now each shorthand syntax's default `excludedArticleGroups: ["lo"]`.
+The former inference sets, answer-syntax rules, and `lo` full-declension exclusion are retired; `scripts/migrate-study-modes.mjs` converts inventories that use them.
 
-See `docs/NOUN_MORPHOLOGY_AND_SYNTAX.md` for the detailed model.
+See `docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
 ## External card import contract
 
@@ -81,7 +81,7 @@ After validation, imported cards use the same `addBatch` and `CardStorage` persi
 
 ## Automated validation
 
-`npm test` runs deterministic tests against the real noun parser/preview, synchronization logic, and external import contract. Noun coverage includes rule-derived number behavior, the editable article table, irregular nouns, article-group exceptions, the `lo` shorthand exclusion, article-derived gender, article capability matching, article profiles independent of declension number availability, ambiguous article gender, contradictory evidence, articleless nouns, zero-candidate complete syntax, candidate ordering, preview candidate scoping, and strict rejection of retired schemas.
+`npm test` runs deterministic tests against the real noun answer checking and preview, the article drill, study preferences, and the external import contract. Noun coverage includes rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word- and article-mode checking, markers, article profiles, prompt gender hints, and strict rejection of retired schemas.
 
 Test files run serially because they share one temporary CommonJS output directory.
 

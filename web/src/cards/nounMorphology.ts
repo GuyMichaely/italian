@@ -1,7 +1,6 @@
 import type {
   Flashcard,
   NounArticleProfile,
-  NounCard,
   NounDeclension,
   NounGender,
   NounDetails,
@@ -9,7 +8,6 @@ import type {
 
 export type { NounArticleGroupOverrides, NounArticleProfile, NounDeclension, NounGender } from "./types";
 export type NounNumberMode = "both" | "singular" | "plural";
-export type NounArticleCapability = "definite-singular" | "definite-plural" | "indefinite-singular";
 export type NounFormNumber = "singular" | "plural";
 export type NounDefiniteness = "definite" | "indefinite";
 
@@ -19,30 +17,9 @@ export type NounFormTransform = {
 
 export type NounDeclensionRule = {
   name: string;
+  /** Limits the rule to nouns of one gender (e.g. -a → -e to feminine nouns); null applies to both. */
+  gender: NounGender | null;
   forms: Partial<Record<NounFormNumber, NounFormTransform>>;
-};
-
-export type NounInferenceSet = {
-  name: string;
-  declensionRules: string[];
-};
-
-export type NounSyntaxMarker =
-  | { kind: "gender"; required: boolean }
-  | { kind: "tantum"; required: boolean; value: "singular" | "plural" };
-
-export type NounSyntaxField =
-  | { kind: "article"; definiteness: NounDefiniteness; number: NounFormNumber }
-  | { kind: "noun"; number: NounFormNumber };
-
-export type NounSyntaxRule = {
-  name: string;
-  markers: NounSyntaxMarker[];
-  markerOrder: "any";
-  fields: NounSyntaxField[];
-  inferenceSet: string;
-  /** Nouns whose article group is listed here cannot be answered with this syntax (e.g. "lo" nouns in shorthand). */
-  excludedArticleGroups: string[];
 };
 
 export type NounArticleSet = {
@@ -72,8 +49,6 @@ export type NounArticleLetters = {
 
 export type NounMorphology = {
   declensionRules: NounDeclensionRule[];
-  inferenceSets: NounInferenceSet[];
-  syntaxRules: NounSyntaxRule[];
   articleLetters: NounArticleLetters;
   articleGroups: NounArticleGroup[];
 };
@@ -108,118 +83,16 @@ export const nounArticleProfiles = {
 
 export const defaultNounMorphology: NounMorphology = {
   declensionRules: [
-    { name: "Singular form is the base", forms: { singular: { suffix: "" } } },
-    { name: "Plural form is the base", forms: { plural: { suffix: "" } } },
-    { name: "Unchanged singular / plural", forms: { singular: { suffix: "" }, plural: { suffix: "" } } },
-    { name: "-o → -i", forms: { singular: { suffix: "o" }, plural: { suffix: "i" } } },
-    { name: "-e → -i", forms: { singular: { suffix: "e" }, plural: { suffix: "i" } } },
-    { name: "-a → -e", forms: { singular: { suffix: "a" }, plural: { suffix: "e" } } },
-    { name: "-a → -i", forms: { singular: { suffix: "a" }, plural: { suffix: "i" } } },
-    { name: "-ca → -che", forms: { singular: { suffix: "ca" }, plural: { suffix: "che" } } },
-    { name: "-ga → -ghe", forms: { singular: { suffix: "ga" }, plural: { suffix: "ghe" } } },
-    { name: "-chio → -chi", forms: { singular: { suffix: "chio" }, plural: { suffix: "chi" } } },
-  ],
-  inferenceSets: [
-    {
-      name: "Full noun answers",
-      declensionRules: [
-        "Singular form is the base",
-        "Plural form is the base",
-        "Unchanged singular / plural",
-        "-o → -i",
-        "-e → -i",
-        "-a → -e",
-        "-a → -i",
-        "-ca → -che",
-        "-ga → -ghe",
-        "-chio → -chi",
-      ],
-    },
-    {
-      name: "Learned shorthand",
-      declensionRules: [
-        "Singular form is the base",
-        "Plural form is the base",
-        "Unchanged singular / plural",
-        "-o → -i",
-        "-e → -i",
-        "-a → -e",
-        "-a → -i",
-        "-ca → -che",
-        "-ga → -ghe",
-      ],
-    },
-  ],
-  syntaxRules: [
-    {
-      name: "Definite singular article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "singular" },
-        { kind: "noun", number: "singular" },
-      ],
-      inferenceSet: "Learned shorthand",
-      excludedArticleGroups: ["lo"],
-    },
-    {
-      name: "Definite plural article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "plural" },
-        { kind: "noun", number: "plural" },
-      ],
-      inferenceSet: "Learned shorthand",
-      excludedArticleGroups: ["lo"],
-    },
-    {
-      name: "Indefinite singular article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "indefinite", number: "singular" },
-        { kind: "noun", number: "singular" },
-      ],
-      inferenceSet: "Learned shorthand",
-      excludedArticleGroups: ["lo"],
-    },
-    {
-      name: "Full declension",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "singular" },
-        { kind: "noun", number: "singular" },
-        { kind: "article", definiteness: "definite", number: "plural" },
-        { kind: "noun", number: "plural" },
-        { kind: "article", definiteness: "indefinite", number: "singular" },
-      ],
-      inferenceSet: "Full noun answers",
-      excludedArticleGroups: [],
-    },
-    {
-      name: "Articleless singular noun",
-      markers: [
-        { kind: "gender", required: true },
-        { kind: "tantum", required: true, value: "singular" },
-      ],
-      markerOrder: "any",
-      fields: [{ kind: "noun", number: "singular" }],
-      inferenceSet: "Full noun answers",
-      excludedArticleGroups: [],
-    },
-    {
-      name: "Articleless plural noun",
-      markers: [
-        { kind: "gender", required: true },
-        { kind: "tantum", required: true, value: "plural" },
-      ],
-      markerOrder: "any",
-      fields: [{ kind: "noun", number: "plural" }],
-      inferenceSet: "Full noun answers",
-      excludedArticleGroups: [],
-    },
+    { name: "Singular form is the base", gender: null, forms: { singular: { suffix: "" } } },
+    { name: "Plural form is the base", gender: null, forms: { plural: { suffix: "" } } },
+    { name: "Unchanged singular / plural", gender: null, forms: { singular: { suffix: "" }, plural: { suffix: "" } } },
+    { name: "-o → -i", gender: null, forms: { singular: { suffix: "o" }, plural: { suffix: "i" } } },
+    { name: "-e → -i", gender: null, forms: { singular: { suffix: "e" }, plural: { suffix: "i" } } },
+    { name: "-a → -e", gender: "feminine", forms: { singular: { suffix: "a" }, plural: { suffix: "e" } } },
+    { name: "-a → -i", gender: "masculine", forms: { singular: { suffix: "a" }, plural: { suffix: "i" } } },
+    { name: "-ca → -che", gender: "feminine", forms: { singular: { suffix: "ca" }, plural: { suffix: "che" } } },
+    { name: "-ga → -ghe", gender: "feminine", forms: { singular: { suffix: "ga" }, plural: { suffix: "ghe" } } },
+    { name: "-chio → -chi", gender: null, forms: { singular: { suffix: "chio" }, plural: { suffix: "chi" } } },
   ],
   articleLetters: {
     vowels: ["a", "e", "i", "o", "u", "à", "á", "è", "é", "ì", "í", "ò", "ó", "ù", "ú"],
@@ -309,10 +182,8 @@ export function ruleSupportsFormNumber(rule: NounDeclensionRule, number: NounFor
   return Boolean(rule.forms[number]);
 }
 
-export function articleProfileAllows(profile: NounArticleProfile, capability: NounArticleCapability) {
-  if (capability === "definite-singular") return profile.definiteSingular;
-  if (capability === "definite-plural") return profile.definitePlural;
-  return profile.indefiniteSingular;
+export function ruleAllowsGender(rule: NounDeclensionRule, gender: NounGender) {
+  return rule.gender === null || rule.gender === gender;
 }
 
 export function articleProfilesEqual(left: NounArticleProfile, right: NounArticleProfile) {
@@ -367,9 +238,17 @@ function patternMatches(word: string, pattern: string, letters: NounArticleLette
 
 /** The article group a word's spelling puts it in: the first group, top to bottom, with a matching pattern. */
 export function articleGroupForWord(word: string, morphology: NounMorphology) {
+  return articlePatternForWord(word, morphology)?.group ?? null;
+}
+
+/** The group a word's spelling puts it in, with the pattern inside that group that matched first. */
+export function articlePatternForWord(word: string, morphology: NounMorphology) {
   const normalized = normalizeText(word);
-  const match = morphology.articleGroups.find((group) => group.startsWith.some((pattern) => patternMatches(normalized, pattern, morphology.articleLetters)));
-  return match?.name ?? null;
+  for (const group of morphology.articleGroups) {
+    const pattern = group.startsWith.find((item) => patternMatches(normalized, item, morphology.articleLetters));
+    if (pattern !== undefined) return { group: group.name, pattern };
+  }
+  return null;
 }
 
 export function articleSetFor(morphology: NounMorphology, groupName: string, gender: NounGender) {
@@ -455,6 +334,11 @@ export function nounDefinitionForCard(card: Flashcard): NounDefinition {
 
 export function resolveNounDetails(details: NounDetails, morphology: NounMorphology, label = "Noun"): ResolvedNounForms {
   const { singular, plural } = declensionForms(details.declension, morphology, label);
+  if (details.declension.kind === "rule") {
+    const ruleName = details.declension.rule;
+    const rule = morphology.declensionRules.find((item) => item.name === ruleName);
+    if (rule && !ruleAllowsGender(rule, details.gender)) throw new Error(`${label} is ${details.gender}, but “${rule.name}” is only for ${rule.gender} nouns.`);
+  }
   if (!singular && !plural) throw new Error(`${label} has neither a singular nor a plural form.`);
   if (!articleProfileCompatibleWithForms(details.articleProfile, { singular, plural })) {
     throw new Error(`${label} has an article profile that requires a noun form it does not have.`);
@@ -494,20 +378,8 @@ export function resolvedNounForms(card: Flashcard, morphology: NounMorphology): 
   return resolveNounDetails(card.details, morphology, `Noun card ${card.id}`);
 }
 
-/** The article group used for a noun as a whole: its singular's group, or its plural's for plural-only nouns. */
-export function nounArticleGroup(card: NounCard, morphology: NounMorphology) {
-  const forms = resolvedNounForms(card, morphology);
-  return forms.singularGroup ?? forms.pluralGroup;
-}
-
-export function ruleForNounCard(card: Flashcard, morphology: NounMorphology) {
-  if (card.type !== "noun" || card.details.declension.kind !== "rule") return null;
-  const name = card.details.declension.rule;
-  return morphology.declensionRules.find((rule) => rule.name === name) ?? null;
-}
-
-/** The most specific rule that produces exactly these forms; null when none or when two tie. */
-export function inferRuleDeclension(input: { singular: string; plural: string }, morphology: NounMorphology): Extract<NounDeclension, { kind: "rule" }> | null {
+/** The most specific rule that produces exactly these forms for this gender; null when none or when two tie. */
+export function inferRuleDeclension(input: { singular: string; plural: string }, gender: NounGender, morphology: NounMorphology): Extract<NounDeclension, { kind: "rule" }> | null {
   const singular = input.singular.normalize("NFC").trim();
   const plural = input.plural.normalize("NFC").trim();
   if (!singular && !plural) return null;
@@ -515,7 +387,7 @@ export function inferRuleDeclension(input: { singular: string; plural: string },
 
   const matches: { rule: string; base: string; specificity: number }[] = [];
   for (const rule of morphology.declensionRules) {
-    if (!ruleSupportsNumberMode(rule, numberMode)) continue;
+    if (!ruleSupportsNumberMode(rule, numberMode) || !ruleAllowsGender(rule, gender)) continue;
     const singularBase = singular ? recognizeNounForm(rule, singular, "singular") : null;
     const pluralBase = plural ? recognizeNounForm(rule, plural, "plural") : null;
     if (singular && singularBase === null) continue;
@@ -528,6 +400,38 @@ export function inferRuleDeclension(input: { singular: string; plural: string },
   const match = matches[0];
   if (!match || matches[1]?.specificity === match.specificity) return null;
   return { kind: "rule", rule: match.rule, base: match.base };
+}
+
+/**
+ * The plurals the rules predict from a singular: among two-number rules allowed for the gender whose
+ * singular ending matches, only the most specific (longest ending) ones count. More than one entry
+ * means equally specific rules disagree.
+ */
+export function predictedPlurals(singular: string, gender: NounGender, morphology: NounMorphology) {
+  const word = singular.normalize("NFC").trim();
+  let best = -1;
+  let plurals: string[] = [];
+  for (const rule of morphology.declensionRules) {
+    if (!rule.forms.singular || !rule.forms.plural || !ruleAllowsGender(rule, gender)) continue;
+    const base = recognizeNounForm(rule, word, "singular");
+    if (base === null) continue;
+    const specificity = [...rule.forms.singular.suffix].length;
+    if (specificity < best) continue;
+    const plural = generateNounForm(rule, base, "plural") ?? "";
+    if (specificity > best) {
+      best = specificity;
+      plurals = [];
+    }
+    if (!plurals.some((item) => normalizeText(item) === normalizeText(plural))) plurals.push(plural);
+  }
+  return plurals;
+}
+
+/** Whether a two-number noun's plural follows from its singular and gender alone. */
+export function pluralIsPredictable(forms: Pick<ResolvedNounForms, "singular" | "plural" | "gender">, morphology: NounMorphology) {
+  if (!forms.singular || !forms.plural) return true;
+  const plurals = predictedPlurals(forms.singular, forms.gender, morphology);
+  return plurals.length === 1 && normalizeText(plurals[0]!) === normalizeText(forms.plural);
 }
 
 /* ---------- Validation ---------- */
@@ -570,11 +474,17 @@ function normalizeArticlePattern(value: unknown, groupName: string) {
   return pattern;
 }
 
+function normalizeRuleGender(value: unknown, ruleName: string): NounGender | null {
+  if (value === null) return null;
+  if (value === "masculine" || value === "feminine") return value;
+  throw new Error(`Declension rule ${ruleName} gender must be masculine, feminine, or null.`);
+}
+
 export function normalizeNounMorphology(value: unknown): NounMorphology {
   const payload = objectValue(value, "Noun morphology");
-  assertExactKeys(payload, "Noun morphology", ["articleGroups", "articleLetters", "declensionRules", "inferenceSets", "syntaxRules"]);
-  if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.inferenceSets) || !Array.isArray(payload.syntaxRules) || !Array.isArray(payload.articleGroups)) {
-    throw new Error("Noun morphology needs articleGroups, declensionRules, inferenceSets, and syntaxRules arrays.");
+  assertExactKeys(payload, "Noun morphology", ["articleGroups", "articleLetters", "declensionRules"]);
+  if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.articleGroups)) {
+    throw new Error("Noun morphology needs articleGroups and declensionRules arrays.");
   }
 
   const articleLetters = normalizeArticleLetters(payload.articleLetters);
@@ -592,11 +502,10 @@ export function normalizeNounMorphology(value: unknown): NounMorphology {
   });
   if (!articleGroups.length) throw new Error("Noun morphology needs at least one article group.");
   assertUniqueNames(articleGroups, "article group");
-  const articleGroupNames = new Set(articleGroups.map((group) => group.name));
 
   const declensionRules: NounDeclensionRule[] = payload.declensionRules.map((raw) => {
     const rule = objectValue(raw, "Declension rule");
-    assertExactKeys(rule, "Declension rule", ["name", "forms"]);
+    assertExactKeys(rule, "Declension rule", ["name", "gender", "forms"]);
     const forms = objectValue(rule.forms, "Declension rule forms");
     const formKeys = Object.keys(forms);
     if (formKeys.some((key) => key !== "singular" && key !== "plural")) throw new Error("Declension rule forms can contain only singular and plural.");
@@ -607,97 +516,11 @@ export function normalizeNounMorphology(value: unknown): NounMorphology {
     if (name === irregularDeclensionName || name.startsWith(":")) throw new Error(`“${name}” is reserved; choose another declension rule name.`);
     return {
       name,
+      gender: normalizeRuleGender(rule.gender, name),
       forms: { ...(singular ? { singular } : {}), ...(plural ? { plural } : {}) },
     };
   });
   assertUniqueNames(declensionRules, "declension rule");
-  const ruleNames = new Set(declensionRules.map((rule) => rule.name));
 
-  const inferenceSets: NounInferenceSet[] = payload.inferenceSets.map((raw) => {
-    const set = objectValue(raw, "Inference set");
-    assertExactKeys(set, "Inference set", ["name", "declensionRules"]);
-    if (!Array.isArray(set.declensionRules)) throw new Error("Inference set declensionRules must be an array.");
-    const declensionRuleNames = set.declensionRules.map((name) => nonEmptyString(name, "Inference rule name"));
-    for (const name of declensionRuleNames) {
-      if (!ruleNames.has(name)) throw new Error(`Inference set references unknown declension rule: ${name}.`);
-    }
-    return {
-      name: nonEmptyString(set.name, "Inference set name"),
-      declensionRules: [...new Set(declensionRuleNames)],
-    };
-  });
-  assertUniqueNames(inferenceSets, "inference set");
-  const inferenceSetNames = new Set(inferenceSets.map((set) => set.name));
-
-  const syntaxRules: NounSyntaxRule[] = payload.syntaxRules.map((raw) => {
-    const syntax = objectValue(raw, "Syntax rule");
-    assertExactKeys(syntax, "Syntax rule", ["name", "markers", "markerOrder", "fields", "inferenceSet", "excludedArticleGroups"]);
-    if (!Array.isArray(syntax.markers) || !Array.isArray(syntax.fields) || !Array.isArray(syntax.excludedArticleGroups)) {
-      throw new Error("Syntax rule markers, fields, and excludedArticleGroups must be arrays.");
-    }
-    if (syntax.markerOrder !== "any") throw new Error("Syntax markerOrder must be any.");
-
-    const markers: NounSyntaxMarker[] = syntax.markers.map((rawMarker) => {
-      const marker = objectValue(rawMarker, "Syntax marker");
-      if (marker.kind === "gender") {
-        assertExactKeys(marker, "Gender syntax marker", ["kind", "required"]);
-        return { kind: "gender", required: Boolean(marker.required) };
-      }
-      if (marker.kind === "tantum" && (marker.value === "singular" || marker.value === "plural")) {
-        assertExactKeys(marker, "Tantum syntax marker", ["kind", "required", "value"]);
-        return { kind: "tantum", required: Boolean(marker.required), value: marker.value };
-      }
-      throw new Error("Syntax marker must be a gender marker or a singular/plural tantum marker.");
-    });
-    if (markers.filter((marker) => marker.kind === "gender").length > 1) throw new Error("A syntax rule can contain at most one gender marker.");
-    if (markers.filter((marker) => marker.kind === "tantum").length > 1) throw new Error("A syntax rule can contain at most one tantum marker.");
-
-    const fields: NounSyntaxField[] = syntax.fields.map((rawField) => {
-      const field = objectValue(rawField, "Syntax field");
-      if (field.kind === "noun" && (field.number === "singular" || field.number === "plural")) {
-        assertExactKeys(field, "Noun syntax field", ["kind", "number"]);
-        return { kind: "noun", number: field.number };
-      }
-      if (
-        field.kind === "article"
-        && (field.number === "singular" || field.number === "plural")
-        && (field.definiteness === "definite" || field.definiteness === "indefinite")
-      ) {
-        assertExactKeys(field, "Article syntax field", ["kind", "definiteness", "number"]);
-        if (field.definiteness === "indefinite" && field.number !== "singular") throw new Error("Indefinite article fields must be singular.");
-        return { kind: "article", number: field.number, definiteness: field.definiteness };
-      }
-      throw new Error("Syntax field must be a noun form or article field.");
-    });
-    if (!fields.some((field) => field.kind === "noun")) throw new Error("A syntax rule must contain at least one noun field.");
-
-    const inferenceSet = nonEmptyString(syntax.inferenceSet, "Syntax inference set");
-    if (!inferenceSetNames.has(inferenceSet)) throw new Error("Syntax rule references an unknown inference set.");
-    const tantum = markers.find((marker) => marker.kind === "tantum");
-    if (tantum && fields.some((field) => field.number !== tantum.value)) {
-      throw new Error(`Noun syntax ${syntax.name} has a ${tantum.value}-only marker but contains a field of the other number.`);
-    }
-    if (!fields.some((field) => field.kind === "article")) {
-      const genderMarker = markers.find((marker) => marker.kind === "gender");
-      if (!genderMarker?.required || !tantum?.required) {
-        throw new Error("An articleless syntax must require explicit gender and singular/plural-only markers.");
-      }
-    }
-    const excludedArticleGroups = [...new Set(syntax.excludedArticleGroups.map((name) => nonEmptyString(name, "Excluded article group")))];
-    for (const name of excludedArticleGroups) {
-      if (!articleGroupNames.has(name)) throw new Error(`Syntax rule references unknown article group: ${name}.`);
-    }
-
-    return {
-      name: nonEmptyString(syntax.name, "Syntax rule name"),
-      markers,
-      markerOrder: "any",
-      fields,
-      inferenceSet,
-      excludedArticleGroups,
-    };
-  });
-  assertUniqueNames(syntaxRules, "syntax rule");
-
-  return { declensionRules, inferenceSets, syntaxRules, articleLetters, articleGroups };
+  return { declensionRules, articleLetters, articleGroups };
 }

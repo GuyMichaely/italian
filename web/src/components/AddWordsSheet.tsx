@@ -38,8 +38,8 @@ import { Sheet } from "./Sheet";
 function updateNounBatchRow<K extends keyof NounDraft>(row: NounBatchRow, field: K, value: NounDraft[K], morphology: NounMorphology): NounBatchRow {
   const next = { ...row, [field]: value } as NounBatchRow;
   if (field === "plural") return { ...next, pluralSuggested: false };
-  if (field === "singular" && (row.pluralSuggested || !row.plural.trim())) {
-    const plural = suggestedPlural(String(value), morphology);
+  if ((field === "singular" || field === "gender") && (row.pluralSuggested || !row.plural.trim())) {
+    const plural = suggestedPlural(next.singular, next.gender, morphology);
     return { ...next, plural, pluralSuggested: Boolean(plural) };
   }
   return next;

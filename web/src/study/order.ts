@@ -1,10 +1,16 @@
 import type { Flashcard } from "../cards/types";
+import type { NounGender } from "../cards/nounMorphology";
 import type { PromptLanguage } from "./setup";
 
 export type StudyItem = {
+  /** Starts with the card id; unique within a round. */
   key: string;
   card: Flashcard;
+  /** A word prompt in one language, or an article-drill prompt (always Italian). */
+  mode: "word" | "article";
   promptLanguage: PromptLanguage;
+  /** Shown beside the prompt when another noun of the other gender shares it. */
+  promptGender: NounGender | null;
 };
 
 export function shuffled<T>(items: T[], seed: number) {

@@ -11,8 +11,9 @@ import {
   type AdverbBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
-import { articleProfileOptions, emptyNounDraft, irregularRuleValue, nounCardFromDraft, nounDraftForEditing, spellingGroup, type NounDraft } from "../cards/nounDraft";
+import { articleProfileOptions, emptyNounDraft, irregularRuleValue, nounCardFromDraft, nounDraftForEditing, resolveNounDraft, spellingGroup, type NounDraft } from "../cards/nounDraft";
 import { standardAdjectivePattern } from "../study/logic";
+import { fullDeclensionReasonLabels, fullDeclensionReasons, type StudyPreferences } from "../study/preferences";
 import { NounDerivedPreview, NounRuleSelect, SetField, TagsField } from "./CardEditorFields";
 import { Sheet } from "./Sheet";
 
@@ -27,6 +28,7 @@ export function WordDrawer({
   card,
   knownSets,
   morphology,
+  studyPreferences,
   onClose,
   onSave,
   onRemove,
@@ -34,8 +36,10 @@ export function WordDrawer({
   card: Flashcard;
   knownSets: string[];
   morphology: NounMorphology;
+  studyPreferences: StudyPreferences;
   onClose: () => void;
-  onSave: (card: Flashcard) => void;
+  /** `fullDeclension` is whether word mode should always ask for every form of this noun. */
+  onSave: (card: Flashcard, fullDeclension: boolean) => void;
   onRemove: (id: number) => void;
 }) {
   const [formError, setFormError] = useState("");
@@ -45,6 +49,7 @@ export function WordDrawer({
   const [verb, setVerb] = useState<VerbBatchRow | null>(() => card.type === "verb" ? verbRowFromCard(card) : null);
   const [adjective, setAdjective] = useState<AdjectiveBatchRow | null>(() => card.type === "adjective" ? adjectiveRowFromCard(card) : null);
   const [adverb, setAdverb] = useState<AdverbBatchRow | null>(() => card.type === "adverb" ? adverbRowFromCard(card) : null);
+  const [fullDeclension, setFullDeclension] = useState(() => studyPreferences.fullDeclensionCards.includes(card.id));
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,7 +81,7 @@ export function WordDrawer({
       return;
     }
     setFormError("");
-    onSave(updated);
+    onSave(updated, fullDeclension);
     onClose();
   }
 
@@ -85,6 +90,13 @@ export function WordDrawer({
     onRemove(card.id);
     onClose();
   }
+
+  // Whether the edited noun has both forms, and what already makes word mode ask for both.
+  const resolvedNoun = card.type === "noun" ? resolveNounDraft(noun, morphology) : null;
+  const hasBothForms = Boolean(resolvedNoun?.ok && resolvedNoun.forms.singular && resolvedNoun.forms.plural);
+  const otherReasons = resolvedNoun?.ok && card.type === "noun"
+    ? fullDeclensionReasons({ ...card, details: resolvedNoun.details }, morphology, { ...studyPreferences, fullDeclensionCards: [] })
+    : [];
 
   const regularPattern = adjective ? standardAdjectivePattern(adjective.masculineSingular) : null;
   const regularAdjective = adjective && regularPattern
@@ -138,6 +150,14 @@ export function WordDrawer({
             </div>
           </details>
           <div className="derived-box"><span className="field-label">Generated forms</span><NounDerivedPreview draft={noun} morphology={morphology} /></div>
+          {hasBothForms && <div className="study-options">
+            <span className="field-label">Study</span>
+            <label className="check-option">
+              <input type="checkbox" checked={fullDeclension} onChange={(event) => setFullDeclension(event.target.checked)} />
+              <span>Always ask for the singular and plural in word mode</span>
+            </label>
+            {otherReasons.length > 0 && <p className="field-hint">Already asked for both: {otherReasons.map((reason) => fullDeclensionReasonLabels[reason]).join("; ")}.</p>}
+          </div>}
         </>}
         {verb && <>
           <TextField label="English" value={verb.english} onChange={(english) => setVerb({ ...verb, english })} autoFocus />

@@ -2,11 +2,9 @@ import { type FormEvent, useState } from "react";
 import type { AdjectiveCard, AdverbCard, Flashcard, NounCard, VerbCard } from "../cards/types";
 import { irregularDeclensionName, resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
 import { nounFormPhrases } from "../cards/nounDraft";
-import type { AnswerKeywords } from "../study/setup";
+import type { StudyPreferences } from "../study/preferences";
 import { AnswerParsePreview, analyzeAnswerSyntax } from "./AnswerParsePreview";
-import { verifyPowerAnswer } from "../study/logic";
-import { evaluateNounAnswer, type NounSyntaxCandidate } from "../study/nounSyntax";
-import { Icon } from "./Icons";
+import { checkTypedAnswer, type StudyItem } from "../study/logic";
 
 /** The single Italian headword shown for a card in prompts, lists, and answers. */
 export function italianHeadword(card: Flashcard, morphology: NounMorphology) {
@@ -78,49 +76,17 @@ export function CardAnswer({ card, morphology }: { card: Flashcard; morphology: 
   return <AdjectiveAnswer card={card} />;
 }
 
-function candidateDescription(candidate: NounSyntaxCandidate) {
-  const definition = candidate.definition;
-  const shape = definition.kind === "rule"
-    ? `base ${definition.base || "∅"}`
-    : [definition.singular, definition.plural].filter((form): form is string => form !== null).join(" / ");
-  return `${shape} · ${definition.gender} · ${candidate.syntaxName}`;
+/** What was wrong with a typed noun answer, listed under the answer after checking. */
+export function AnswerProblems({ problems }: { problems: string[] }) {
+  if (!problems.length) return null;
+  return <ul className="answer-problems">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>;
 }
 
-export function NounAnswerDiagnostic({ card, answer, keywords, morphology }: { card: Flashcard; answer: string; keywords: AnswerKeywords; morphology: NounMorphology }) {
-  if (card.type !== "noun") return null;
-  const evaluation = evaluateNounAnswer(card, answer, morphology, keywords);
-  if (evaluation.result === "correct") return null;
-
-  const uniqueCandidates = Array.from(new Map(evaluation.candidates.map((candidate) => {
-    return [candidateDescription(candidate), candidate] as const;
-  })).values());
-
-  return <details className="diagnostic">
-    <summary>How Parola read your answer</summary>
-    {uniqueCandidates.length
-      ? <ul>{uniqueCandidates.map((candidate) => <li key={candidateDescription(candidate)}>
-          <strong>{candidate.declensionRule}</strong>
-          {` · ${candidateDescription(candidate)}`}
-        </li>)}</ul>
-      : <p>No allowed declension rule recognized the completed noun syntax.</p>}
-  </details>;
-}
-
-function AnswerFormatHelp({ keywords }: { keywords: AnswerKeywords }) {
-  return <div className="format-help">
-    <p><strong>Noun</strong> <code>il libro</code> · full form <code>lo specchio gli specchi uno</code>. Nouns taking <code>lo</code> need the full form. Articleless: <code>{keywords.feminine} {keywords.singularOnly} Venezia</code>.</p>
-    <p><strong>Verb</strong> <code>infinitive io tu lui/lei noi voi loro auxiliary participle</code></p>
-    <p><strong>Adjective</strong> <code>bello</code> or <code>bello bella belli belle</code></p>
-    <p><strong>Adverb</strong> <code>molto</code></p>
-    <p>Separate fields with spaces; wrap a multi-word field in "double quotes". Gender markers: <code>{keywords.masculine}</code> / <code>{keywords.feminine}</code>.</p>
-  </div>;
-}
-
-export function ItalianVerificationForm({ card, keywords, morphology, onResult }: { card: Flashcard; keywords: AnswerKeywords; morphology: NounMorphology; onResult: (correct: boolean, answer: string) => void }) {
+export function ItalianVerificationForm({ item, preferences, morphology, onResult }: { item: StudyItem; preferences: StudyPreferences; morphology: NounMorphology; onResult: (correct: boolean, answer: string, problems: string[]) => void }) {
+  const { card } = item;
   const [answer, setAnswer] = useState("");
   const [syntaxRejected, setSyntaxRejected] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const syntax = analyzeAnswerSyntax(card, answer, keywords, morphology);
+  const syntax = analyzeAnswerSyntax(item, answer, preferences.answerKeywords, morphology);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -129,36 +95,34 @@ export function ItalianVerificationForm({ card, keywords, morphology, onResult }
       return;
     }
     setSyntaxRejected(false);
-    onResult(verifyPowerAnswer(card, answer, keywords, morphology), answer);
+    const check = checkTypedAnswer(item, answer, morphology, preferences);
+    onResult(check.correct, answer, check.problems);
   }
 
-  const placeholder = card.type === "noun" ? "il libro"
-    : card.type === "verb" ? "parlare parlo parli parla …"
-      : card.type === "adjective" ? "bello" : "molto";
+  const placeholder = item.mode === "article" ? "il i un"
+    : card.type === "noun" ? "il libro"
+      : card.type === "verb" ? "parlare parlo parli parla …"
+        : card.type === "adjective" ? "bello" : "molto";
 
   return (
     <form className={`answer-form${syntaxRejected ? " syntax-rejected" : ""}`} onSubmit={submit}>
-      <div className="answer-input-row">
-        <input
-          className="answer-input"
-          name="answer"
-          aria-label="Answer"
-          lang="it"
-          value={answer}
-          onChange={(event) => { setAnswer(event.target.value); setSyntaxRejected(false); }}
-          aria-invalid={syntaxRejected || syntax.status === "invalid"}
-          autoComplete="off"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          autoFocus
-          placeholder={placeholder}
-          enterKeyHint="done"
-        />
-        <button type="button" className={`icon-button help-toggle${helpOpen ? " active" : ""}`} aria-expanded={helpOpen} aria-label="Answer format" title="Answer format" onClick={() => setHelpOpen((open) => !open)}><Icon name="help" /></button>
-      </div>
-      {helpOpen && <AnswerFormatHelp keywords={keywords} />}
-      <AnswerParsePreview card={card} value={answer} keywords={keywords} morphology={morphology} />
+      <input
+        className="answer-input"
+        name="answer"
+        aria-label="Answer"
+        lang="it"
+        value={answer}
+        onChange={(event) => { setAnswer(event.target.value); setSyntaxRejected(false); }}
+        aria-invalid={syntaxRejected || syntax.status === "invalid"}
+        autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        autoFocus
+        placeholder={placeholder}
+        enterKeyHint="done"
+      />
+      <AnswerParsePreview item={item} value={answer} keywords={preferences.answerKeywords} morphology={morphology} />
       {syntaxRejected && <p className="form-error" role="alert">Finish the answer first: Parola can only check a complete answer.</p>}
       <button className="primary-button check-answer-button" type="submit" disabled={!answer.trim()}>Check answer <kbd>Enter</kbd></button>
     </form>

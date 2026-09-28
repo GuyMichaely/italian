@@ -18,118 +18,16 @@ const nounArticleProfiles = {
 
 const defaultNounMorphology = {
   declensionRules: [
-    { name: "Singular form is the base", forms: { singular: { suffix: "" } } },
-    { name: "Plural form is the base", forms: { plural: { suffix: "" } } },
-    { name: "Unchanged singular / plural", forms: { singular: { suffix: "" }, plural: { suffix: "" } } },
-    { name: "-o → -i", forms: { singular: { suffix: "o" }, plural: { suffix: "i" } } },
-    { name: "-e → -i", forms: { singular: { suffix: "e" }, plural: { suffix: "i" } } },
-    { name: "-a → -e", forms: { singular: { suffix: "a" }, plural: { suffix: "e" } } },
-    { name: "-a → -i", forms: { singular: { suffix: "a" }, plural: { suffix: "i" } } },
-    { name: "-ca → -che", forms: { singular: { suffix: "ca" }, plural: { suffix: "che" } } },
-    { name: "-ga → -ghe", forms: { singular: { suffix: "ga" }, plural: { suffix: "ghe" } } },
-    { name: "-chio → -chi", forms: { singular: { suffix: "chio" }, plural: { suffix: "chi" } } },
-  ],
-  inferenceSets: [
-    {
-      name: "Full noun answers",
-      declensionRules: [
-        "Singular form is the base",
-        "Plural form is the base",
-        "Unchanged singular / plural",
-        "-o → -i",
-        "-e → -i",
-        "-a → -e",
-        "-a → -i",
-        "-ca → -che",
-        "-ga → -ghe",
-        "-chio → -chi",
-      ],
-    },
-    {
-      name: "Learned shorthand",
-      declensionRules: [
-        "Singular form is the base",
-        "Plural form is the base",
-        "Unchanged singular / plural",
-        "-o → -i",
-        "-e → -i",
-        "-a → -e",
-        "-a → -i",
-        "-ca → -che",
-        "-ga → -ghe",
-      ],
-    },
-  ],
-  syntaxRules: [
-    {
-      name: "Definite singular article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "singular" },
-        { kind: "noun", number: "singular" },
-      ],
-      excludedArticleGroups: ["lo"],
-      inferenceSet: "Learned shorthand",
-    },
-    {
-      name: "Definite plural article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "plural" },
-        { kind: "noun", number: "plural" },
-      ],
-      excludedArticleGroups: ["lo"],
-      inferenceSet: "Learned shorthand",
-    },
-    {
-      name: "Indefinite singular article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "indefinite", number: "singular" },
-        { kind: "noun", number: "singular" },
-      ],
-      excludedArticleGroups: ["lo"],
-      inferenceSet: "Learned shorthand",
-    },
-    {
-      name: "Full declension",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "singular" },
-        { kind: "noun", number: "singular" },
-        { kind: "article", definiteness: "definite", number: "plural" },
-        { kind: "noun", number: "plural" },
-        { kind: "article", definiteness: "indefinite", number: "singular" },
-      ],
-      excludedArticleGroups: [],
-      inferenceSet: "Full noun answers",
-    },
-    {
-      name: "Articleless singular noun",
-      markers: [
-        { kind: "gender", required: true },
-        { kind: "tantum", required: true, value: "singular" },
-      ],
-      markerOrder: "any",
-      fields: [{ kind: "noun", number: "singular" }],
-      excludedArticleGroups: [],
-      inferenceSet: "Full noun answers",
-    },
-    {
-      name: "Articleless plural noun",
-      markers: [
-        { kind: "gender", required: true },
-        { kind: "tantum", required: true, value: "plural" },
-      ],
-      markerOrder: "any",
-      fields: [{ kind: "noun", number: "plural" }],
-      excludedArticleGroups: [],
-      inferenceSet: "Full noun answers",
-    },
+    { name: "Singular form is the base", gender: null, forms: { singular: { suffix: "" } } },
+    { name: "Plural form is the base", gender: null, forms: { plural: { suffix: "" } } },
+    { name: "Unchanged singular / plural", gender: null, forms: { singular: { suffix: "" }, plural: { suffix: "" } } },
+    { name: "-o → -i", gender: null, forms: { singular: { suffix: "o" }, plural: { suffix: "i" } } },
+    { name: "-e → -i", gender: null, forms: { singular: { suffix: "e" }, plural: { suffix: "i" } } },
+    { name: "-a → -e", gender: "feminine", forms: { singular: { suffix: "a" }, plural: { suffix: "e" } } },
+    { name: "-a → -i", gender: "masculine", forms: { singular: { suffix: "a" }, plural: { suffix: "i" } } },
+    { name: "-ca → -che", gender: "feminine", forms: { singular: { suffix: "ca" }, plural: { suffix: "che" } } },
+    { name: "-ga → -ghe", gender: "feminine", forms: { singular: { suffix: "ga" }, plural: { suffix: "ghe" } } },
+    { name: "-chio → -chi", gender: null, forms: { singular: { suffix: "chio" }, plural: { suffix: "chi" } } },
   ],
   articleLetters: {
     vowels: ["a", "e", "i", "o", "u", "à", "á", "è", "é", "ì", "í", "ò", "ó", "ù", "ú"],
@@ -155,6 +53,12 @@ const defaultNounMorphology = {
       feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
     },
   ]
+};
+
+const defaultStudyPreferences = {
+  answerKeywords: { masculine: "m", feminine: "f", singularOnly: "s", pluralOnly: "p" },
+  fullDeclensionRules: [],
+  fullDeclensionCards: [],
 };
 
 let writeQueue = Promise.resolve();
@@ -366,9 +270,9 @@ function normalizeArticlePattern(value, groupName) {
 
 function normalizeNounMorphology(value) {
   const payload = objectValue(value, "Noun morphology");
-  assertExactKeys(payload, "Noun morphology", ["articleGroups", "articleLetters", "declensionRules", "inferenceSets", "syntaxRules"]);
-  if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.inferenceSets) || !Array.isArray(payload.syntaxRules) || !Array.isArray(payload.articleGroups)) {
-    throw new Error("Noun morphology needs articleGroups, declensionRules, inferenceSets, and syntaxRules arrays.");
+  assertExactKeys(payload, "Noun morphology", ["articleGroups", "articleLetters", "declensionRules"]);
+  if (!Array.isArray(payload.declensionRules) || !Array.isArray(payload.articleGroups)) {
+    throw new Error("Noun morphology needs articleGroups and declensionRules arrays.");
   }
 
   const articleLetters = normalizeArticleLetters(payload.articleLetters);
@@ -386,109 +290,69 @@ function normalizeNounMorphology(value) {
   });
   if (!articleGroups.length) throw new Error("Noun morphology needs at least one article group.");
   assertUniqueNames(articleGroups, "article group");
-  const articleGroupNames = new Set(articleGroups.map((group) => group.name));
 
   const declensionRules = payload.declensionRules.map((raw) => {
     const rule = objectValue(raw, "Declension rule");
-    assertExactKeys(rule, "Declension rule", ["name", "forms"]);
+    assertExactKeys(rule, "Declension rule", ["name", "gender", "forms"]);
     const forms = objectValue(rule.forms, "Declension rule forms");
-    if (Object.keys(forms).some((key) => key !== "singular" && key !== "plural")) {
-      throw new Error("Declension rule forms can contain only singular and plural.");
-    }
+    if (Object.keys(forms).some((key) => key !== "singular" && key !== "plural")) throw new Error("Declension rule forms can contain only singular and plural.");
     const singular = normalizeTransform(forms.singular, "Singular transform");
     const plural = normalizeTransform(forms.plural, "Plural transform");
     if (!singular && !plural) throw new Error("A declension rule must define at least one form.");
+    const name = nonEmptyString(rule.name, "Declension rule name");
+    if (name === "Irregular" || name.startsWith(":")) throw new Error(`“${name}” is reserved; choose another declension rule name.`);
+    if (rule.gender !== null && rule.gender !== "masculine" && rule.gender !== "feminine") throw new Error(`Declension rule ${name} gender must be masculine, feminine, or null.`);
     return {
-      name: nonEmptyString(rule.name, "Declension rule name"),
+      name,
+      gender: rule.gender,
       forms: { ...(singular ? { singular } : {}), ...(plural ? { plural } : {}) },
     };
   });
   assertUniqueNames(declensionRules, "declension rule");
-  const ruleNames = new Set(declensionRules.map((rule) => rule.name));
-
-  const inferenceSets = payload.inferenceSets.map((raw) => {
-    const set = objectValue(raw, "Inference set");
-    assertExactKeys(set, "Inference set", ["name", "declensionRules"]);
-    if (!Array.isArray(set.declensionRules)) throw new Error("Inference set declensionRules must be an array.");
-    const declensionRules = [...new Set(set.declensionRules.map((name) => nonEmptyString(name, "Inference rule name")))];
-    for (const name of declensionRules) if (!ruleNames.has(name)) throw new Error(`Inference set references unknown declension rule: ${name}.`);
-    return { name: nonEmptyString(set.name, "Inference set name"), declensionRules };
-  });
-  assertUniqueNames(inferenceSets, "inference set");
-  const inferenceSetNames = new Set(inferenceSets.map((set) => set.name));
-
-  const syntaxRules = payload.syntaxRules.map((raw) => {
-    const syntax = objectValue(raw, "Syntax rule");
-    assertExactKeys(syntax, "Syntax rule", ["name", "markers", "markerOrder", "fields", "inferenceSet", "excludedArticleGroups"]);
-    if (!Array.isArray(syntax.markers) || !Array.isArray(syntax.fields) || !Array.isArray(syntax.excludedArticleGroups)) {
-      throw new Error("Syntax rule markers, fields, and excludedArticleGroups must be arrays.");
-    }
-    if (syntax.markerOrder !== "any") throw new Error("Syntax markerOrder must be any.");
-
-    const markers = syntax.markers.map((rawMarker) => {
-      const marker = objectValue(rawMarker, "Syntax marker");
-      if (marker.kind === "gender") {
-        assertExactKeys(marker, "Gender syntax marker", ["kind", "required"]);
-        return { kind: "gender", required: Boolean(marker.required) };
-      }
-      if (marker.kind === "tantum" && (marker.value === "singular" || marker.value === "plural")) {
-        assertExactKeys(marker, "Tantum syntax marker", ["kind", "required", "value"]);
-        return { kind: "tantum", required: Boolean(marker.required), value: marker.value };
-      }
-      throw new Error("Syntax marker must be a gender marker or a singular/plural tantum marker.");
-    });
-    if (markers.filter((marker) => marker.kind === "gender").length > 1) throw new Error("A syntax rule can contain at most one gender marker.");
-    if (markers.filter((marker) => marker.kind === "tantum").length > 1) throw new Error("A syntax rule can contain at most one tantum marker.");
-
-    const fields = syntax.fields.map((rawField) => {
-      const field = objectValue(rawField, "Syntax field");
-      if (field.kind === "noun" && (field.number === "singular" || field.number === "plural")) {
-        assertExactKeys(field, "Noun syntax field", ["kind", "number"]);
-        return { kind: "noun", number: field.number };
-      }
-      if (field.kind === "article" && (field.number === "singular" || field.number === "plural") && (field.definiteness === "definite" || field.definiteness === "indefinite")) {
-        assertExactKeys(field, "Article syntax field", ["kind", "definiteness", "number"]);
-        if (field.definiteness === "indefinite" && field.number !== "singular") throw new Error("Indefinite article fields must be singular.");
-        return { kind: "article", number: field.number, definiteness: field.definiteness };
-      }
-      throw new Error("Syntax field must be a noun form or article field.");
-    });
-    if (!fields.some((field) => field.kind === "noun")) throw new Error("A syntax rule must contain at least one noun field.");
-
-    const inferenceSet = nonEmptyString(syntax.inferenceSet, "Syntax inference set");
-    if (!inferenceSetNames.has(inferenceSet)) throw new Error("Syntax rule references an unknown inference set.");
-
-    const name = nonEmptyString(syntax.name, "Syntax name");
-    const tantum = markers.find((marker) => marker.kind === "tantum");
-    if (tantum && fields.some((field) => field.number !== tantum.value)) {
-      throw new Error(`Noun syntax ${name} has a ${tantum.value}-only marker but contains a field of the other number.`);
-    }
-    if (!fields.some((field) => field.kind === "article")) {
-      const gender = markers.find((marker) => marker.kind === "gender");
-      if (!gender?.required || !tantum?.required) {
-        throw new Error(`Articleless noun syntax ${name} must require explicit gender and singular/plural-only markers.`);
-      }
-    }
-
-    const excludedArticleGroups = [...new Set(syntax.excludedArticleGroups.map((groupName) => nonEmptyString(groupName, "Excluded article group")))];
-    for (const groupName of excludedArticleGroups) {
-      if (!articleGroupNames.has(groupName)) throw new Error(`Syntax rule references unknown article group: ${groupName}.`);
-    }
-
-    return {
-      name,
-      markers,
-      markerOrder: "any",
-      fields,
-      inferenceSet,
-      excludedArticleGroups,
-    };
-  });
-  assertUniqueNames(syntaxRules, "syntax rule");
-  return { declensionRules, inferenceSets, syntaxRules, articleLetters, articleGroups };
+  return { declensionRules, articleLetters, articleGroups };
 }
 
-function validateState(cards, nounMorphology) {
+function normalizeAnswerKeywords(value) {
+  const raw = objectValue(value, "Answer keywords");
+  assertExactKeys(raw, "Answer keywords", ["masculine", "feminine", "singularOnly", "pluralOnly"]);
+  const keywords = Object.fromEntries(["masculine", "feminine", "singularOnly", "pluralOnly"].map((key) => {
+    const keyword = String(raw[key] ?? "").normalize("NFC").trim().toLocaleLowerCase("it-IT");
+    if (!keyword || /\s|[|:"'’]/u.test(keyword)) throw new Error("Each answer keyword must be one token without spaces, quotes, or apostrophes.");
+    return [key, keyword];
+  }));
+  if (new Set(Object.values(keywords)).size !== 4) throw new Error("Each answer keyword must be different.");
+  return keywords;
+}
+
+function normalizeStudyPreferences(value) {
+  const raw = objectValue(value, "Study preferences");
+  assertExactKeys(raw, "Study preferences", ["answerKeywords", "fullDeclensionRules", "fullDeclensionCards"]);
+  if (!Array.isArray(raw.fullDeclensionRules) || !Array.isArray(raw.fullDeclensionCards)) {
+    throw new Error("Study preferences need fullDeclensionRules and fullDeclensionCards arrays.");
+  }
+  const cards = raw.fullDeclensionCards.map((id) => {
+    if (!Number.isSafeInteger(id)) throw new Error("Full-declension card ids must be integers.");
+    return id;
+  });
+  return {
+    answerKeywords: normalizeAnswerKeywords(raw.answerKeywords),
+    fullDeclensionRules: [...new Set(raw.fullDeclensionRules.map((name) => nonEmptyString(name, "Full-declension rule name")))],
+    fullDeclensionCards: [...new Set(cards)],
+  };
+}
+
+/** Study preferences without references to deleted nouns or rules. */
+function prunedStudyPreferences(preferences, cards, nounMorphology) {
+  const ruleNames = new Set(nounMorphology.declensionRules.map((rule) => rule.name));
+  const nounIds = new Set(cards.filter((card) => card.type === "noun").map((card) => card.id));
+  return {
+    ...preferences,
+    fullDeclensionRules: preferences.fullDeclensionRules.filter((name) => ruleNames.has(name)),
+    fullDeclensionCards: preferences.fullDeclensionCards.filter((id) => nounIds.has(id)),
+  };
+}
+
+function validateState(cards, nounMorphology, studyPreferences) {
   const duplicateKeys = new Set();
   for (const card of cards) {
     const duplicateKey = cardDuplicateKey(card);
@@ -506,6 +370,7 @@ function validateState(cards, nounMorphology) {
     if (declension.kind === "rule") {
       const rule = rules.get(declension.rule);
       if (!rule) throw new Error(`${label} references unknown declension rule ${declension.rule}.`);
+      if (rule.gender !== null && rule.gender !== card.details.gender) throw new Error(`${label} is ${card.details.gender}, but “${rule.name}” is only for ${rule.gender} nouns.`);
       forms = { singular: Boolean(rule.forms.singular), plural: Boolean(rule.forms.plural) };
     } else {
       forms = { singular: Boolean(declension.singular), plural: Boolean(declension.plural) };
@@ -517,12 +382,21 @@ function validateState(cards, nounMorphology) {
       if (group !== null && !groupNames.has(group)) throw new Error(`${label} references unknown article group ${group}.`);
     }
   }
+
+  for (const name of studyPreferences.fullDeclensionRules) {
+    if (!rules.has(name)) throw new Error(`Study preferences name unknown declension rule ${name}.`);
+  }
+  const nounIds = new Set(cards.filter((card) => card.type === "noun").map((card) => card.id));
+  for (const id of studyPreferences.fullDeclensionCards) {
+    if (!nounIds.has(id)) throw new Error(`Study preferences name unknown noun card ${id}.`);
+  }
 }
 
 function emptyState() {
   return {
     cards: [],
     nounMorphology: structuredClone(defaultNounMorphology),
+    studyPreferences: structuredClone(defaultStudyPreferences),
     updatedAt: null,
   };
 }
@@ -537,15 +411,17 @@ async function readState() {
     const parsed = objectValue(JSON.parse(await readFile(dataPath, "utf8")), "Inventory state");
     if (!Array.isArray(parsed.cards)) throw new Error("Inventory state needs a cards array.");
     if (!parsed.nounMorphology) throw new Error("Inventory state needs nounMorphology.");
+    if (!parsed.studyPreferences) throw new Error("Inventory state needs studyPreferences.");
     const cards = parsed.cards.map((card) => normalizeCard(card, { requireId: true }));
     const nounMorphology = normalizeNounMorphology(parsed.nounMorphology);
+    const studyPreferences = normalizeStudyPreferences(parsed.studyPreferences);
     const updatedAt = parsed.updatedAt === null || parsed.updatedAt === undefined
       ? null
       : typeof parsed.updatedAt === "string" && Number.isFinite(Date.parse(parsed.updatedAt))
         ? parsed.updatedAt
         : (() => { throw new Error("Inventory state has an invalid updatedAt timestamp."); })();
-    validateState(cards, nounMorphology);
-    return { cards, nounMorphology, updatedAt };
+    validateState(cards, nounMorphology, studyPreferences);
+    return { cards, nounMorphology, studyPreferences, updatedAt };
   } catch (error) {
     if (error?.code === "ENOENT") return emptyState();
     throw error;
@@ -560,7 +436,7 @@ async function writeAtomic(path, contents) {
 }
 
 async function writeState(state) {
-  validateState(state.cards, state.nounMorphology);
+  validateState(state.cards, state.nounMorphology, state.studyPreferences);
   await writeAtomic(dataPath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
@@ -574,12 +450,13 @@ function mutateCards(operation) {
   return queueWrite(async () => {
     const state = await readState();
     const result = await operation(state.cards);
-    await writeState({ ...state, updatedAt: new Date().toISOString() });
+    const studyPreferences = prunedStudyPreferences(state.studyPreferences, state.cards, state.nounMorphology);
+    await writeState({ ...state, studyPreferences, updatedAt: new Date().toISOString() });
     return result;
   });
 }
 
-function replaceStateIfNewer(cards, nounMorphology, updatedAt) {
+function replaceStateIfNewer(cards, nounMorphology, studyPreferences, updatedAt) {
   return queueWrite(async () => {
     const current = await readState();
     const incomingTime = Date.parse(updatedAt);
@@ -587,10 +464,11 @@ function replaceStateIfNewer(cards, nounMorphology, updatedAt) {
     if (incomingTime < currentTime) return { conflict: true, state: current };
     if (incomingTime === currentTime) {
       const sameState = JSON.stringify(cards) === JSON.stringify(current.cards)
-        && JSON.stringify(nounMorphology) === JSON.stringify(current.nounMorphology);
+        && JSON.stringify(nounMorphology) === JSON.stringify(current.nounMorphology)
+        && JSON.stringify(studyPreferences) === JSON.stringify(current.studyPreferences);
       return sameState ? { conflict: false, state: current } : { conflict: true, state: current };
     }
-    const state = { cards, nounMorphology, updatedAt };
+    const state = { cards, nounMorphology, studyPreferences, updatedAt };
     await writeState(state);
     return { conflict: false, state };
   });
@@ -625,11 +503,13 @@ const server = createServer(async (req, res) => {
         const body = await readJsonBody(req);
         if (!body || !Array.isArray(body.cards)) return sendJson(res, 400, { error: "PUT /state requires a cards array." }, cors);
         if (!body.nounMorphology) return sendJson(res, 400, { error: "PUT /state requires nounMorphology." }, cors);
+        if (!body.studyPreferences) return sendJson(res, 400, { error: "PUT /state requires studyPreferences." }, cors);
         if (typeof body.updatedAt !== "string" || !Number.isFinite(Date.parse(body.updatedAt))) return sendJson(res, 400, { error: "PUT /state requires a valid updatedAt timestamp." }, cors);
         const cards = body.cards.map((card) => normalizeCard(card, { requireId: true }));
         const nounMorphology = normalizeNounMorphology(body.nounMorphology);
-        validateState(cards, nounMorphology);
-        const result = await replaceStateIfNewer(cards, nounMorphology, body.updatedAt);
+        const studyPreferences = normalizeStudyPreferences(body.studyPreferences);
+        validateState(cards, nounMorphology, studyPreferences);
+        const result = await replaceStateIfNewer(cards, nounMorphology, studyPreferences, body.updatedAt);
         if (result.conflict) return sendJson(res, 409, { error: "Remote inventory is newer.", state: result.state }, cors);
         return sendJson(res, 200, result.state, cors);
       }

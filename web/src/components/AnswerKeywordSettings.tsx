@@ -1,41 +1,35 @@
-import { useState } from "react";
-import { defaultAnswerKeywords, type AnswerKeywords } from "../study/setup";
+import { useEffect, useState } from "react";
+import { defaultAnswerKeywords, normalizeAnswerKeywords, type AnswerKeywords } from "../study/preferences";
 
 const fields: { key: keyof AnswerKeywords; label: string; example: (keywords: AnswerKeywords) => string }[] = [
   { key: "masculine", label: "Masculine", example: (keywords) => `${keywords.masculine} l’amico` },
   { key: "feminine", label: "Feminine", example: (keywords) => `${keywords.feminine} l’amica` },
   { key: "singularOnly", label: "Singular-only", example: (keywords) => `${keywords.feminine} ${keywords.singularOnly} Venezia` },
-  { key: "pluralOnly", label: "Plural-only", example: (keywords) => `${keywords.feminine} ${keywords.pluralOnly} nozze` },
+  { key: "pluralOnly", label: "Plural-only", example: (keywords) => `${keywords.pluralOnly} i pantaloni` },
 ];
 
-export function AnswerKeywordSettings({ keywords, onChange }: { keywords: AnswerKeywords; onChange: (keywords: AnswerKeywords) => void }) {
+export function AnswerKeywordSettings({ keywords, onChange }: { keywords: AnswerKeywords; onChange: (keywords: AnswerKeywords) => Promise<void> }) {
   const [draft, setDraft] = useState(keywords);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function applyKeywords() {
-    const normalized = Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, value.trim().toLocaleLowerCase("it-IT")])) as AnswerKeywords;
-    const values = Object.values(normalized);
+  useEffect(() => setDraft(keywords), [keywords]);
+
+  async function save(next: AnswerKeywords, success: string) {
     setMessage("");
-    if (values.some((value) => !value || /\s|[|:"]/u.test(value))) {
-      setError("Each keyword must be one token without spaces or punctuation separators.");
-      return;
-    }
-    if (new Set(values).size !== values.length) {
-      setError("Each keyword must be different.");
-      return;
-    }
     setError("");
-    onChange(normalized);
-    setDraft(normalized);
-    setMessage("Saved on this device.");
-  }
-
-  function resetKeywords() {
-    setDraft(defaultAnswerKeywords);
-    onChange(defaultAnswerKeywords);
-    setError("");
-    setMessage("Defaults restored.");
+    setSaving(true);
+    try {
+      const normalized = normalizeAnswerKeywords(next);
+      await onChange(normalized);
+      setDraft(normalized);
+      setMessage(success);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The keywords could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return <div className="keyword-settings">
@@ -49,8 +43,8 @@ export function AnswerKeywordSettings({ keywords, onChange }: { keywords: Answer
     {error && <p className="form-error" role="alert">{error}</p>}
     {message && <p className="success-message" role="status">{message}</p>}
     <div className="button-row">
-      <button type="button" className="text-button" onClick={resetKeywords}>Restore defaults</button>
-      <button type="button" className="neutral-button" onClick={applyKeywords}>Save keywords</button>
+      <button type="button" className="text-button" disabled={saving} onClick={() => void save(defaultAnswerKeywords, "Defaults restored.")}>Restore defaults</button>
+      <button type="button" className="neutral-button" disabled={saving} onClick={() => void save(draft, "Keywords saved.")}>Save keywords</button>
     </div>
   </div>;
 }

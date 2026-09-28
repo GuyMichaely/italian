@@ -1,9 +1,4 @@
 import type { Flashcard } from "../cards/types";
-import {
-  cloneNounMorphology,
-  defaultNounMorphology,
-  normalizeNounMorphology,
-} from "../cards/nounMorphology";
 import { assertNoDuplicateCards, cloneCards } from "./cardCodec";
 import {
   clearLocalSnapshot,
@@ -11,7 +6,14 @@ import {
   writeLocalSnapshot,
   type InventorySnapshot,
 } from "./browser";
-import { assertInventoryState } from "./inventoryState";
+import {
+  assertInventoryState,
+  cloneInventoryState,
+  consistentInventoryState,
+  emptyInventoryState,
+  inventoryStatesEqual,
+  parseInventoryState,
+} from "./inventoryState";
 import { RemoteConflictError, RemoteSyncClient, type RemoteSnapshot } from "./remote";
 import type { SyncLoadPolicy } from "./settings";
 import type { CardStorage, InventoryState } from "./types";
@@ -52,11 +54,6 @@ function setSyncStatus(state: SyncStatusState) {
   for (const listener of syncListeners) listener(state);
 }
 
-function snapshotsEqual(left: InventorySnapshot | RemoteSnapshot, right: InventorySnapshot | RemoteSnapshot) {
-  return JSON.stringify(left.cards) === JSON.stringify(right.cards)
-    && JSON.stringify(left.nounMorphology) === JSON.stringify(right.nounMorphology);
-}
-
 function timestamp(value: string | null) {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -82,26 +79,11 @@ function nextTimestamp(...values: Array<string | null | undefined>) {
 }
 
 function emptySnapshot(): InventorySnapshot {
-  return {
-    cards: [],
-    nounMorphology: cloneNounMorphology(defaultNounMorphology),
-    updatedAt: null,
-  };
+  return { ...emptyInventoryState(), updatedAt: null };
 }
 
 function cloneSnapshot(snapshot: InventorySnapshot | RemoteSnapshot): InventorySnapshot {
-  return {
-    cards: cloneCards(snapshot.cards),
-    nounMorphology: cloneNounMorphology(snapshot.nounMorphology),
-    updatedAt: snapshot.updatedAt,
-  };
-}
-
-function cloneInventoryState(snapshot: InventoryState): InventoryState {
-  return {
-    cards: cloneCards(snapshot.cards),
-    nounMorphology: cloneNounMorphology(snapshot.nounMorphology),
-  };
+  return { ...cloneInventoryState(snapshot), updatedAt: snapshot.updatedAt };
 }
 
 export class SyncStorage implements CardStorage {
@@ -140,11 +122,7 @@ export class SyncStorage implements CardStorage {
     assertInventoryState(this.snapshot);
     setSyncStatus({ status: "syncing", message: "Syncing…" });
     try {
-      const saved = await this.remote.writeState({
-        cards: cloneCards(this.snapshot.cards),
-        nounMorphology: cloneNounMorphology(this.snapshot.nounMorphology),
-        updatedAt: this.snapshot.updatedAt,
-      });
+      const saved = await this.remote.writeState(cloneSnapshot(this.snapshot));
       this.acceptSavedState(saved);
     } catch (error) {
       if (error instanceof RemoteConflictError) {
@@ -153,18 +131,10 @@ export class SyncStorage implements CardStorage {
           setSyncStatus({ status: "pending", message: "Sync available" });
           return;
         }
-        this.snapshot = {
-          cards: cloneCards(this.snapshot.cards),
-          nounMorphology: cloneNounMorphology(this.snapshot.nounMorphology),
-          updatedAt: nextTimestamp(this.snapshot.updatedAt, error.state.updatedAt),
-        };
+        this.snapshot = { ...cloneSnapshot(this.snapshot), updatedAt: nextTimestamp(this.snapshot.updatedAt, error.state.updatedAt) };
         this.persistSnapshot();
         try {
-          const saved = await this.remote.writeState({
-            cards: cloneCards(this.snapshot.cards),
-            nounMorphology: cloneNounMorphology(this.snapshot.nounMorphology),
-            updatedAt: this.snapshot.updatedAt,
-          });
+          const saved = await this.remote.writeState(cloneSnapshot(this.snapshot));
           this.acceptSavedState(saved);
         } catch (retryError) {
           if (retryError instanceof RemoteConflictError) {
@@ -182,7 +152,7 @@ export class SyncStorage implements CardStorage {
 
   private async reconcile(local: InventorySnapshot, remote: RemoteSnapshot, force: boolean) {
     this.latestRemoteUpdatedAt = remote.updatedAt;
-    if (snapshotsEqual(local, remote)) {
+    if (inventoryStatesEqual(local, remote)) {
       this.snapshot = cloneSnapshot(newerSide(local, remote) === "remote" ? remote : local);
       this.persistSnapshot();
       setSyncStatus({ status: "synced", message: "Synced" });
@@ -202,11 +172,7 @@ export class SyncStorage implements CardStorage {
       return;
     }
 
-    this.snapshot = {
-      cards: cloneCards(local.cards),
-      nounMorphology: cloneNounMorphology(local.nounMorphology),
-      updatedAt: local.updatedAt ?? nextTimestamp(remote.updatedAt),
-    };
+    this.snapshot = { ...cloneSnapshot(local), updatedAt: local.updatedAt ?? nextTimestamp(remote.updatedAt) };
     this.persistSnapshot();
     await this.pushLocal();
   }
@@ -231,11 +197,7 @@ export class SyncStorage implements CardStorage {
   private async mutateCards(operation: (cards: Flashcard[]) => Flashcard[]) {
     await this.initialize();
     const current = this.snapshot ?? emptySnapshot();
-    const next = {
-      cards: cloneCards(operation(cloneCards(current.cards))),
-      nounMorphology: cloneNounMorphology(current.nounMorphology),
-    };
-    assertInventoryState(next);
+    const next = assertInventoryState(consistentInventoryState({ ...current, cards: operation(cloneCards(current.cards)) }));
     this.snapshot = {
       ...next,
       updatedAt: nextTimestamp(current.updatedAt, this.latestRemoteUpdatedAt),
@@ -286,10 +248,7 @@ export class SyncStorage implements CardStorage {
   }
 
   async replaceInventory(state: InventoryState) {
-    const replacement = assertInventoryState({
-      cards: cloneCards(state.cards),
-      nounMorphology: normalizeNounMorphology(state.nounMorphology),
-    });
+    const replacement = parseInventoryState(consistentInventoryState(state), "Inventory");
     const currentUpdatedAt = this.snapshot?.updatedAt ?? null;
     this.snapshot = {
       ...cloneInventoryState(replacement),

@@ -1,11 +1,16 @@
 import type { CardType, Flashcard } from "../cards/types";
+import type { NounMorphology } from "../cards/nounMorphology";
 import { storageKey } from "../storage/keys";
+import { takesArticles } from "./nounAnswers";
 
 export type PromptLanguage = "english" | "italian";
 export type PromptMode = PromptLanguage | "both";
 export type ScopeMode = "all" | "only" | "exclude";
+/** Words: recall each word from a prompt. Articles: an endless drill of noun articles. */
+export type StudyMode = "words" | "articles";
 
 export type StudySetup = {
+  studyMode: StudyMode;
   scopeMode: ScopeMode;
   /** Scope keys shaped like `type:noun`, `set:Basics`, or `tag:tricky`. */
   selectedScopes: string[];
@@ -15,14 +20,8 @@ export type StudySetup = {
   englishFirstWhenBoth: boolean;
 };
 
-export type AnswerKeywords = {
-  masculine: string;
-  feminine: string;
-  singularOnly: string;
-  pluralOnly: string;
-};
-
 export const defaultStudySetup: StudySetup = {
+  studyMode: "words",
   scopeMode: "all",
   selectedScopes: [],
   promptMode: "english",
@@ -31,21 +30,14 @@ export const defaultStudySetup: StudySetup = {
   englishFirstWhenBoth: false,
 };
 
-export const defaultAnswerKeywords: AnswerKeywords = {
-  masculine: "m",
-  feminine: "f",
-  singularOnly: "s",
-  pluralOnly: "p",
-};
-
 const studySetupKey = storageKey("study-setup");
-const answerKeywordsKey = storageKey("answer-keywords");
 
 export function readStudySetup(): StudySetup {
   if (typeof window === "undefined") return defaultStudySetup;
   try {
     const parsed = JSON.parse(window.localStorage.getItem(studySetupKey) ?? "{}") as Partial<StudySetup>;
     return {
+      studyMode: parsed.studyMode === "articles" ? "articles" : "words",
       scopeMode: parsed.scopeMode === "only" || parsed.scopeMode === "exclude" ? parsed.scopeMode : "all",
       selectedScopes: Array.isArray(parsed.selectedScopes) ? parsed.selectedScopes.filter((item): item is string => typeof item === "string") : [],
       promptMode: parsed.promptMode === "italian" || parsed.promptMode === "both" ? parsed.promptMode : "english",
@@ -66,27 +58,6 @@ export function writeStudySetup(setup: StudySetup) {
   }
 }
 
-export function readAnswerKeywords(): AnswerKeywords {
-  if (typeof window === "undefined") return defaultAnswerKeywords;
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(answerKeywordsKey) ?? "{}") as Partial<AnswerKeywords>;
-    return Object.fromEntries(Object.entries(defaultAnswerKeywords).map(([key, fallback]) => {
-      const stored = parsed[key as keyof AnswerKeywords];
-      return [key, typeof stored === "string" && stored.trim() ? stored.trim() : fallback];
-    })) as AnswerKeywords;
-  } catch {
-    return defaultAnswerKeywords;
-  }
-}
-
-export function writeAnswerKeywords(keywords: AnswerKeywords) {
-  try {
-    window.localStorage.setItem(answerKeywordsKey, JSON.stringify(keywords));
-  } catch {
-    // Keyword customization is optional; verification still works with the current in-memory values.
-  }
-}
-
 export function cardScopeKeys(card: Flashcard) {
   return [`type:${card.type}`, ...(card.setName ? [`set:${card.setName}`] : []), ...card.tags.map((tag) => `tag:${tag}`)];
 }
@@ -100,9 +71,11 @@ export function cardsInScope(cards: Flashcard[], setup: Pick<StudySetup, "scopeM
   });
 }
 
-export function studyItemCount(cards: Flashcard[], setup: StudySetup) {
-  const scoped = cardsInScope(cards, setup).length;
-  return setup.promptMode === "both" && !setup.oneDirectionPerWord ? scoped * 2 : scoped;
+/** Prompts in one words round, or the nouns the endless articles drill draws from. */
+export function studyItemCount(cards: Flashcard[], setup: StudySetup, morphology: NounMorphology) {
+  const scoped = cardsInScope(cards, setup);
+  if (setup.studyMode === "articles") return scoped.filter((card) => takesArticles(card, morphology)).length;
+  return setup.promptMode === "both" && !setup.oneDirectionPerWord ? scoped.length * 2 : scoped.length;
 }
 
 export function scopeKeyLabel(key: string, typeLabels: Record<CardType, string>) {

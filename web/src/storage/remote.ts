@@ -1,13 +1,7 @@
-import {
-  normalizeNounMorphology,
-  type NounMorphology,
-} from "../cards/nounMorphology";
-import { parseCardsResponse } from "./cardCodec";
-import { assertInventoryState } from "./inventoryState";
+import { parseInventoryState } from "./inventoryState";
+import type { InventoryState } from "./types";
 
-export interface RemoteSnapshot {
-  cards: ReturnType<typeof parseCardsResponse>;
-  nounMorphology: NounMorphology;
+export interface RemoteSnapshot extends InventoryState {
   updatedAt: string | null;
 }
 
@@ -28,15 +22,9 @@ function stateUrl(endpoint: string) {
 }
 
 function parseSnapshot(value: unknown): RemoteSnapshot {
-  const payload = value as { cards?: unknown; nounMorphology?: unknown; updatedAt?: unknown };
-  if (!payload?.nounMorphology) throw new Error("Remote state does not contain nounMorphology.");
-  const state = {
-    cards: parseCardsResponse(payload),
-    nounMorphology: normalizeNounMorphology(payload.nounMorphology),
-  };
-  assertInventoryState(state);
+  const payload = value as { updatedAt?: unknown } | null;
   return {
-    ...state,
+    ...parseInventoryState(value, "Remote state"),
     updatedAt: typeof payload?.updatedAt === "string" && payload.updatedAt ? payload.updatedAt : null,
   };
 }

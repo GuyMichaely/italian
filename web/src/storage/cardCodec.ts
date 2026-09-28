@@ -176,15 +176,3 @@ export function normalizeCard(value: unknown): Flashcard {
   assertExactKeys(details, `Adverb card ${id} details`, []);
   return { ...common, type: "adverb", italian, details: {} };
 }
-
-export function parseCardsResponse(value: unknown): Flashcard[] {
-  const payload = value as { cards?: unknown };
-  const cards = Array.isArray(value) ? value : payload && Array.isArray(payload.cards) ? payload.cards : null;
-  if (!cards) throw new Error("Remote API did not return a cards array.");
-  return cards.map(normalizeCard);
-}
-
-export function parseCardResponse(value: unknown): Flashcard {
-  const payload = value as { card?: unknown };
-  return normalizeCard(payload && payload.card ? payload.card : value);
-}

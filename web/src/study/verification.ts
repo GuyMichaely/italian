@@ -1,22 +1,14 @@
 import type { Flashcard } from "../cards/types";
-import { resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
-import type { AnswerKeywords } from "./setup";
-import { evaluateNounAnswer } from "./nounSyntax";
+import type { NounMorphology } from "../cards/nounMorphology";
+import { checkArticleAnswer, checkWordAnswer, type AnswerCheck } from "./nounAnswers";
+import type { StudyItem } from "./order";
+import type { StudyPreferences } from "./preferences";
 
 export type VerificationField = {
   key: string;
   label: string;
   expected: string;
 };
-
-export function inferArticle(fullForm: string | undefined, noun: string | undefined, fallback: string) {
-  if (!fullForm || !noun) return fallback;
-  if (fullForm.endsWith(noun)) {
-    const article = fullForm.slice(0, -noun.length).trim();
-    return article || fallback;
-  }
-  return fallback;
-}
 
 export function normalizeAnswer(value: string) {
   return value
@@ -25,10 +17,6 @@ export function normalizeAnswer(value: string) {
     .toLocaleLowerCase("it-IT")
     .replace(/[’`]/g, "'")
     .replace(/\s+/g, " ");
-}
-
-export function keywordMatches(value: string, configured: string) {
-  return normalizeAnswer(value) === normalizeAnswer(configured);
 }
 
 export function standardAdjectivePattern(masculineSingular: string) {
@@ -62,12 +50,19 @@ export function matchesExpected(actual: string[], expected: string[]) {
   return actual.length === expected.length && actual.every((value, index) => normalizeAnswer(value) === normalizeAnswer(expected[index] ?? ""));
 }
 
-export function verifyPowerAnswer(card: Flashcard, rawValue: string, keywords: AnswerKeywords, morphology: NounMorphology) {
-  const answer = rawValue.trim();
-
+/** Checks a typed answer for a study prompt; nouns explain what was wrong. */
+export function checkTypedAnswer(item: StudyItem, rawValue: string, morphology: NounMorphology, preferences: StudyPreferences): AnswerCheck {
+  const { card } = item;
   if (card.type === "noun") {
-    return evaluateNounAnswer(card, answer, morphology, keywords).result === "correct";
+    return item.mode === "article"
+      ? checkArticleAnswer(card, rawValue, morphology)
+      : checkWordAnswer(card, rawValue, { morphology, preferences, genderGiven: item.promptGender !== null });
   }
+  return { correct: verifyPowerAnswer(card, rawValue), problems: [] };
+}
+
+export function verifyPowerAnswer(card: Exclude<Flashcard, { type: "noun" }>, rawValue: string) {
+  const answer = rawValue.trim();
 
   if (card.type === "verb") {
     const d = card.details;
@@ -85,18 +80,7 @@ export function verifyPowerAnswer(card: Flashcard, rawValue: string, keywords: A
   return matchesExpected(adjectiveParts, [d.masculineSingular || card.italian, d.feminineSingular, d.masculinePlural, d.femininePlural]);
 }
 
-export function verificationFields(card: Flashcard, morphology?: NounMorphology): VerificationField[] {
-  if (card.type === "noun") {
-    if (!morphology) throw new Error("Noun verification fields require noun morphology.");
-    const forms = resolvedNounForms(card, morphology);
-    return [
-      { key: "singular", label: "Singular noun", expected: forms.singular },
-      { key: "plural", label: "Plural noun", expected: forms.plural },
-      { key: "definiteSingularArticle", label: "Definite singular article", expected: forms.definiteSingularArticle },
-      { key: "definitePluralArticle", label: "Definite plural article", expected: forms.definitePluralArticle },
-      { key: "indefiniteArticle", label: "Indefinite article", expected: forms.indefiniteArticle },
-    ].filter((field) => Boolean(field.expected));
-  }
+export function verificationFields(card: Exclude<Flashcard, { type: "noun" }>): VerificationField[] {
   if (card.type === "verb") {
     const d = card.details;
     return [

@@ -6,8 +6,10 @@ import {
   generateNounForm,
   inferRuleDeclension,
   nounArticleProfiles,
+  predictedPlurals,
   recognizeNounForm,
   resolveNounDetails,
+  ruleAllowsGender,
   ruleSupportsFormNumber,
   type NounArticleProfile,
   type NounDeclension,
@@ -65,7 +67,7 @@ function draftDeclension(draft: NounDraft, singular: string, plural: string, mor
   if (draft.rule === irregularRuleValue) return { declension: { kind: "irregular", singular, plural } };
 
   if (!draft.rule) {
-    const inferred = inferRuleDeclension({ singular, plural }, morphology);
+    const inferred = inferRuleDeclension({ singular, plural }, draft.gender, morphology);
     if (inferred) return { declension: inferred };
     return {
       error: singular && plural
@@ -76,6 +78,7 @@ function draftDeclension(draft: NounDraft, singular: string, plural: string, mor
 
   const rule = morphology.declensionRules.find((item) => item.name === draft.rule);
   if (!rule) return { error: `The rule “${draft.rule}” no longer exists.` };
+  if (!ruleAllowsGender(rule, draft.gender)) return { error: `“${rule.name}” is only for ${rule.gender} nouns.` };
   if (singular && !ruleSupportsFormNumber(rule, "singular")) return { error: `“${rule.name}” has no singular form.` };
   if (plural && !ruleSupportsFormNumber(rule, "plural")) return { error: `“${rule.name}” has no plural form.` };
   const base = singular ? recognizeNounForm(rule, singular, "singular") : recognizeNounForm(rule, plural, "plural");
@@ -140,7 +143,7 @@ export function nounDraftFromCard(card: NounCard, morphology: NounMorphology): N
   };
   if (details.declension.kind === "irregular") return draft;
   const declension = details.declension;
-  const automatic = inferRuleDeclension({ singular: forms.singular, plural: forms.plural }, morphology);
+  const automatic = inferRuleDeclension({ singular: forms.singular, plural: forms.plural }, details.gender, morphology);
   const automaticMatches = automatic?.rule === declension.rule && automatic.base === declension.base;
   return { ...draft, rule: automaticMatches ? "" : declension.rule };
 }
@@ -167,19 +170,11 @@ export function spellingGroup(word: string, morphology: NounMorphology) {
   return word.trim() ? articleGroupForWord(word, morphology) ?? "no match" : null;
 }
 
-/** Suggests a plural from the most specific two-number rule whose singular suffix matches. */
-export function suggestedPlural(singular: string, morphology: NounMorphology) {
-  const word = singular.normalize("NFC").trim();
-  if (!word) return "";
-  let best: { suffix: string; plural: string } | null = null;
-  for (const rule of morphology.declensionRules) {
-    const singularSuffix = rule.forms.singular?.suffix;
-    if (!singularSuffix || !rule.forms.plural) continue;
-    const base = recognizeNounForm(rule, word, "singular");
-    if (base === null || (best && best.suffix.length >= singularSuffix.length)) continue;
-    best = { suffix: singularSuffix, plural: generateNounForm(rule, base, "plural") ?? "" };
-  }
-  return best?.plural ?? "";
+/** Suggests the plural the rules predict for this singular and gender; empty when they don't agree on one. */
+export function suggestedPlural(singular: string, gender: NounGender, morphology: NounMorphology) {
+  if (!singular.trim()) return "";
+  const plurals = predictedPlurals(singular, gender, morphology);
+  return plurals.length === 1 ? plurals[0]! : "";
 }
 
 export function joinArticle(article: string, noun: string) {

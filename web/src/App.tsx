@@ -38,14 +38,14 @@ import {
 import {
   cardScopeKeys,
   cardsInScope,
-  readAnswerKeywords,
   readStudySetup,
-  writeAnswerKeywords,
   writeStudySetup,
-  type AnswerKeywords,
   type PromptLanguage,
   type StudySetup,
 } from "./study/setup";
+import { articleDrillPool, drawArticleCard } from "./study/articleDrill";
+import { cloneStudyPreferences, defaultStudyPreferences, prunedStudyPreferences, type StudyPreferences } from "./study/preferences";
+import { promptGender } from "./study/prompts";
 import { StudyView, type StudyScopeOption } from "./views/StudyView";
 import { appendMistakeReviewSet, availableReviewItems, type MistakeReviewSet } from "./study/reviews";
 import { WordsView, type WordsTypeFilter } from "./views/WordsView";
@@ -91,7 +91,9 @@ export default function Home() {
   const [revealed, setRevealed] = useState(false);
   const [verificationResult, setVerificationResult] = useState<"correct" | "wrong" | null>(null);
   const [submittedAnswer, setSubmittedAnswer] = useState("");
-  const [answerKeywords, setAnswerKeywords] = useState<AnswerKeywords>(readAnswerKeywords);
+  const [submittedProblems, setSubmittedProblems] = useState<string[]>([]);
+  const [studyPreferences, setStudyPreferences] = useState<StudyPreferences>(() => cloneStudyPreferences(defaultStudyPreferences));
+  const [articleItems, setArticleItems] = useState<StudyItem[]>([]);
   const [directionSeed, setDirectionSeed] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now() >>> 0);
   const [selectedInventoryTags, setSelectedInventoryTags] = useState<string[]>([]);
@@ -108,7 +110,8 @@ export default function Home() {
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
   const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
 
-  const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
+  const { studyMode, promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
+  const articleMode = studyMode === "articles";
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
   const tags = useMemo(() => Array.from(new Set(cards.flatMap((card) => card.tags))).sort((a, b) => a.localeCompare(b)), [cards]);
   const suggestedMistakeTagName = useMemo(() => {
@@ -123,28 +126,32 @@ export default function Home() {
   ], [setNames, tags]);
   const scopedCards = useMemo(() => cardsInScope(cards, setup), [cards, setup]);
   const allStudyItems = useMemo(() => scopedCards.flatMap((card): StudyItem[] => {
-    if (promptMode === "english" || promptMode === "italian") {
-      return [{ key: `${card.id}:${promptMode}`, card, promptLanguage: promptMode }];
-    }
-    if (oneDirectionPerWord) {
-      const promptLanguage: PromptLanguage = Math.abs((card.id * 31) + directionSeed) % 2 === 0 ? "english" : "italian";
-      return [{ key: `${card.id}:${promptLanguage}`, card, promptLanguage }];
-    }
-    return [
-      { key: `${card.id}:english`, card, promptLanguage: "english" },
-      { key: `${card.id}:italian`, card, promptLanguage: "italian" },
-    ];
-  }), [directionSeed, oneDirectionPerWord, promptMode, scopedCards]);
+    const item = (promptLanguage: PromptLanguage): StudyItem => ({
+      key: `${card.id}:${promptLanguage}`,
+      card,
+      mode: "word",
+      promptLanguage,
+      promptGender: promptGender(card, cards, promptLanguage, nounMorphology),
+    });
+    if (promptMode === "english" || promptMode === "italian") return [item(promptMode)];
+    if (oneDirectionPerWord) return [item(Math.abs((card.id * 31) + directionSeed) % 2 === 0 ? "english" : "italian")];
+    return [item("english"), item("italian")];
+  }), [cards, directionSeed, nounMorphology, oneDirectionPerWord, promptMode, scopedCards]);
+  const articlePool = useMemo(() => articleDrillPool(scopedCards, nounMorphology), [nounMorphology, scopedCards]);
   const availableReviewSets = useMemo(() => reviewSets.map((set) => ({ ...set, items: availableReviewItems(set, cards) })), [reviewSets, cards]);
   const activeReviewSet = availableReviewSets.find((set) => set.id === activeReviewSetId);
   const studyItems = useMemo(() => {
+    if (articleMode) return articleItems;
     const randomized = shuffled(activeReviewSet ? activeReviewSet.items : allStudyItems, shuffleSeed);
     return englishFirstWhenBoth && promptMode === "both" && !oneDirectionPerWord
       ? withEnglishPromptFirst(randomized)
       : randomized;
-  }, [allStudyItems, englishFirstWhenBoth, activeReviewSet, oneDirectionPerWord, promptMode, shuffleSeed]);
-  const studyItem = !sessionComplete && studyItems.length && current < studyItems.length ? studyItems[current] : null;
-  const typingItalian = Boolean(typeToVerify && studyItem?.promptLanguage === "english");
+  }, [allStudyItems, articleItems, articleMode, englishFirstWhenBoth, activeReviewSet, oneDirectionPerWord, promptMode, shuffleSeed]);
+  // The drill always shows its latest draw, so resets of `current` elsewhere never replay an answered prompt.
+  const studyItem = articleMode
+    ? articleItems.at(-1) ?? null
+    : !sessionComplete && studyItems.length && current < studyItems.length ? studyItems[current] : null;
+  const typingItalian = Boolean(typeToVerify && (studyItem?.mode === "article" || studyItem?.promptLanguage === "english"));
   const missedItems = useMemo(() => mistakeKeys
     .map((key) => studyItems.find((item) => item.key === key))
     .filter((item): item is StudyItem => Boolean(item)), [mistakeKeys, studyItems]);
@@ -166,6 +173,7 @@ export default function Home() {
         if (!active) return;
         setCards(stored.cards);
         setNounMorphology(stored.nounMorphology);
+        setStudyPreferences(stored.studyPreferences);
       })
       .catch((error) => {
         if (!active) return;
@@ -175,9 +183,12 @@ export default function Home() {
     return () => { active = false; };
   }, [storage]);
 
+  // The articles drill has no fixed deck: it starts with one draw and draws again after each answer.
   useEffect(() => {
-    writeAnswerKeywords(answerKeywords);
-  }, [answerKeywords]);
+    if (!articleMode || articleItems.length) return;
+    const card = drawArticleCard(articlePool, null);
+    if (card) setArticleItems([articleItem(card, 0)]);
+  });
 
   useEffect(() => {
     function reply(result: ExtensionImportResult) {
@@ -263,6 +274,10 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKey);
   });
 
+  function articleItem(card: Flashcard, index: number): StudyItem {
+    return { key: `${card.id}:article:${index}`, card, mode: "article", promptLanguage: "italian", promptGender: promptGender(card, cards, "italian", nounMorphology) };
+  }
+
   function rate(result: "right" | "wrong" | "skipped") {
     if (!studyItems.length || !studyItem) return;
     setSession((value) => ({ ...value, [result]: value[result] + 1 }));
@@ -271,12 +286,13 @@ export default function Home() {
     advanceStudy(nextMistakeKeys);
   }
 
-  function verifyItalian(correct: boolean, answer: string) {
+  function verifyItalian(correct: boolean, answer: string, problems: string[]) {
     if (!studyItem || verificationResult) return;
     const result = correct ? "right" : "wrong";
     setSession((value) => ({ ...value, [result]: value[result] + 1 }));
     if (!correct) setMistakeKeys((items) => items.includes(studyItem.key) ? items : [...items, studyItem.key]);
     setSubmittedAnswer(answer.trim());
+    setSubmittedProblems(problems);
     setVerificationResult(correct ? "correct" : "wrong");
     setRevealed(true);
   }
@@ -287,7 +303,10 @@ export default function Home() {
 
   function advanceStudy(completedMistakeKeys: string[]) {
     if (!studyItem) return;
-    if (current + 1 >= studyItems.length) {
+    if (articleMode) {
+      const card = drawArticleCard(articlePool, studyItem.card.id);
+      if (card) setArticleItems((items) => [...items, articleItem(card, items.length)]);
+    } else if (current + 1 >= studyItems.length) {
       const missed = studyItems.filter((item) => completedMistakeKeys.includes(item.key));
       setReviewSets((sets) => appendMistakeReviewSet(sets, missed, activeReviewSetId));
       setSessionComplete(true);
@@ -296,6 +315,7 @@ export default function Home() {
     setRevealed(false);
     setVerificationResult(null);
     setSubmittedAnswer("");
+    setSubmittedProblems([]);
   }
 
   function applySetup(next: StudySetup) {
@@ -313,6 +333,7 @@ export default function Home() {
     setRevealed(false);
     setVerificationResult(null);
     setSubmittedAnswer("");
+    setSubmittedProblems([]);
   }
 
   function resetStudyProgress() {
@@ -322,11 +343,13 @@ export default function Home() {
   }
 
   function resetStudyRound() {
+    setArticleItems([]);
     setShuffleSeed((value) => value + 1);
     setCurrent(0);
     setRevealed(false);
     setVerificationResult(null);
     setSubmittedAnswer("");
+    setSubmittedProblems([]);
     setSessionComplete(false);
     setMistakeKeys([]);
     setMistakeTagName("");
@@ -363,22 +386,26 @@ export default function Home() {
     resetStudyRound();
   }
 
-  /** Commits a complete card list through one inventory replacement, restoring the previous list on failure. */
-  async function commitCards(nextCards: Flashcard[], failureMessage: string) {
+  /** Commits a complete card list through one inventory replacement, restoring the previous state on failure. */
+  async function commitCards(nextCards: Flashcard[], failureMessage: string, nextPreferences = studyPreferences) {
     const previousCards = cards;
+    const previousPreferences = studyPreferences;
     setCards(nextCards);
+    setStudyPreferences(nextPreferences);
     removeUnavailableInventoryTags(nextCards);
     setSyncWarning("");
     setSaveState("saving");
     try {
-      const saved = await storage.replaceInventory({ cards: nextCards, nounMorphology });
+      const saved = await storage.replaceInventory({ cards: nextCards, nounMorphology, studyPreferences: nextPreferences });
       setCards(saved.cards);
       setNounMorphology(saved.nounMorphology);
+      setStudyPreferences(saved.studyPreferences);
       removeUnavailableInventoryTags(saved.cards);
       setSaveState("saved");
       return true;
     } catch {
       setCards(previousCards);
+      setStudyPreferences(previousPreferences);
       removeUnavailableInventoryTags(previousCards);
       setSaveState("failed");
       setSyncWarning(failureMessage);
@@ -483,6 +510,7 @@ export default function Home() {
     if (!removed) return;
     const remainingCards = cards.filter((item) => item.id !== id);
     setCards(remainingCards);
+    setStudyPreferences((preferences) => prunedStudyPreferences(preferences, remainingCards, nounMorphology));
     removeUnavailableInventoryTags(remainingCards);
     setCurrent(0);
     setSaveState("saving");
@@ -527,6 +555,7 @@ export default function Home() {
       const saved = await storage.replaceInventory(nextState);
       setCards(saved.cards);
       setNounMorphology(saved.nounMorphology);
+      setStudyPreferences(saved.studyPreferences);
       removeUnavailableInventoryTags(saved.cards);
       setCurrent(0);
       setSessionComplete(false);
@@ -538,6 +567,41 @@ export default function Home() {
     }
   }
 
+  /** Saves study preferences through the inventory, so they sync wherever the inventory does. */
+  async function saveStudyPreferences(next: StudyPreferences) {
+    const previous = studyPreferences;
+    setStudyPreferences(next);
+    setSyncWarning("");
+    setSaveState("saving");
+    try {
+      const saved = await storage.replaceInventory({ cards, nounMorphology, studyPreferences: next });
+      setStudyPreferences(saved.studyPreferences);
+      setSaveState("saved");
+    } catch (error) {
+      setStudyPreferences(previous);
+      setSaveState("failed");
+      setSyncWarning("Study preferences could not be saved. The previous ones were restored.");
+      throw error;
+    }
+  }
+
+  /** Saves a word from the drawer; a changed "always ask for every form" choice is saved with it. */
+  function saveWord(updated: Flashcard, fullDeclension: boolean) {
+    const listed = studyPreferences.fullDeclensionCards.includes(updated.id);
+    if (updated.type !== "noun" || listed === fullDeclension) {
+      updateCard(updated);
+      return;
+    }
+    const fullDeclensionCards = fullDeclension
+      ? [...studyPreferences.fullDeclensionCards, updated.id]
+      : studyPreferences.fullDeclensionCards.filter((id) => id !== updated.id);
+    void commitCards(
+      cards.map((item) => item.id === updated.id ? updated : item),
+      "That edit could not be saved. The previous version has been restored.",
+      { ...studyPreferences, fullDeclensionCards },
+    );
+  }
+
   async function applyStorageSettings(endpoint: string, nextPersistLocal: boolean, nextLoadPolicy: SyncLoadPolicy) {
     const normalizedEndpoint = endpoint.trim();
     const effectivePersistLocal = normalizedEndpoint ? nextPersistLocal : true;
@@ -547,6 +611,7 @@ export default function Home() {
       await createCardStorage("").replaceInventory(latestState);
       setCards(latestState.cards);
       setNounMorphology(latestState.nounMorphology);
+      setStudyPreferences(latestState.studyPreferences);
     }
 
     saveStorageEndpoint(normalizedEndpoint);
@@ -566,6 +631,7 @@ export default function Home() {
     const nextState = await storage.syncNow();
     setCards(nextState.cards);
     setNounMorphology(nextState.nounMorphology);
+    setStudyPreferences(nextState.studyPreferences);
     removeUnavailableInventoryTags(nextState.cards);
     setCurrent(0);
     setSessionComplete(false);
@@ -577,21 +643,22 @@ export default function Home() {
         loading={loadingCards}
         cards={cards}
         morphology={nounMorphology}
-        keywords={answerKeywords}
+        preferences={studyPreferences}
         setup={setup}
         setupOpen={setupOpen}
         onSetupOpen={setSetupOpen}
         onApplySetup={applySetup}
         onAnswerMode={applyAnswerMode}
         scopeOptions={studyScopeOptions}
-        items={studyItems}
-        current={current}
+        total={articleMode ? null : studyItems.length}
+        current={articleMode ? articleItems.length - 1 : current}
         studyItem={studyItem}
         typing={typingItalian}
         revealed={revealed}
         onReveal={setRevealed}
         verificationResult={verificationResult}
         submittedAnswer={submittedAnswer}
+        submittedProblems={submittedProblems}
         onVerify={verifyItalian}
         onAdvance={advanceCard}
         onRate={rate}
@@ -638,19 +705,20 @@ export default function Home() {
       />}
       {route === "grammar" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
-        <GrammarView cards={cards} morphology={nounMorphology} onSave={replaceNounInventory} onOpenCard={setEditingCard} />
+        <GrammarView cards={cards} morphology={nounMorphology} studyPreferences={studyPreferences} onSave={replaceNounInventory} onOpenCard={setEditingCard} />
       </>}
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
         <SettingsView
           storageProps={{ storage, endpoint: storageEndpoint, persistLocal, loadPolicy: syncLoadPolicy, onApply: applyStorageSettings, onSyncNow: syncNow }}
-          keywords={answerKeywords}
-          onKeywords={setAnswerKeywords}
+          morphology={nounMorphology}
+          preferences={studyPreferences}
+          onPreferences={saveStudyPreferences}
         />
       </>}
     </AppShell>
 
     {adding && <AddWordsSheet knownSets={setNames} morphology={nounMorphology} onClose={() => setAdding(false)} onBatch={addBatch} />}
-    {editingCard && <WordDrawer card={editingCard} knownSets={setNames} morphology={nounMorphology} onClose={() => setEditingCard(null)} onSave={updateCard} onRemove={removeCard} />}
+    {editingCard && <WordDrawer card={editingCard} knownSets={setNames} morphology={nounMorphology} studyPreferences={studyPreferences} onClose={() => setEditingCard(null)} onSave={saveWord} onRemove={removeCard} />}
   </>;
 }

@@ -208,6 +208,7 @@ button.chip.selected { background: var(--accent-soft); border-color: var(--accen
 .study-card-top { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12.5px; }
 .card-set { margin-left: auto; padding: 2px 9px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); }
 .prompt-word { font-size: clamp(34px, 6.5vw, 50px); font-weight: 650; line-height: 1.1; letter-spacing: -.025em; text-align: center; overflow-wrap: anywhere; }
+.prompt-gender { color: var(--faint); font-weight: 500; }
 .study-card.typing .prompt-word { font-size: clamp(32px, 6vw, 44px); padding: 6px 0 2px; }
 .flip-surface { display: grid; align-content: center; gap: 22px; min-height: min(46vh, 380px); padding: 12px 0; border: 0; background: transparent; text-align: center; }
 .study-card.flip.revealed .flip-surface { align-content: start; }
@@ -231,14 +232,9 @@ button.chip.selected { background: var(--accent-soft); border-color: var(--accen
 .conjugation-grid dd { margin: 0; font-size: 19px; }
 
 .answer-form { display: grid; gap: 12px; }
-.answer-input-row { display: flex; gap: 8px; align-items: center; }
 input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-radius: 12px; font-size: 22px; text-align: center; }
 .answer-form.syntax-rejected .answer-input { border-color: var(--wrong); }
-.help-toggle { width: 44px; height: 44px; }
 .check-answer-button { min-height: 48px; font-size: 15.5px; }
-.format-help { display: grid; gap: 8px; padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
-.format-help strong { color: var(--text); margin-right: 6px; }
-.format-help code { color: var(--text); }
 
 .parse-preview { display: grid; gap: 8px; min-height: 64px; padding: 12px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-size: 13.5px; transition: border-color .15s; }
 .parse-preview.syntax-empty { align-content: center; }
@@ -273,11 +269,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .expected .answer-block { justify-items: start; text-align: left; }
 .expected .form-list { justify-content: flex-start; }
 .expected .italian-word { font-size: 30px; }
-.diagnostic { color: var(--muted); font-size: 13px; }
-.diagnostic summary { cursor: pointer; color: var(--muted); }
-.diagnostic summary:hover { color: var(--text); }
-.diagnostic ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
-.diagnostic strong { color: var(--text); }
+.answer-problems { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: 13.5px; }
 
 .study-actions { display: flex; justify-content: center; gap: 10px; margin-top: 16px; }
 .study-actions .wide { flex: 1; max-width: 420px; min-height: 50px; font-size: 16px; }
@@ -429,6 +421,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .word-editor { display: grid; gap: 16px; }
 .conjugation-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .derived-box { display: grid; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.study-options { display: grid; gap: 8px; }
 .derived-box .derived-preview { font-size: 13.5px; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
@@ -452,6 +445,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .morphology-inference-set > .noun-pattern-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .morphology-inference-set > .noun-pattern-actions > input:not([type="checkbox"]) { flex: 1 1 240px; max-width: 360px; font-weight: 600; }
 .morphology-rule-checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.drill-settings { display: grid; gap: 10px; }
 .morphology-rule-checks label { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 13.5px; cursor: pointer; }
 .morphology-rule-checks label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .noun-pattern-actions { display: flex; gap: 8px; align-items: center; }

@@ -63,7 +63,7 @@ export function NounDerivedPreview({ draft, morphology }: { draft: NounDraft; mo
 export function NounRuleSelect({ value, morphology, onChange, label }: { value: string; morphology: NounMorphology; onChange: (value: string) => void; label: string }) {
   return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
     <option value="">Auto</option>
-    {morphology.declensionRules.map((rule) => <option key={rule.name} value={rule.name}>{rule.name}</option>)}
+    {morphology.declensionRules.map((rule) => <option key={rule.name} value={rule.name}>{rule.name}{rule.gender ? ` (${rule.gender} only)` : ""}</option>)}
     <option value={irregularRuleValue}>{irregularDeclensionName}</option>
   </select>;
 }

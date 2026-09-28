@@ -8,40 +8,11 @@ const morphology = {
   declensionRules: [
     {
       name: "-chio → -chi",
+      gender: null,
       forms: {
         singular: { suffix: "chio" },
         plural: { suffix: "chi" },
       },
-    },
-  ],
-  inferenceSets: [
-    { name: "All test rules", declensionRules: ["-chio → -chi"] },
-  ],
-  syntaxRules: [
-    {
-      name: "Definite singular article + noun",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "singular" },
-        { kind: "noun", number: "singular" },
-      ],
-      inferenceSet: "All test rules",
-      excludedArticleGroups: ["lo"],
-    },
-    {
-      name: "Full declension",
-      markers: [{ kind: "gender", required: false }],
-      markerOrder: "any",
-      fields: [
-        { kind: "article", definiteness: "definite", number: "singular" },
-        { kind: "noun", number: "singular" },
-        { kind: "article", definiteness: "definite", number: "plural" },
-        { kind: "noun", number: "plural" },
-        { kind: "article", definiteness: "indefinite", number: "singular" },
-      ],
-      inferenceSet: "All test rules",
-      excludedArticleGroups: [],
     },
   ],
   articleLetters: {
@@ -91,6 +62,11 @@ const currentInventory = {
     },
   ],
   nounMorphology: morphology,
+  studyPreferences: {
+    answerKeywords: { masculine: "m", feminine: "f", singularOnly: "s", pluralOnly: "p" },
+    fullDeclensionRules: [],
+    fullDeclensionCards: [],
+  },
 };
 
 const staleLocalSnapshot = {
@@ -148,23 +124,23 @@ try {
 
   const answer = page.getByRole("textbox", { name: "Answer" });
   await answer.fill("lo");
-  const articleGender = page.locator(".answer-parse-piece").filter({ hasText: "Gender from article" });
-  await articleGender.waitFor({ state: "visible" });
-  assert.match(await articleGender.textContent(), /masculine/i);
+  const stillNeeded = page.locator(".answer-parse-message").filter({ hasText: "Type the noun after the article." });
+  await stillNeeded.waitFor({ state: "visible" });
 
   await answer.fill("lo specchio");
-  const stillNeeded = page.locator(".answer-parse-message").filter({ hasText: "Still needed:" });
-  await stillNeeded.waitFor({ state: "visible" });
-  assert.match(await stillNeeded.textContent(), /Definite plural article/i);
-  assert.match(await stillNeeded.textContent(), /Plural noun/i);
-  assert.match(await stillNeeded.textContent(), /Indefinite article/i);
+  await page.getByRole("button", { name: "Check answer" }).click();
+  await page.getByRole("status").filter({ hasText: "Correct" }).waitFor({ state: "visible" });
 
-  await answer.fill("lo specchio gli specchi uno");
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("heading", { name: "Session complete" }).waitFor({ state: "visible" });
+  await page.getByRole("radio", { name: /^Articles/ }).click();
+  await page.getByRole("heading", { name: "specchio" }).waitFor({ state: "visible" });
+  await page.getByRole("textbox", { name: "Answer" }).fill("lo gli uno");
   await page.getByRole("button", { name: "Check answer" }).click();
   await page.getByRole("status").filter({ hasText: "Correct" }).waitFor({ state: "visible" });
 
   assert.deepEqual(pageErrors, [], `Unexpected page errors: ${pageErrors.map(String).join("\n")}`);
-  console.log("Browser E2E passed: stale inventory replacement, noun prompt metadata, lo gender evidence, and full-declension verification.");
+  console.log("Browser E2E passed: stale inventory replacement, noun prompt metadata, word-mode checking, and the article drill.");
 } catch (error) {
   await mkdir("test-results", { recursive: true });
   if (page) {
