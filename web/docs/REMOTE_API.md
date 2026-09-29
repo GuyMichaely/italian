@@ -61,22 +61,31 @@ A synchronization snapshot contains the complete inventory plus its last-change 
       }
     ]
   },
+  "adjectiveMorphology": {
+    "declensionRules": [
+      {
+        "name": "-o/-a/-i/-e",
+        "endings": { "masculineSingular": "o", "feminineSingular": "a", "masculinePlural": "i", "femininePlural": "e" }
+      }
+    ]
+  },
   "studyPreferences": {
     "answerKeywords": { "masculine": "m", "feminine": "f", "singularOnly": "s", "pluralOnly": "p" },
-    "fullDeclensionRules": [],
+    "nounFullDeclensionRules": [],
+    "adjectiveFullDeclensionRules": [],
     "fullDeclensionCards": [123]
   },
   "updatedAt": "2026-08-20T03:00:00.000Z"
 }
 ```
 
-Noun cards do not contain a top-level `italian` property. Their Italian surface forms are generated from `details.declension` and the accompanying noun morphology.
+Noun and adjective cards do not contain a top-level `italian` property. Their Italian surface forms are generated from `details.declension` and the accompanying noun or adjective morphology. An adjective's `details` is exactly `{ "declension": … }`: `{ "kind": "rule", "rule", "base" }` naming an adjective rule, or `{ "kind": "irregular" }` with all four forms (see `docs/ADJECTIVE_DECLENSIONS.md`).
 
 Noun `articleProfile` has three named Boolean properties: `definiteSingular`, `definitePlural`, and `indefiniteSingular`. The accepted combinations are all three `true`, definite singular only, definite plural only, or all three `false`.
 
 Declension-rule names and article-group names are references and must be unique within their collections. Noun number availability is derived from the referenced rule's `forms`: both entries means both numbers; only one entry means singular-only or plural-only. Article availability is independent from that number availability. A rule's `gender` is `"masculine"`, `"feminine"`, or `null`; a noun cannot use a rule limited to the other gender.
 
-`studyPreferences` holds the answer keywords (four distinct single tokens), the declension-rule names being drilled, and the noun card ids that always need both forms in word mode. Every name and id must exist; deleting a card through `DELETE /cards` removes its id.
+`studyPreferences` holds the answer keywords (four distinct single tokens), the noun and adjective rule names being drilled, and the noun and adjective card ids that always need every form. Every name and id must exist; deleting a card through `DELETE /cards` removes its id.
 
 `updatedAt` must be a valid timestamp. Parola uses it for snapshot-level last-write-wins synchronization. It does not merge individual cards or morphology definitions.
 

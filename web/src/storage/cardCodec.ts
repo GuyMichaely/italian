@@ -1,5 +1,6 @@
 import type { CardType, Flashcard, NounArticleGroupOverrides, NounDeclension } from "../cards/types";
 import { normalizeNounArticleProfile } from "../cards/nounMorphology";
+import { normalizeAdjectiveDeclension } from "../cards/adjectiveMorphology";
 import { cardTypes } from "../cardTypes";
 
 function objectValue(value: unknown, label: string) {
@@ -63,6 +64,7 @@ export function cloneCards(cards: Flashcard[]): Flashcard[] {
         },
       };
     }
+    if (card.type === "adjective") return { ...card, tags: [...card.tags], details: { declension: { ...card.details.declension } } };
     return { ...card, tags: [...card.tags], details: { ...card.details } } as Flashcard;
   });
 }
@@ -78,12 +80,23 @@ function nounIdentity(card: Extract<Flashcard, { type: "noun" }>) {
     : `irregular\u0000${normalizeIdentityText(declension.singular)}\u0000${normalizeIdentityText(declension.plural)}`;
 }
 
+function adjectiveIdentity(card: Extract<Flashcard, { type: "adjective" }>) {
+  const declension = card.details.declension;
+  return declension.kind === "rule"
+    ? `rule\u0000${normalizeIdentityText(declension.rule)}\u0000${normalizeIdentityText(declension.base)}`
+    : `irregular\u0000${[declension.masculineSingular, declension.feminineSingular, declension.masculinePlural, declension.femininePlural].map(normalizeIdentityText).join("\u0000")}`;
+}
+
 export function cardDuplicateKey(card: Flashcard) {
-  const italianIdentity = card.type === "noun" ? nounIdentity(card) : normalizeIdentityText(card.italian);
+  const italianIdentity = card.type === "noun" ? nounIdentity(card) : card.type === "adjective" ? adjectiveIdentity(card) : normalizeIdentityText(card.italian);
   return `${card.type}\u0000${normalizeIdentityText(card.english)}\u0000${italianIdentity}`;
 }
 
 function cardIdentityLabel(card: Flashcard) {
+  if (card.type === "adjective") {
+    const declension = card.details.declension;
+    return declension.kind === "rule" ? `${declension.rule} / base ${declension.base}` : declension.masculineSingular;
+  }
   if (card.type !== "noun") return card.italian;
   const declension = card.details.declension;
   return declension.kind === "rule" ? `${declension.rule} / base ${declension.base || "∅"}` : [declension.singular, declension.plural].filter(Boolean).join(" / ");
@@ -136,6 +149,18 @@ export function normalizeCard(value: unknown): Flashcard {
     };
   }
 
+  if (type === "adjective") {
+    if (Object.prototype.hasOwnProperty.call(raw, "italian")) {
+      throw new Error(`Adjective card ${id} must not store a derived italian field.`);
+    }
+    assertExactKeys(details, `Adjective card ${id} details`, ["declension"]);
+    return {
+      ...common,
+      type: "adjective",
+      details: { declension: normalizeAdjectiveDeclension(details.declension, `Adjective card ${id} declension`) },
+    };
+  }
+
   const italian = String(raw.italian ?? "");
   if (!italian) throw new Error(`Storage returned a ${type} card without an Italian form.`);
 
@@ -156,21 +181,6 @@ export function normalizeCard(value: unknown): Flashcard {
         loro: stringField(details.loro),
         auxiliary,
         participle: stringField(details.participle),
-      },
-    };
-  }
-
-  if (type === "adjective") {
-    assertExactKeys(details, `Adjective card ${id} details`, ["masculineSingular", "feminineSingular", "masculinePlural", "femininePlural"]);
-    return {
-      ...common,
-      type: "adjective",
-      italian,
-      details: {
-        masculineSingular: stringField(details.masculineSingular),
-        feminineSingular: stringField(details.feminineSingular),
-        masculinePlural: stringField(details.masculinePlural),
-        femininePlural: stringField(details.femininePlural),
       },
     };
   }

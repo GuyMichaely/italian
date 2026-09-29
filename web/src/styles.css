@@ -349,6 +349,8 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .grid-table { min-width: 1080px; }
 .grid-all { min-width: 640px; }
 .grid-noun { min-width: 1360px; }
+.grid-adjective { min-width: 1240px; }
+.grid-adjective select { min-width: 120px; }
 .grid-noun .derived-forms { white-space: nowrap; }
 .grid-verb { min-width: 1380px; }
 .grid-adverb { min-width: 720px; }
@@ -389,6 +391,9 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .noun-inventory-table { min-width: 1240px; }
 .verb-batch-table { min-width: 1080px; }
 .noun-batch-table { min-width: 980px; }
+.adjective-batch-table { min-width: 1120px; }
+.adjective-batch-table select { min-width: 120px; }
+.adjective-batch-table .derived-forms, .grid-adjective .derived-forms { white-space: nowrap; }
 .noun-batch-table td:nth-child(1) { width: 17%; }
 .noun-batch-table td:nth-child(4) { width: 70px; }
 .derived-cell { min-width: 220px; }
@@ -397,6 +402,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .derived-preview.invalid { color: var(--wrong); }
 .derived-preview .derived-forms { font-size: 16px; color: var(--text); }
 .derived-preview small { color: var(--faint); font-size: 12px; }
+.derived-preview small.derived-warning { color: var(--wrong); }
 .row-action-cell { width: 40px; text-align: center; }
 
 .batch-form { display: grid; gap: 14px; }
@@ -438,6 +444,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .noun-patterns-body { gap: 44px; }
 .grammar-section { display: grid; gap: 14px; scroll-margin-top: 120px; }
 .grammar-section h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.grammar-subheading { margin-top: 18px; font-size: 15px; font-weight: 650; }
 .declension-rules-table { min-width: 720px; }
 .morphology-form-cell { display: flex; align-items: center; gap: 10px; }
 .morphology-support-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; white-space: nowrap; cursor: pointer; }
@@ -447,6 +454,8 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .morphology-inference-set > .noun-pattern-actions > input:not([type="checkbox"]) { flex: 1 1 240px; max-width: 360px; font-weight: 600; }
 .morphology-rule-checks { display: flex; flex-wrap: wrap; gap: 6px; }
 .drill-settings { display: grid; gap: 10px; }
+.drill-settings h3 { margin: 0; color: var(--faint); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.drill-settings + .drill-settings { margin-top: 16px; }
 .morphology-rule-checks label { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 13.5px; cursor: pointer; }
 .morphology-rule-checks label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .noun-pattern-actions { display: flex; gap: 8px; align-items: center; }

@@ -149,16 +149,17 @@ The inventory stores `studyPreferences` next to the cards and morphology, so the
 ```json
 {
   "answerKeywords": { "masculine": "m", "feminine": "f", "singularOnly": "s", "pluralOnly": "p" },
-  "fullDeclensionRules": ["-chio → -chi"],
+  "nounFullDeclensionRules": ["-chio → -chi"],
+  "adjectiveFullDeclensionRules": [],
   "fullDeclensionCards": [59]
 }
 ```
 
 - `answerKeywords` are the gender and singular-/plural-only markers typed in noun answers. They are single lowercase tokens and all different, and neither gender keyword pair (`mf`, `fm`) may equal a keyword.
-- `fullDeclensionRules` are declension rules still being drilled.
-- `fullDeclensionCards` are noun ids that always need both forms.
+- `nounFullDeclensionRules` are declension rules still being drilled; `adjectiveFullDeclensionRules` are the same for adjective rules (see `docs/ADJECTIVE_DECLENSIONS.md`).
+- `fullDeclensionCards` are noun and adjective ids that always need every form.
 
-Neither list changes what a word is. References to deleted nouns or rules are dropped whenever the inventory is saved.
+None of the lists changes what a word is. References to deleted words or rules are dropped whenever the inventory is saved.
 
 ## Study modes
 
@@ -177,7 +178,7 @@ All three read the same answer format: gender and singular-/plural-only keywords
 With Words alone, the answer is the noun with or without an article: `il libro`, `i libri`, `un libro`, `m libro`, or both numbers `il libro i libri`.
 
 - Each form must be one of the noun's forms. An article is optional, but a typed article must be one the noun takes for that number (per its article profile); a form that takes no article must have none.
-- **Both forms** are required when the gender differs with plurality, when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `fullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
+- **Both forms** are required when the gender differs with plurality, when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `nounFullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
 - **Singular-/plural-only marker** is required for a noun with only one form and wrong on a noun with both: `p i pantaloni`, `f s Venezia`.
 - **Gender marker** is required when the typed articles don't settle the gender (`m l’albero`; `gli alberi` needs none) and when there is no article (`m libro`). It is not required when the prompt shows the gender. A marker that disagrees with the noun is wrong.
 - **Gender differing with plurality**: each typed form's gender must be shown. A single marker gives the singular's gender. The two gender keywords together (`mf` or `fm`) give each typed form's gender in the order the forms are typed, and fit only these nouns. A plural article always shows the plural's gender.
@@ -238,12 +239,14 @@ The editor cascades renames of rules and article groups, and rejects duplicates.
     "articleLetters": { "vowels": [], "consonants": [] },
     "articleGroups": []
   },
+  "adjectiveMorphology": { "declensionRules": [] },
   "studyPreferences": {
     "answerKeywords": { "masculine": "m", "feminine": "f", "singularOnly": "s", "pluralOnly": "p" },
-    "fullDeclensionRules": [],
+    "nounFullDeclensionRules": [],
+    "adjectiveFullDeclensionRules": [],
     "fullDeclensionCards": []
   }
 }
 ```
 
-The schema is strict. `scripts/migrate-study-modes.mjs` converts inventories from the earlier syntax-rule schema (with `inferenceSets` and `syntaxRules`): it drops both, gives the `-a` rules their genders, and turns the rules the shorthand inference set left out into `fullDeclensionRules`.
+The schema is strict. `scripts/migrate-study-modes.mjs` converts inventories from the earlier syntax-rule schema (with `inferenceSets` and `syntaxRules`): it drops both, gives the `-a` rules their genders, and turns the rules the shorthand inference set left out into `fullDeclensionRules` (since renamed `nounFullDeclensionRules` by `scripts/migrate-adjective-declensions.mjs`).

@@ -15,6 +15,7 @@ const {
   extensionCandidatesToCards,
   parseExtensionImportRequest,
 } = require(path.join(testDist, "extensionImport.js"));
+const { defaultAdjectiveMorphology } = require(path.join(testDist, "cards", "adjectiveMorphology.js"));
 
 function canonicalCard(overrides) {
   return {
@@ -49,14 +50,14 @@ function canonicalNoun(overrides = {}) {
 
 test("extension imports accept a current canonical noun card unchanged", () => {
   const input = canonicalNoun();
-  const [card] = extensionCandidatesToCards([input], defaultNounMorphology);
+  const [card] = extensionCandidatesToCards([input], defaultNounMorphology, defaultAdjectiveMorphology);
   assert.deepEqual(card, input);
 });
 
 test("extension imports reject a stored Italian field on nouns", () => {
   const retired = canonicalNoun({ italian: "specchio" });
   assert.throws(
-    () => extensionCandidatesToCards([retired], defaultNounMorphology),
+    () => extensionCandidatesToCards([retired], defaultNounMorphology, defaultAdjectiveMorphology),
     /must not store a derived italian field/i,
   );
 });
@@ -74,7 +75,7 @@ test("extension imports reject the retired noun forms/details shape", () => {
   });
 
   assert.throws(
-    () => extensionCandidatesToCards([legacy], defaultNounMorphology),
+    () => extensionCandidatesToCards([legacy], defaultNounMorphology, defaultAdjectiveMorphology),
     /must contain exactly.*articleGroups.*articleProfile.*declension.*gender/i,
   );
 });
@@ -90,7 +91,7 @@ test("extension imports reject the retired rule/base noun schema", () => {
   });
 
   assert.throws(
-    () => extensionCandidatesToCards([retired], defaultNounMorphology),
+    () => extensionCandidatesToCards([retired], defaultNounMorphology, defaultAdjectiveMorphology),
     /must contain exactly.*articleGroups.*articleProfile.*declension.*gender/i,
   );
 });
@@ -106,7 +107,7 @@ test("extension imports reject the retired articleMode noun schema", () => {
   });
 
   assert.throws(
-    () => extensionCandidatesToCards([retired], defaultNounMorphology),
+    () => extensionCandidatesToCards([retired], defaultNounMorphology, defaultAdjectiveMorphology),
     /must contain exactly.*articleGroups.*articleProfile.*declension.*gender/i,
   );
 });
@@ -124,7 +125,7 @@ test("extension imports reject noun article profiles unsupported by their declen
   });
 
   assert.throws(
-    () => extensionCandidatesToCards([invalid], defaultNounMorphology),
+    () => extensionCandidatesToCards([invalid], defaultNounMorphology, defaultAdjectiveMorphology),
     /requires a noun form/i,
   );
 });
@@ -132,7 +133,7 @@ test("extension imports reject noun article profiles unsupported by their declen
 test("extension imports reject unknown card types", () => {
   const invalid = canonicalCard({ type: "pronoun", english: "it", italian: "esso" });
   assert.throws(
-    () => extensionCandidatesToCards([invalid], defaultNounMorphology),
+    () => extensionCandidatesToCards([invalid], defaultNounMorphology, defaultAdjectiveMorphology),
     /incomplete or invalid card/i,
   );
 });

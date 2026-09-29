@@ -1,6 +1,5 @@
 import type { NounMorphology } from "../cards/nounMorphology";
 import {
-  standardAdjectivePattern,
   whitespaceParts,
   type StudyItem,
 } from "../study/logic";
@@ -94,16 +93,15 @@ export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawV
   if (card.type === "adjective") {
     const labels = ["Masculine singular", "Feminine singular", "Masculine plural", "Feminine plural"];
     const values = whitespaceParts(trimmed);
-    const shorthand = values.length === 1 ? standardAdjectivePattern(values[0] ?? "") : null;
-    if (shorthand) {
+    if (values.length === 1) {
       const status: AnswerSyntaxStatus = unclosedQuote ? "partial" : "complete";
       return {
-        pieces: [{ label: "Regular adjective base", value: values[0] ?? "" }],
-        message: "Regular adjective shorthand is syntactically complete.",
+        pieces: labeledPieces(values, labels),
+        message: "One form: the masculine singular.",
         status,
         checkable: status === "complete",
         missing: unclosedQuote ? ["Closing quote"] : [],
-        syntaxName: "Regular adjective shorthand",
+        syntaxName: "Masculine singular",
       };
     }
     const status: AnswerSyntaxStatus = values.length > labels.length ? "invalid" : values.length === labels.length ? "complete" : "partial";
@@ -114,7 +112,7 @@ export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawV
       status: finalStatus,
       checkable: finalStatus === "complete",
       missing: unclosedQuote ? [...labels.slice(values.length), "Closing quote"] : labels.slice(values.length),
-      syntaxName: "Full adjective",
+      syntaxName: "All four forms",
     };
   }
 

@@ -1,9 +1,10 @@
-import type { Flashcard, NounCard } from "../cards/types";
+import type { AdjectiveCard, Flashcard, NounCard } from "../cards/types";
 import {
   pluralIsPredictable,
   resolvedNounForms,
   type NounMorphology,
 } from "../cards/nounMorphology";
+import { adjectiveFormsArePredictable, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 
 /** Words typed before or among a noun answer to state its gender or that it has only one number. */
 export type AnswerKeywords = {
@@ -15,12 +16,14 @@ export type AnswerKeywords = {
 
 /**
  * Study settings that belong to the inventory rather than to one device, so they sync with it.
- * `fullDeclensionRules` are declension rules still being drilled; `fullDeclensionCards` are noun ids
- * that always need every form. Neither changes what a word is, only what word mode asks for.
+ * `nounFullDeclensionRules` and `adjectiveFullDeclensionRules` are declension rules still being
+ * drilled; `fullDeclensionCards` are noun and adjective ids that always need every form. None of
+ * them changes what a word is, only what a word answer asks for.
  */
 export type StudyPreferences = {
   answerKeywords: AnswerKeywords;
-  fullDeclensionRules: string[];
+  nounFullDeclensionRules: string[];
+  adjectiveFullDeclensionRules: string[];
   fullDeclensionCards: number[];
 };
 
@@ -33,14 +36,16 @@ export const defaultAnswerKeywords: AnswerKeywords = {
 
 export const defaultStudyPreferences: StudyPreferences = {
   answerKeywords: defaultAnswerKeywords,
-  fullDeclensionRules: [],
+  nounFullDeclensionRules: [],
+  adjectiveFullDeclensionRules: [],
   fullDeclensionCards: [],
 };
 
 export function cloneStudyPreferences(value: StudyPreferences): StudyPreferences {
   return {
     answerKeywords: { ...value.answerKeywords },
-    fullDeclensionRules: [...value.fullDeclensionRules],
+    nounFullDeclensionRules: [...value.nounFullDeclensionRules],
+    adjectiveFullDeclensionRules: [...value.adjectiveFullDeclensionRules],
     fullDeclensionCards: [...value.fullDeclensionCards],
   };
 }
@@ -75,48 +80,61 @@ export function normalizeAnswerKeywords(value: unknown): AnswerKeywords {
   return keywords;
 }
 
-export function normalizeStudyPreferences(value: unknown): StudyPreferences {
-  const raw = objectValue(value, "Study preferences");
-  assertExactKeys(raw, "Study preferences", ["answerKeywords", "fullDeclensionRules", "fullDeclensionCards"]);
-  if (!Array.isArray(raw.fullDeclensionRules) || !Array.isArray(raw.fullDeclensionCards)) {
-    throw new Error("Study preferences need fullDeclensionRules and fullDeclensionCards arrays.");
-  }
-  const rules = raw.fullDeclensionRules.map((name) => {
+function ruleNameList(value: unknown, label: string) {
+  if (!Array.isArray(value)) throw new Error(`Study preferences need a ${label} array.`);
+  return [...new Set(value.map((name) => {
     const rule = String(name ?? "").trim();
     if (!rule) throw new Error("Full-declension rule names must be non-empty.");
     return rule;
-  });
+  }))];
+}
+
+export function normalizeStudyPreferences(value: unknown): StudyPreferences {
+  const raw = objectValue(value, "Study preferences");
+  assertExactKeys(raw, "Study preferences", ["answerKeywords", "nounFullDeclensionRules", "adjectiveFullDeclensionRules", "fullDeclensionCards"]);
+  if (!Array.isArray(raw.fullDeclensionCards)) throw new Error("Study preferences need a fullDeclensionCards array.");
   const cards = raw.fullDeclensionCards.map((id) => {
     if (!Number.isSafeInteger(id)) throw new Error("Full-declension card ids must be integers.");
     return id as number;
   });
   return {
     answerKeywords: normalizeAnswerKeywords(raw.answerKeywords),
-    fullDeclensionRules: [...new Set(rules)],
+    nounFullDeclensionRules: ruleNameList(raw.nounFullDeclensionRules, "nounFullDeclensionRules"),
+    adjectiveFullDeclensionRules: ruleNameList(raw.adjectiveFullDeclensionRules, "adjectiveFullDeclensionRules"),
     fullDeclensionCards: [...new Set(cards)],
   };
 }
 
-/** Throws when a preference names a declension rule or noun that does not exist. */
-export function assertStudyPreferenceReferences(preferences: StudyPreferences, cards: Flashcard[], morphology: NounMorphology) {
-  const ruleNames = new Set(morphology.declensionRules.map((rule) => rule.name));
-  for (const name of preferences.fullDeclensionRules) {
-    if (!ruleNames.has(name)) throw new Error(`Study preferences name unknown declension rule ${name}.`);
+function declinedCardIds(cards: Flashcard[]) {
+  return new Set(cards.filter((card) => card.type === "noun" || card.type === "adjective").map((card) => card.id));
+}
+
+/** Throws when a preference names a declension rule, noun, or adjective that does not exist. */
+export function assertStudyPreferenceReferences(preferences: StudyPreferences, cards: Flashcard[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
+  const nounRules = new Set(morphology.declensionRules.map((rule) => rule.name));
+  for (const name of preferences.nounFullDeclensionRules) {
+    if (!nounRules.has(name)) throw new Error(`Study preferences name unknown declension rule ${name}.`);
   }
-  const nounIds = new Set(cards.filter((card) => card.type === "noun").map((card) => card.id));
+  const adjectiveRules = new Set(adjectiveMorphology.declensionRules.map((rule) => rule.name));
+  for (const name of preferences.adjectiveFullDeclensionRules) {
+    if (!adjectiveRules.has(name)) throw new Error(`Study preferences name unknown adjective rule ${name}.`);
+  }
+  const ids = declinedCardIds(cards);
   for (const id of preferences.fullDeclensionCards) {
-    if (!nounIds.has(id)) throw new Error(`Study preferences name unknown noun card ${id}.`);
+    if (!ids.has(id)) throw new Error(`Study preferences name unknown noun or adjective card ${id}.`);
   }
 }
 
-/** Drops references to rules and nouns that no longer exist, e.g. after a delete. */
-export function prunedStudyPreferences(preferences: StudyPreferences, cards: Flashcard[], morphology: NounMorphology): StudyPreferences {
-  const ruleNames = new Set(morphology.declensionRules.map((rule) => rule.name));
-  const nounIds = new Set(cards.filter((card) => card.type === "noun").map((card) => card.id));
+/** Drops references to rules and words that no longer exist, e.g. after a delete. */
+export function prunedStudyPreferences(preferences: StudyPreferences, cards: Flashcard[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): StudyPreferences {
+  const nounRules = new Set(morphology.declensionRules.map((rule) => rule.name));
+  const adjectiveRules = new Set(adjectiveMorphology.declensionRules.map((rule) => rule.name));
+  const ids = declinedCardIds(cards);
   return {
     answerKeywords: { ...preferences.answerKeywords },
-    fullDeclensionRules: preferences.fullDeclensionRules.filter((name) => ruleNames.has(name)),
-    fullDeclensionCards: preferences.fullDeclensionCards.filter((id) => nounIds.has(id)),
+    nounFullDeclensionRules: preferences.nounFullDeclensionRules.filter((name) => nounRules.has(name)),
+    adjectiveFullDeclensionRules: preferences.adjectiveFullDeclensionRules.filter((name) => adjectiveRules.has(name)),
+    fullDeclensionCards: preferences.fullDeclensionCards.filter((id) => ids.has(id)),
   };
 }
 
@@ -134,10 +152,31 @@ export function fullDeclensionReasons(card: NounCard, morphology: NounMorphology
   if (card.details.genderDiffersWithPlurality) reasons.push("gender");
   if (declension.kind === "irregular") reasons.push("irregular");
   else if (!pluralIsPredictable(forms, morphology)) reasons.push("unpredictable");
-  if (declension.kind === "rule" && preferences.fullDeclensionRules.includes(declension.rule)) reasons.push("rule");
+  if (declension.kind === "rule" && preferences.nounFullDeclensionRules.includes(declension.rule)) reasons.push("rule");
   if (preferences.fullDeclensionCards.includes(card.id)) reasons.push("card");
   return reasons;
 }
+
+export type AdjectiveFullFormsReason = Exclude<FullDeclensionReason, "gender">;
+
+/** Why a typed answer needs all four forms of this adjective; empty when the masculine singular is enough. */
+export function adjectiveFullFormsReasons(card: AdjectiveCard, morphology: AdjectiveMorphology, preferences: StudyPreferences): AdjectiveFullFormsReason[] {
+  const { forms } = resolvedAdjectiveForms(card, morphology);
+  const declension = card.details.declension;
+  const reasons: AdjectiveFullFormsReason[] = [];
+  if (declension.kind === "irregular") reasons.push("irregular");
+  else if (!adjectiveFormsArePredictable(forms, morphology)) reasons.push("unpredictable");
+  if (declension.kind === "rule" && preferences.adjectiveFullDeclensionRules.includes(declension.rule)) reasons.push("rule");
+  if (preferences.fullDeclensionCards.includes(card.id)) reasons.push("card");
+  return reasons;
+}
+
+export const adjectiveFullFormsReasonLabels: Record<AdjectiveFullFormsReason, string> = {
+  irregular: "its forms are irregular",
+  unpredictable: "the adjective rules don’t predict its forms",
+  rule: "you’re drilling its adjective rule",
+  card: "you marked this word",
+};
 
 export const fullDeclensionReasonLabels: Record<FullDeclensionReason, string> = {
   gender: "its gender differs with plurality",

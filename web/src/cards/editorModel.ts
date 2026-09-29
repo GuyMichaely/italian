@@ -1,5 +1,4 @@
 import type {
-  AdjectiveCard,
   AdverbCard,
   CardType,
   VerbCard,
@@ -7,6 +6,7 @@ import type {
 import { cardTypes } from "../cardTypes";
 import { storageKey } from "../storage/keys";
 import { emptyNounDraft, type NounDraft } from "./nounDraft";
+import { emptyAdjectiveDraft, type AdjectiveDraft } from "./adjectiveDraft";
 
 export type NounBatchRow = NounDraft & {
   id: string;
@@ -28,13 +28,10 @@ export type VerbBatchRow = {
   participle: string;
 };
 
-export type AdjectiveBatchRow = {
+export type AdjectiveBatchRow = AdjectiveDraft & {
   id: string;
-  english: string;
-  masculineSingular: string;
-  feminineSingular: string;
-  masculinePlural: string;
-  femininePlural: string;
+  /** True while the other three forms still hold Parola's suggestion rather than typed text. */
+  suggested: boolean;
 };
 
 export type AdverbBatchRow = {
@@ -134,7 +131,7 @@ export function emptyVerbBatchRow(id: string): VerbBatchRow {
 }
 
 export function emptyAdjectiveBatchRow(id: string): AdjectiveBatchRow {
-  return { id, english: "", masculineSingular: "", feminineSingular: "", masculinePlural: "", femininePlural: "" };
+  return { ...emptyAdjectiveDraft(), id, suggested: false };
 }
 
 export function emptyAdverbBatchRow(id: string): AdverbBatchRow {
@@ -153,28 +150,12 @@ export function verbCard(input: Omit<VerbBatchRow, "id"> & { id: number; setName
   };
 }
 
-export function adjectiveCard(input: Omit<AdjectiveBatchRow, "id"> & { id: number; setName: string | null; tags: string[] }): AdjectiveCard {
-  return {
-    id: input.id,
-    type: "adjective",
-    english: input.english,
-    italian: input.masculineSingular,
-    setName: input.setName,
-    tags: input.tags,
-    details: { masculineSingular: input.masculineSingular, feminineSingular: input.feminineSingular, masculinePlural: input.masculinePlural, femininePlural: input.femininePlural },
-  };
-}
-
 export function adverbCard(input: Omit<AdverbBatchRow, "id"> & { id: number; setName: string | null; tags: string[] }): AdverbCard {
   return { id: input.id, type: "adverb", english: input.english, italian: input.form, setName: input.setName, tags: input.tags, details: {} };
 }
 
 export function verbRowFromCard(card: VerbCard): VerbBatchRow {
   return { id: String(card.id), english: card.english, infinitive: card.italian, io: card.details.io, tu: card.details.tu, luiLei: card.details.luiLei, noi: card.details.noi, voi: card.details.voi, loro: card.details.loro, auxiliary: card.details.auxiliary, participle: card.details.participle };
-}
-
-export function adjectiveRowFromCard(card: AdjectiveCard): AdjectiveBatchRow {
-  return { id: String(card.id), english: card.english, masculineSingular: card.details.masculineSingular || card.italian, feminineSingular: card.details.feminineSingular, masculinePlural: card.details.masculinePlural, femininePlural: card.details.femininePlural };
 }
 
 export function adverbRowFromCard(card: AdverbCard): AdverbBatchRow {

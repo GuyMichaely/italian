@@ -19,6 +19,7 @@ import {
   resolvedNounForms,
   type NounMorphology,
 } from "./cards/nounMorphology";
+import { cloneAdjectiveMorphology, defaultAdjectiveMorphology, resolvedAdjectiveForms, type AdjectiveMorphology } from "./cards/adjectiveMorphology";
 import { cardTypes, typeLabels } from "./cardTypes";
 import { useHashRoute } from "./app/useHashRoute";
 import { AppShell } from "./components/AppShell";
@@ -51,20 +52,21 @@ import { GrammarView } from "./views/GrammarView";
 import { SettingsView } from "./views/SettingsView";
 
 
-function cardItalianText(card: Flashcard, morphology: NounMorphology) {
+function cardItalianText(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
+  if (card.type === "adjective") return Object.values(resolvedAdjectiveForms(card, adjectiveMorphology).forms).join(" ");
   if (card.type !== "noun") return card.italian;
   const forms = resolvedNounForms(card, morphology);
   return forms.singular || forms.plural;
 }
 
-function cardSearchText(card: Flashcard, morphology: NounMorphology) {
+function cardSearchText(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
   let italian = "";
   try {
-    italian = cardItalianText(card, morphology);
+    italian = cardItalianText(card, morphology, adjectiveMorphology);
   } catch {
-    // A noun whose rule is broken is still searchable by its other fields.
+    // A word whose rule is broken is still searchable by its other fields.
   }
-  const declension = card.type === "noun" ? card.details.declension : null;
+  const declension = card.type === "noun" || card.type === "adjective" ? card.details.declension : null;
   const base = declension?.kind === "rule" ? declension.base : "";
   return `${card.english} ${italian} ${base} ${card.setName ?? ""} ${card.tags.join(" ")}`.toLowerCase();
 }
@@ -73,6 +75,7 @@ export default function Home() {
   const [route, navigate] = useHashRoute();
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [nounMorphology, setNounMorphology] = useState<NounMorphology>(() => cloneNounMorphology(defaultNounMorphology));
+  const [adjectiveMorphology, setAdjectiveMorphology] = useState<AdjectiveMorphology>(() => cloneAdjectiveMorphology(defaultAdjectiveMorphology));
   const [loadingCards, setLoadingCards] = useState(true);
   const [storageEndpoint, setStorageEndpoint] = useState(readStorageEndpoint);
   const [persistLocal, setPersistLocal] = useState(readSyncPersistLocal);
@@ -139,9 +142,9 @@ export default function Home() {
     const needle = query.trim().toLowerCase();
     return cards.filter((item) => {
       if (selectedInventoryTags.length && !cardScopeKeys(item).some((key) => selectedInventoryTags.includes(key))) return false;
-      return !needle || cardSearchText(item, nounMorphology).includes(needle);
+      return !needle || cardSearchText(item, nounMorphology, adjectiveMorphology).includes(needle);
     });
-  }, [cards, nounMorphology, query, selectedInventoryTags]);
+  }, [adjectiveMorphology, cards, nounMorphology, query, selectedInventoryTags]);
   const filteredCards = useMemo(() => typeFilter === "all" ? matchingCards : matchingCards.filter((item) => item.type === typeFilter), [matchingCards, typeFilter]);
 
   useEffect(() => {
@@ -153,6 +156,7 @@ export default function Home() {
         if (!active) return;
         setCards(stored.cards);
         setNounMorphology(stored.nounMorphology);
+        setAdjectiveMorphology(stored.adjectiveMorphology);
         setStudyPreferences(stored.studyPreferences);
       })
       .catch((error) => {
@@ -191,7 +195,7 @@ export default function Home() {
       if (!work) {
         work = (async (): Promise<ExtensionImportResult> => {
           try {
-            const importedCards = extensionCandidatesToCards(request.candidates, nounMorphology);
+            const importedCards = extensionCandidatesToCards(request.candidates, nounMorphology, adjectiveMorphology);
             await addBatch(importedCards);
             return {
               source: "parola-web",
@@ -361,9 +365,10 @@ export default function Home() {
     setSyncWarning("");
     setSaveState("saving");
     try {
-      const saved = await storage.replaceInventory({ cards: nextCards, nounMorphology, studyPreferences: nextPreferences });
+      const saved = await storage.replaceInventory({ cards: nextCards, nounMorphology, adjectiveMorphology, studyPreferences: nextPreferences });
       setCards(saved.cards);
       setNounMorphology(saved.nounMorphology);
+      setAdjectiveMorphology(saved.adjectiveMorphology);
       setStudyPreferences(saved.studyPreferences);
       removeUnavailableInventoryTags(saved.cards);
       setSaveState("saved");
@@ -447,7 +452,7 @@ export default function Home() {
     for (const newCard of newCards) {
       const key = cardDuplicateKey(newCard);
       if (existingKeys.has(key) || newKeys.has(key)) {
-        throw new Error(`A ${newCard.type} card for “${cardItalianText(newCard, nounMorphology)}” / “${newCard.english}” already exists.`);
+        throw new Error(`A ${newCard.type} card for “${cardItalianText(newCard, nounMorphology, adjectiveMorphology)}” / “${newCard.english}” already exists.`);
       }
       newKeys.add(key);
     }
@@ -475,7 +480,7 @@ export default function Home() {
     if (!removed) return;
     const remainingCards = cards.filter((item) => item.id !== id);
     setCards(remainingCards);
-    setStudyPreferences((preferences) => prunedStudyPreferences(preferences, remainingCards, nounMorphology));
+    setStudyPreferences((preferences) => prunedStudyPreferences(preferences, remainingCards, nounMorphology, adjectiveMorphology));
     removeUnavailableInventoryTags(remainingCards);
     setCurrent(0);
     setSaveState("saving");
@@ -520,6 +525,7 @@ export default function Home() {
       const saved = await storage.replaceInventory(nextState);
       setCards(saved.cards);
       setNounMorphology(saved.nounMorphology);
+      setAdjectiveMorphology(saved.adjectiveMorphology);
       setStudyPreferences(saved.studyPreferences);
       removeUnavailableInventoryTags(saved.cards);
       setCurrent(0);
@@ -539,7 +545,7 @@ export default function Home() {
     setSyncWarning("");
     setSaveState("saving");
     try {
-      const saved = await storage.replaceInventory({ cards, nounMorphology, studyPreferences: next });
+      const saved = await storage.replaceInventory({ cards, nounMorphology, adjectiveMorphology, studyPreferences: next });
       setStudyPreferences(saved.studyPreferences);
       setSaveState("saved");
     } catch (error) {
@@ -576,6 +582,7 @@ export default function Home() {
       await createCardStorage("").replaceInventory(latestState);
       setCards(latestState.cards);
       setNounMorphology(latestState.nounMorphology);
+      setAdjectiveMorphology(latestState.adjectiveMorphology);
       setStudyPreferences(latestState.studyPreferences);
     }
 
@@ -596,6 +603,7 @@ export default function Home() {
     const nextState = await storage.syncNow();
     setCards(nextState.cards);
     setNounMorphology(nextState.nounMorphology);
+    setAdjectiveMorphology(nextState.adjectiveMorphology);
     setStudyPreferences(nextState.studyPreferences);
     removeUnavailableInventoryTags(nextState.cards);
     setCurrent(0);
@@ -608,6 +616,7 @@ export default function Home() {
         loading={loadingCards}
         cards={cards}
         morphology={nounMorphology}
+        adjectiveMorphology={adjectiveMorphology}
         preferences={studyPreferences}
         setup={setup}
         setupOpen={setupOpen}
@@ -650,6 +659,7 @@ export default function Home() {
         matchingCards={matchingCards}
         filteredCards={filteredCards}
         morphology={nounMorphology}
+        adjectiveMorphology={adjectiveMorphology}
         knownSets={setNames}
         query={query}
         onQuery={setQuery}
@@ -670,20 +680,21 @@ export default function Home() {
       />}
       {route === "grammar" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
-        <GrammarView cards={cards} morphology={nounMorphology} studyPreferences={studyPreferences} onSave={replaceNounInventory} onOpenCard={setEditingCard} />
+        <GrammarView cards={cards} morphology={nounMorphology} adjectiveMorphology={adjectiveMorphology} studyPreferences={studyPreferences} onSave={replaceNounInventory} onOpenCard={setEditingCard} />
       </>}
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
         <SettingsView
           storageProps={{ storage, endpoint: storageEndpoint, persistLocal, loadPolicy: syncLoadPolicy, onApply: applyStorageSettings, onSyncNow: syncNow }}
           morphology={nounMorphology}
+          adjectiveMorphology={adjectiveMorphology}
           preferences={studyPreferences}
           onPreferences={saveStudyPreferences}
         />
       </>}
     </AppShell>
 
-    {adding && <AddWordsSheet knownSets={setNames} morphology={nounMorphology} onClose={() => setAdding(false)} onBatch={addBatch} />}
-    {editingCard && <WordDrawer card={editingCard} knownSets={setNames} morphology={nounMorphology} studyPreferences={studyPreferences} onClose={() => setEditingCard(null)} onSave={saveWord} onRemove={removeCard} />}
+    {adding && <AddWordsSheet knownSets={setNames} morphology={nounMorphology} adjectiveMorphology={adjectiveMorphology} onClose={() => setAdding(false)} onBatch={addBatch} />}
+    {editingCard && <WordDrawer card={editingCard} knownSets={setNames} morphology={nounMorphology} adjectiveMorphology={adjectiveMorphology} studyPreferences={studyPreferences} onClose={() => setEditingCard(null)} onSave={saveWord} onRemove={removeCard} />}
   </>;
 }

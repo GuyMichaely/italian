@@ -130,12 +130,12 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function objectValue(value: unknown, label: string) {
+export function objectValue(value: unknown, label: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object.`);
   return value as Record<string, unknown>;
 }
 
-function assertExactKeys(value: Record<string, unknown>, label: string, expected: string[]) {
+export function assertExactKeys(value: Record<string, unknown>, label: string, expected: string[]) {
   const actual = Object.keys(value).sort();
   const wanted = [...expected].sort();
   if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
@@ -143,7 +143,7 @@ function assertExactKeys(value: Record<string, unknown>, label: string, expected
   }
 }
 
-function nonEmptyString(value: unknown, label: string) {
+export function nonEmptyString(value: unknown, label: string) {
   const result = String(value ?? "").trim();
   if (!result) throw new Error(`${label} must be a non-empty string.`);
   return result;
@@ -156,7 +156,7 @@ function normalizedTransform(value: unknown, label: string): NounFormTransform |
   return { suffix: String(transform.suffix ?? "").normalize("NFC") };
 }
 
-function assertUniqueNames(values: { name: string }[], label: string) {
+export function assertUniqueNames(values: { name: string }[], label: string) {
   const names = new Set<string>();
   for (const value of values) {
     if (names.has(value.name)) throw new Error(`Duplicate ${label} name: ${value.name}.`);

@@ -3,18 +3,17 @@ import type { Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import { typeLabels } from "../cardTypes";
 import {
-  adjectiveRowFromCard,
   adverbRowFromCard,
   parseTags,
   verbRowFromCard,
-  type AdjectiveBatchRow,
   type AdverbBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
+import { adjectiveCardFromDraft, adjectiveDraftForEditing, resolveAdjectiveDraft, suggestedAdjectiveForms, type AdjectiveDraft } from "../cards/adjectiveDraft";
+import { adjectiveFormLabels, adjectiveForms, adjectiveFormsEqual, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { articleProfileOptions, emptyNounDraft, irregularRuleValue, nounCardFromDraft, nounDraftForEditing, resolveNounDraft, spellingGroup, type NounDraft } from "../cards/nounDraft";
-import { standardAdjectivePattern } from "../study/logic";
-import { fullDeclensionReasonLabels, fullDeclensionReasons, type StudyPreferences } from "../study/preferences";
-import { NounDerivedPreview, NounRuleSelect, SetField, TagsField } from "./CardEditorFields";
+import { adjectiveFullFormsReasonLabels, adjectiveFullFormsReasons, fullDeclensionReasonLabels, fullDeclensionReasons, type StudyPreferences } from "../study/preferences";
+import { AdjectiveDerivedPreview, AdjectiveRuleSelect, NounDerivedPreview, NounRuleSelect, SetField, TagsField } from "./CardEditorFields";
 import { Sheet } from "./Sheet";
 
 function TextField({ label, value, onChange, autoFocus = false, placeholder, italian = false }: { label: string; value: string; onChange: (value: string) => void; autoFocus?: boolean; placeholder?: string; italian?: boolean }) {
@@ -28,6 +27,7 @@ export function WordDrawer({
   card,
   knownSets,
   morphology,
+  adjectiveMorphology,
   studyPreferences,
   onClose,
   onSave,
@@ -36,9 +36,10 @@ export function WordDrawer({
   card: Flashcard;
   knownSets: string[];
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   studyPreferences: StudyPreferences;
   onClose: () => void;
-  /** `fullDeclension` is whether word mode should always ask for every form of this noun. */
+  /** `fullDeclension` is whether a word answer should always ask for every form of this noun or adjective. */
   onSave: (card: Flashcard, fullDeclension: boolean) => void;
   onRemove: (id: number) => void;
 }) {
@@ -47,7 +48,7 @@ export function WordDrawer({
   const [tags, setTags] = useState(card.tags.join(", "));
   const [noun, setNoun] = useState<NounDraft>(() => card.type === "noun" ? nounDraftForEditing(card, morphology) : emptyNounDraft());
   const [verb, setVerb] = useState<VerbBatchRow | null>(() => card.type === "verb" ? verbRowFromCard(card) : null);
-  const [adjective, setAdjective] = useState<AdjectiveBatchRow | null>(() => card.type === "adjective" ? adjectiveRowFromCard(card) : null);
+  const [adjective, setAdjective] = useState<AdjectiveDraft | null>(() => card.type === "adjective" ? adjectiveDraftForEditing(card, adjectiveMorphology) : null);
   const [adverb, setAdverb] = useState<AdverbBatchRow | null>(() => card.type === "adverb" ? adverbRowFromCard(card) : null);
   const [fullDeclension, setFullDeclension] = useState(() => studyPreferences.fullDeclensionCards.includes(card.id));
 
@@ -65,11 +66,7 @@ export function WordDrawer({
           voi: verb.voi.trim(), loro: verb.loro.trim(), auxiliary: verb.auxiliary, participle: verb.participle.trim(),
         } };
       } else if (adjective) {
-        if ([adjective.english, adjective.masculineSingular, adjective.feminineSingular, adjective.masculinePlural, adjective.femininePlural].some((value) => !value.trim())) throw new Error("English and all four Italian adjective forms are required.");
-        updated = { ...common, type: "adjective", english: adjective.english.trim(), italian: adjective.masculineSingular.trim(), details: {
-          masculineSingular: adjective.masculineSingular.trim(), feminineSingular: adjective.feminineSingular.trim(),
-          masculinePlural: adjective.masculinePlural.trim(), femininePlural: adjective.femininePlural.trim(),
-        } };
+        updated = adjectiveCardFromDraft(adjective, common, adjectiveMorphology);
       } else if (adverb) {
         if (!adverb.english.trim() || !adverb.form.trim()) throw new Error("English and the Italian adverb are required.");
         updated = { ...common, type: "adverb", english: adverb.english.trim(), italian: adverb.form.trim(), details: {} };
@@ -98,11 +95,13 @@ export function WordDrawer({
     ? fullDeclensionReasons({ ...card, details: resolvedNoun.details }, morphology, { ...studyPreferences, fullDeclensionCards: [] })
     : [];
 
-  const regularPattern = adjective ? standardAdjectivePattern(adjective.masculineSingular) : null;
-  const regularAdjective = adjective && regularPattern
-    && (Object.keys(regularPattern) as (keyof typeof regularPattern)[]).some((field) => adjective[field].trim() !== regularPattern[field])
-    ? regularPattern
-    : null;
+  // The forms the rules suggest, offered when they differ from what's typed; and what already asks for all four.
+  const suggestion = adjective ? suggestedAdjectiveForms(adjective.masculineSingular, adjectiveMorphology) : null;
+  const offeredSuggestion = adjective && suggestion && !adjectiveFormsEqual(suggestion, adjective) ? suggestion : null;
+  const resolvedAdjective = adjective ? resolveAdjectiveDraft(adjective, adjectiveMorphology) : null;
+  const adjectiveReasons = resolvedAdjective?.ok && card.type === "adjective"
+    ? adjectiveFullFormsReasons({ ...card, details: { declension: resolvedAdjective.declension } }, adjectiveMorphology, { ...studyPreferences, fullDeclensionCards: [] })
+    : [];
 
   return (
     <Sheet size="side" title={card.english} subtitle={<span className={`pos-badge ${card.type}`}>{typeLabels[card.type]}</span>} onClose={onClose}>
@@ -177,14 +176,25 @@ export function WordDrawer({
         {adjective && <>
           <TextField label="English" value={adjective.english} onChange={(english) => setAdjective({ ...adjective, english })} autoFocus />
           <div className="field-row">
-            <TextField label="Masculine singular" italian value={adjective.masculineSingular} onChange={(masculineSingular) => setAdjective({ ...adjective, masculineSingular })} />
-            <TextField label="Feminine singular" italian value={adjective.feminineSingular} onChange={(feminineSingular) => setAdjective({ ...adjective, feminineSingular })} />
+            {adjectiveForms.slice(0, 2).map((form) => <TextField key={form} label={adjectiveFormLabels[form][0]!.toUpperCase() + adjectiveFormLabels[form].slice(1)} italian value={adjective[form]} onChange={(value) => setAdjective({ ...adjective, [form]: value })} />)}
           </div>
           <div className="field-row">
-            <TextField label="Masculine plural" italian value={adjective.masculinePlural} onChange={(masculinePlural) => setAdjective({ ...adjective, masculinePlural })} />
-            <TextField label="Feminine plural" italian value={adjective.femininePlural} onChange={(femininePlural) => setAdjective({ ...adjective, femininePlural })} />
+            {adjectiveForms.slice(2).map((form) => <TextField key={form} label={adjectiveFormLabels[form][0]!.toUpperCase() + adjectiveFormLabels[form].slice(1)} italian value={adjective[form]} onChange={(value) => setAdjective({ ...adjective, [form]: value })} />)}
           </div>
-          {regularAdjective && <button type="button" className="text-button align-start" onClick={() => setAdjective({ ...adjective, ...regularAdjective })}>Fill regular endings from “{adjective.masculineSingular}”</button>}
+          {offeredSuggestion && <button type="button" className="text-button align-start" onClick={() => setAdjective({ ...adjective, ...offeredSuggestion })}>Fill the forms the rules give “{adjective.masculineSingular.trim()}”</button>}
+          <label className="field">
+            <span>Adjective rule{adjective.rule === irregularRuleValue ? " · forms are stored exactly as typed" : ""}</span>
+            <AdjectiveRuleSelect label="Adjective rule" value={adjective.rule} morphology={adjectiveMorphology} onChange={(rule) => setAdjective({ ...adjective, rule })} />
+          </label>
+          <div className="derived-box"><span className="field-label">Generated forms</span><AdjectiveDerivedPreview draft={adjective} morphology={adjectiveMorphology} /></div>
+          <div className="study-options">
+            <span className="field-label">Study</span>
+            <label className="check-option">
+              <input type="checkbox" checked={fullDeclension} onChange={(event) => setFullDeclension(event.target.checked)} />
+              <span>Always ask for all four forms</span>
+            </label>
+            {adjectiveReasons.length > 0 && <p className="field-hint">Already asked for all four: {adjectiveReasons.map((reason) => adjectiveFullFormsReasonLabels[reason]).join("; ")}.</p>}
+          </div>
         </>}
         {adverb && <>
           <TextField label="English" value={adverb.english} onChange={(english) => setAdverb({ ...adverb, english })} autoFocus />

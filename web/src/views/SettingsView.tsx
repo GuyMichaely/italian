@@ -1,13 +1,15 @@
 import type { ComponentProps } from "react";
 import type { NounMorphology } from "../cards/nounMorphology";
+import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { AnswerKeywordSettings } from "../components/AnswerKeywordSettings";
 import { DeclensionDrillSettings } from "../components/DeclensionDrillSettings";
 import { StorageSettingsPanel } from "../components/StorageSettingsPanel";
 import type { StudyPreferences } from "../study/preferences";
 
-export function SettingsView({ storageProps, morphology, preferences, onPreferences }: {
+export function SettingsView({ storageProps, morphology, adjectiveMorphology, preferences, onPreferences }: {
   storageProps: ComponentProps<typeof StorageSettingsPanel>;
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   preferences: StudyPreferences;
   onPreferences: (preferences: StudyPreferences) => Promise<void>;
 }) {
@@ -24,9 +26,20 @@ export function SettingsView({ storageProps, morphology, preferences, onPreferen
     <section className="settings-section" aria-labelledby="drilling-heading">
       <div className="settings-section-heading">
         <h2 id="drilling-heading">Declensions you’re drilling</h2>
-        <p>Word mode asks for both the singular and the plural of every noun that uses a checked rule. Uncheck a rule once you know it, and one form will do again.</p>
+        <p>Word mode asks for both the singular and the plural of every noun that uses a checked rule, and for all four forms of every adjective that does. Uncheck a rule once you know it, and one form will do again.</p>
       </div>
-      <DeclensionDrillSettings morphology={morphology} drilling={preferences.fullDeclensionRules} onChange={(fullDeclensionRules) => onPreferences({ ...preferences, fullDeclensionRules })} />
+      <DeclensionDrillSettings
+        label="Nouns"
+        ruleNames={morphology.declensionRules.filter((rule) => rule.forms.singular && rule.forms.plural).map((rule) => rule.name)}
+        drilling={preferences.nounFullDeclensionRules}
+        onChange={(nounFullDeclensionRules) => onPreferences({ ...preferences, nounFullDeclensionRules })}
+      />
+      <DeclensionDrillSettings
+        label="Adjectives"
+        ruleNames={adjectiveMorphology.declensionRules.map((rule) => rule.name)}
+        drilling={preferences.adjectiveFullDeclensionRules}
+        onChange={(adjectiveFullDeclensionRules) => onPreferences({ ...preferences, adjectiveFullDeclensionRules })}
+      />
     </section>
   </section>;
 }

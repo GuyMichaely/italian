@@ -1,5 +1,6 @@
 import type { Flashcard } from "./cards/types";
 import type { NounMorphology } from "./cards/nounMorphology";
+import type { AdjectiveMorphology } from "./cards/adjectiveMorphology";
 import { normalizeCard } from "./storage/cardCodec";
 import { assertCardsFitMorphology } from "./storage/inventoryState";
 
@@ -38,8 +39,8 @@ export function parseExtensionImportRequest(value: unknown): ExtensionImportRequ
   return { source: "parola-capture-extension", type: extensionImportRequestType, requestId, candidates: request.candidates };
 }
 
-export function extensionCandidatesToCards(values: unknown[], morphology: NounMorphology): Flashcard[] {
+export function extensionCandidatesToCards(values: unknown[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard[] {
   const cards = values.map(normalizeCard);
-  assertCardsFitMorphology(cards, morphology);
+  assertCardsFitMorphology(cards, morphology, adjectiveMorphology);
   return cards;
 }

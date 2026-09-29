@@ -5,6 +5,8 @@ import {
   type VerbBatchRow,
 } from "../cards/editorModel";
 import { articleProfileOptions, irregularRuleValue, nounFormPhrases, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
+import { resolveAdjectiveDraft, type AdjectiveDraft } from "../cards/adjectiveDraft";
+import { adjectiveFormAbbreviations, adjectiveFormLabels, adjectiveForms, adjectiveFormsArePredictable, followsLessSpecificRule, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { irregularDeclensionName, type NounMorphology } from "../cards/nounMorphology";
 import type { NounDetails } from "../cards/types";
 
@@ -119,17 +121,49 @@ export function VerbRowCells({ row, index, onChange, onRemove, autoFocus = false
   </>;
 }
 
-const adjectiveFieldLabels = {
-  masculineSingular: "Masc. sg.",
-  feminineSingular: "Fem. sg.",
-  masculinePlural: "Masc. pl.",
-  femininePlural: "Fem. pl.",
-} as const;
+export function AdjectiveDerivedPreview({ draft, morphology }: { draft: AdjectiveDraft; morphology: AdjectiveMorphology }) {
+  if (!draft.masculineSingular.trim()) return <span className="derived-preview empty">Forms appear as you type</span>;
+  const resolved = resolveAdjectiveDraft(draft, morphology);
+  if (!resolved.ok) return <span className="derived-preview invalid" role="status">{resolved.error}</span>;
+  const suspicious = resolved.rule !== null && followsLessSpecificRule(resolved.rule, resolved.forms.masculineSingular, morphology);
+  const allFour = !adjectiveFormsArePredictable(resolved.forms, morphology);
+  return <span className="derived-preview valid">
+    <span className="derived-forms">{adjectiveForms.map((form) => resolved.forms[form]).join(" · ")}</span>
+    <small>{resolved.inferred ? "auto: " : ""}{resolved.rule ?? irregularDeclensionName}{allFour ? " · answers need all four forms" : ""}</small>
+    {suspicious && <small className="derived-warning">A rule with a longer ending also fits “{resolved.forms.masculineSingular}”. Check the forms for typos.</small>}
+  </span>;
+}
 
-export function AdjectiveRowCells({ row, index, onChange, onRemove, autoFocus = false }: { row: AdjectiveBatchRow; index: number; onChange: (field: keyof AdjectiveBatchRow, value: string) => void; onRemove?: () => void; autoFocus?: boolean }) {
+export function AdjectiveRuleSelect({ value, morphology, onChange, label }: { value: string; morphology: AdjectiveMorphology; onChange: (value: string) => void; label: string }) {
+  return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+    <option value="">Auto</option>
+    {morphology.declensionRules.map((rule) => <option key={rule.name} value={rule.name}>{rule.name}</option>)}
+    <option value={irregularRuleValue}>{irregularDeclensionName}</option>
+  </select>;
+}
+
+const adjectivePlaceholders = { masculineSingular: "rosso", feminineSingular: "rossa", masculinePlural: "rossi", femininePlural: "rosse" } as const;
+
+export function AdjectiveRowCells({
+  row,
+  index,
+  morphology,
+  onChange,
+  onRemove,
+  autoFocus = false,
+}: {
+  row: AdjectiveBatchRow;
+  index: number;
+  morphology: AdjectiveMorphology;
+  onChange: <K extends keyof AdjectiveDraft>(field: K, value: AdjectiveDraft[K]) => void;
+  onRemove?: () => void;
+  autoFocus?: boolean;
+}) {
   return <>
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(e) => onChange("english", e.target.value)} placeholder="beautiful" autoFocus={autoFocus} /></td>
-    {(["masculineSingular", "feminineSingular", "masculinePlural", "femininePlural"] as const).map((field) => <td key={field} data-label={adjectiveFieldLabels[field]}><input aria-label={`Row ${index + 1} ${field}`} value={row[field]} onChange={(e) => onChange(field, e.target.value)} /></td>)}
+    {adjectiveForms.map((form) => <td key={form} data-label={adjectiveFormAbbreviations[form]}><input aria-label={`Row ${index + 1} ${adjectiveFormLabels[form]}`} className={row.suggested && form !== "masculineSingular" ? "suggested" : ""} value={row[form]} onChange={(e) => onChange(form, e.target.value)} placeholder={adjectivePlaceholders[form]} autoCapitalize="none" spellCheck={false} /></td>)}
+    <td data-label="Rule"><AdjectiveRuleSelect label={`Row ${index + 1} adjective rule`} value={row.rule} morphology={morphology} onChange={(value) => onChange("rule", value)} /></td>
+    <td data-label="Forms" className="derived-cell"><AdjectiveDerivedPreview draft={row} morphology={morphology} /></td>
     {onRemove && <td className="row-action-cell"><button type="button" className="row-remove" tabIndex={-1} onClick={onRemove} aria-label={`Remove row ${index + 1}`}>×</button></td>}
   </>;
 }

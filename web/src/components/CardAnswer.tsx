@@ -1,13 +1,22 @@
 import { type FormEvent, useState } from "react";
 import type { AdjectiveCard, AdverbCard, Flashcard, NounCard, VerbCard } from "../cards/types";
 import { irregularDeclensionName, resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
+import { adjectiveFormAbbreviations, adjectiveForms, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { nounFormPhrases } from "../cards/nounDraft";
 import type { StudyPreferences } from "../study/preferences";
 import { AnswerParsePreview, analyzeAnswerSyntax } from "./AnswerParsePreview";
 import { checkTypedAnswer, type StudyItem } from "../study/logic";
 
 /** The single Italian headword shown for a card in prompts, lists, and answers. */
-export function italianHeadword(card: Flashcard, morphology: NounMorphology) {
+export function italianHeadword(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
+  if (card.type === "adjective") {
+    try {
+      return resolvedAdjectiveForms(card, adjectiveMorphology).forms.masculineSingular;
+    } catch {
+      const declension = card.details.declension;
+      return declension.kind === "rule" ? declension.base : declension.masculineSingular;
+    }
+  }
   if (card.type !== "noun") return card.italian;
   try {
     const forms = resolvedNounForms(card, morphology);
@@ -49,17 +58,14 @@ function VerbAnswer({ card }: { card: VerbCard }) {
   );
 }
 
-function AdjectiveAnswer({ card }: { card: AdjectiveCard }) {
-  const d = card.details;
+function AdjectiveAnswer({ card, morphology }: { card: AdjectiveCard; morphology: AdjectiveMorphology }) {
+  const { forms, rule } = resolvedAdjectiveForms(card, morphology);
   return (
     <div className="answer-block">
-      <p className="answer-meta">adjective</p>
-      <p className="italian-word">{card.italian}</p>
+      <p className="answer-meta">adjective · {rule ?? irregularDeclensionName}</p>
+      <p className="italian-word">{forms.masculineSingular}</p>
       <dl className="conjugation-grid two-columns">
-        <div><dt>masc. sg.</dt><dd lang="it">{d.masculineSingular}</dd></div>
-        <div><dt>fem. sg.</dt><dd lang="it">{d.feminineSingular}</dd></div>
-        <div><dt>masc. pl.</dt><dd lang="it">{d.masculinePlural}</dd></div>
-        <div><dt>fem. pl.</dt><dd lang="it">{d.femininePlural}</dd></div>
+        {adjectiveForms.map((form) => <div key={form}><dt>{adjectiveFormAbbreviations[form]}</dt><dd lang="it">{forms[form]}</dd></div>)}
       </dl>
     </div>
   );
@@ -69,20 +75,20 @@ function AdverbAnswer({ card }: { card: AdverbCard }) {
   return <div className="answer-block"><p className="answer-meta">adverb · invariant</p><p className="italian-word">{card.italian}</p></div>;
 }
 
-export function CardAnswer({ card, morphology }: { card: Flashcard; morphology: NounMorphology }) {
+export function CardAnswer({ card, morphology, adjectiveMorphology }: { card: Flashcard; morphology: NounMorphology; adjectiveMorphology: AdjectiveMorphology }) {
   if (card.type === "noun") return <NounAnswer card={card} morphology={morphology} />;
   if (card.type === "verb") return <VerbAnswer card={card} />;
   if (card.type === "adverb") return <AdverbAnswer card={card} />;
-  return <AdjectiveAnswer card={card} />;
+  return <AdjectiveAnswer card={card} morphology={adjectiveMorphology} />;
 }
 
-/** What was wrong with a typed noun answer, listed under the answer after checking. */
+/** What was wrong with a typed noun or adjective answer, listed under the answer after checking. */
 export function AnswerProblems({ problems }: { problems: string[] }) {
   if (!problems.length) return null;
   return <ul className="answer-problems">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>;
 }
 
-export function ItalianVerificationForm({ item, preferences, morphology, onResult }: { item: StudyItem; preferences: StudyPreferences; morphology: NounMorphology; onResult: (correct: boolean, answer: string, problems: string[]) => void }) {
+export function ItalianVerificationForm({ item, preferences, morphology, adjectiveMorphology, onResult }: { item: StudyItem; preferences: StudyPreferences; morphology: NounMorphology; adjectiveMorphology: AdjectiveMorphology; onResult: (correct: boolean, answer: string, problems: string[]) => void }) {
   const { card } = item;
   const [answer, setAnswer] = useState("");
   const [syntaxRejected, setSyntaxRejected] = useState(false);
@@ -95,7 +101,7 @@ export function ItalianVerificationForm({ item, preferences, morphology, onResul
       return;
     }
     setSyntaxRejected(false);
-    const check = checkTypedAnswer(item, answer, morphology, preferences);
+    const check = checkTypedAnswer(item, answer, morphology, adjectiveMorphology, preferences);
     onResult(check.correct, answer, check.problems);
   }
 

@@ -28,7 +28,9 @@ src/
 │   ├── types.ts                   discriminated Flashcard union and typed detail schemas
 │   ├── editorModel.ts             batch-entry rows, drafts, and card construction
 │   ├── nounDraft.ts               the one noun-entry model: surface forms → rule, base, articles
-│   └── nounMorphology.ts          declension rules, article table, generation, plural prediction
+│   ├── nounMorphology.ts          declension rules, article table, generation, plural prediction
+│   ├── adjectiveDraft.ts          the adjective-entry model: four forms → rule and base
+│   └── adjectiveMorphology.ts     adjective rules, generation, prediction
 ├── storage/                       inventory persistence, sync, import/export (cards, morphology, study preferences)
 ├── study/
 │   ├── setup.ts                   study setup (mode, scope, prompts), persistence
@@ -41,7 +43,7 @@ src/
 ├── views/
 │   ├── StudyView.tsx               setup sidebar (staged mid-session), flip/typed cards, summary
 │   ├── WordsView.tsx               filters, search, part-of-speech tabs, bulk actions
-│   ├── GrammarView.tsx             noun morphology page
+│   ├── GrammarView.tsx             noun and adjective morphology page
 │   └── SettingsView.tsx            sync, backup/restore, answer keywords, drilled rules
 └── components/
     ├── AppShell.tsx                top navigation (desktop) and bottom tab bar (phone)
@@ -61,9 +63,9 @@ src/
 
 `Flashcard` is a discriminated union keyed by `type`, so `card.type === "noun"` narrows `card.details` to the noun detail schema at compile time. External JSON remains untrusted until `cardCodec` validates and normalizes it.
 
-The shared card base does not require `italian`. Noun cards omit that property because their surface forms are derived. Verb, adjective, and adverb cards still store their canonical `italian` value.
+The shared card base does not require `italian`. Noun and adjective cards omit that property because their surface forms are derived from `details.declension` and the inventory's `nounMorphology` or `adjectiveMorphology`. Verb and adverb cards still store their canonical `italian` value.
 
-`App.tsx` owns cross-cutting application state, including the current card collection and active noun morphology. Morphology is passed explicitly to study and editor code rather than stored in a second runtime singleton.
+`App.tsx` owns cross-cutting application state, including the current card collection and the active noun and adjective morphology. Morphology is passed explicitly to study and editor code rather than stored in a second runtime singleton.
 
 Each completed study round with wrong answers adds a numbered mistake review set. Earlier sets remain replayable, including after returning to the full session; replaying a set can produce another set without replacing its parent. Sets preserve the failed prompt directions and resolve current card data on replay. This history lives in app memory and clears when the session setup changes or the page reloads. Switching between typing and flipping preserves it.
 

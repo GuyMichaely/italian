@@ -3,8 +3,6 @@ import type { CardType, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import { typeLabels } from "../cardTypes";
 import {
-  adjectiveCard,
-  adjectiveRowFromCard,
   adverbCard,
   adverbRowFromCard,
   parseTags,
@@ -15,6 +13,8 @@ import {
   type VerbBatchRow,
 } from "../cards/editorModel";
 import { nounDraftForEditing, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
+import { adjectiveDraftForEditing, resolveAdjectiveDraft } from "../cards/adjectiveDraft";
+import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { AdjectiveRowCells, AdverbRowCells, NounBatchRowCells, VerbRowCells } from "./CardEditorFields";
 import { italianHeadword } from "./CardAnswer";
 
@@ -27,22 +27,19 @@ type GridRow =
 
 export type GridTab = CardType | "all";
 
-function rowFromCard(card: Flashcard, morphology: NounMorphology): GridRow {
+function rowFromCard(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): GridRow {
   const metadata = { setName: card.setName ?? "", tags: card.tags.join(", ") };
   if (card.type === "noun") return { type: "noun", ...nounDraftForEditing(card, morphology), ...metadata };
   if (card.type === "verb") {
     const { id: _id, ...row } = verbRowFromCard(card);
     return { type: "verb", ...row, ...metadata };
   }
-  if (card.type === "adjective") {
-    const { id: _id, ...row } = adjectiveRowFromCard(card);
-    return { type: "adjective", ...row, ...metadata };
-  }
+  if (card.type === "adjective") return { type: "adjective", ...adjectiveDraftForEditing(card, adjectiveMorphology), suggested: false, ...metadata };
   const { id: _id, ...row } = adverbRowFromCard(card);
   return { type: "adverb", ...row, ...metadata };
 }
 
-function cardFromRow(row: GridRow, id: number, morphology: NounMorphology): Flashcard {
+function cardFromRow(row: GridRow, id: number, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard {
   const common = { id, setName: row.setName.trim() || null, tags: parseTags(row.tags) };
   const english = row.english.trim();
   if (!english) throw new Error("English is required.");
@@ -57,9 +54,9 @@ function cardFromRow(row: GridRow, id: number, morphology: NounMorphology): Flas
     return verbCard({ ...row, ...common, english, infinitive: fields[0]!, io: fields[1]!, tu: fields[2]!, luiLei: fields[3]!, noi: fields[4]!, voi: fields[5]!, loro: fields[6]!, participle: fields[7]! });
   }
   if (row.type === "adjective") {
-    const fields = [row.masculineSingular, row.feminineSingular, row.masculinePlural, row.femininePlural].map((value) => value.trim());
-    if (fields.some((value) => !value)) throw new Error("An adjective needs all four forms.");
-    return adjectiveCard({ ...common, english, masculineSingular: fields[0]!, feminineSingular: fields[1]!, masculinePlural: fields[2]!, femininePlural: fields[3]! });
+    const resolved = resolveAdjectiveDraft(row, adjectiveMorphology);
+    if (!resolved.ok) throw new Error(resolved.error);
+    return { ...common, type: "adjective", english, details: { declension: resolved.declension } };
   }
   if (!row.form.trim()) throw new Error("An adverb needs its Italian form.");
   return adverbCard({ ...common, english, form: row.form.trim() });
@@ -70,7 +67,7 @@ const rowKey = (row: GridRow) => JSON.stringify(row);
 const typeHeaders: Record<CardType, string[]> = {
   noun: ["English", "Singular", "Plural", "Gender", "Articles", "Rule", "Forms"],
   verb: ["English", "Infinitive", "io", "tu", "lui / lei", "noi", "voi", "loro", "Aux.", "Participle"],
-  adjective: ["English", "Masc. sg.", "Fem. sg.", "Masc. pl.", "Fem. pl."],
+  adjective: ["English", "Masc. sg.", "Fem. sg.", "Masc. pl.", "Fem. pl.", "Rule", "Forms"],
   adverb: ["English", "Italian"],
 };
 
@@ -80,6 +77,7 @@ export function WordsGrid({
   tab,
   knownSets,
   morphology,
+  adjectiveMorphology,
   selectedIds,
   onToggleSelected,
   onSelectAll,
@@ -92,6 +90,7 @@ export function WordsGrid({
   tab: GridTab;
   knownSets: string[];
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   selectedIds: number[];
   onToggleSelected: (id: number) => void;
   onSelectAll: (ids: number[], selected: boolean) => void;
@@ -99,7 +98,7 @@ export function WordsGrid({
   onOpen: (card: Flashcard) => void;
   onRemove: (id: number) => void;
 }) {
-  const baseline = useMemo(() => new Map(allCards.map((card) => [card.id, rowFromCard(card, morphology)])), [allCards, morphology]);
+  const baseline = useMemo(() => new Map(allCards.map((card) => [card.id, rowFromCard(card, morphology, adjectiveMorphology)])), [adjectiveMorphology, allCards, morphology]);
   const [drafts, setDrafts] = useState<Record<number, GridRow>>({});
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState(false);
@@ -162,7 +161,7 @@ export function WordsGrid({
     const errors: Record<number, string> = {};
     for (const id of dirtyIds) {
       try {
-        updated.push(cardFromRow(drafts[id]!, id, morphology));
+        updated.push(cardFromRow(drafts[id]!, id, morphology, adjectiveMorphology));
       } catch (caught) {
         errors[id] = caught instanceof Error ? caught.message : "This row is invalid.";
       }
@@ -196,7 +195,7 @@ export function WordsGrid({
     const onField = (field: string, value: unknown) => update(card.id, { [field]: value });
     if (row.type === "noun") return <NounBatchRowCells row={{ ...row, id: String(card.id), pluralSuggested: false }} index={index} morphology={morphology} onChange={onField} />;
     if (row.type === "verb") return <VerbRowCells row={{ ...row, id: String(card.id) }} index={index} onChange={onField} />;
-    if (row.type === "adjective") return <AdjectiveRowCells row={{ ...row, id: String(card.id) }} index={index} onChange={onField} />;
+    if (row.type === "adjective") return <AdjectiveRowCells row={{ ...row, id: String(card.id) }} index={index} morphology={adjectiveMorphology} onChange={onField} />;
     return <AdverbRowCells row={{ ...row, id: String(card.id) }} index={index} onChange={onField} />;
   }
 
@@ -224,7 +223,7 @@ export function WordsGrid({
                 {tab === "all" ? <>
                   <td className="italian-cell"><button type="button" className="italian-open" onClick={() => onOpen(card)} title="Open in editor">
                     <span className={`pos-dot ${card.type}`} title={typeLabels[card.type]} />
-                    <span lang="it">{italianHeadword(card, morphology)}</span>
+                    <span lang="it">{italianHeadword(card, morphology, adjectiveMorphology)}</span>
                     <small>{typeLabels[card.type].toLowerCase()}{card.setName ? ` · ${card.setName}` : ""}</small>
                   </button></td>
                   <td data-label="English"><input aria-label={`English for ${card.english}`} value={row.english} onChange={(event) => update(card.id, { english: event.target.value })} /></td>

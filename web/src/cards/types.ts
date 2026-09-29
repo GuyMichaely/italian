@@ -44,11 +44,16 @@ export type VerbDetails = {
   participle: string;
 };
 
+export type AdjectiveForm = "masculineSingular" | "feminineSingular" | "masculinePlural" | "femininePlural";
+export type AdjectiveForms = Record<AdjectiveForm, string>;
+
+/** How an adjective's four forms are produced: a declension rule and base, or the forms themselves. */
+export type AdjectiveDeclension =
+  | { kind: "rule"; rule: string; base: string }
+  | ({ kind: "irregular" } & AdjectiveForms);
+
 export type AdjectiveDetails = {
-  masculineSingular: string;
-  feminineSingular: string;
-  masculinePlural: string;
-  femininePlural: string;
+  declension: AdjectiveDeclension;
 };
 
 export type AdverbDetails = Record<string, never>;
@@ -62,13 +67,13 @@ type CardBase<Type extends CardType, Details> = {
   details: Details;
 };
 
-type ItalianCardBase<Type extends Exclude<CardType, "noun">, Details> = CardBase<Type, Details> & {
+type ItalianCardBase<Type extends Exclude<CardType, "noun" | "adjective">, Details> = CardBase<Type, Details> & {
   italian: string;
 };
 
 export type NounCard = CardBase<"noun", NounDetails>;
 export type VerbCard = ItalianCardBase<"verb", VerbDetails>;
-export type AdjectiveCard = ItalianCardBase<"adjective", AdjectiveDetails>;
+export type AdjectiveCard = CardBase<"adjective", AdjectiveDetails>;
 export type AdverbCard = ItalianCardBase<"adverb", AdverbDetails>;
 
 export type Flashcard = NounCard | VerbCard | AdjectiveCard | AdverbCard;

@@ -55,9 +55,30 @@ const defaultNounMorphology = {
   ]
 };
 
+const adjectiveForms = ["masculineSingular", "feminineSingular", "masculinePlural", "femininePlural"];
+
+function adjectiveEndings(masculineSingular, feminineSingular, masculinePlural, femininePlural) {
+  return { masculineSingular, feminineSingular, masculinePlural, femininePlural };
+}
+
+const defaultAdjectiveMorphology = {
+  declensionRules: [
+    { name: "-o/-a/-i/-e", endings: adjectiveEndings("o", "a", "i", "e") },
+    { name: "-e/-e/-i/-i", endings: adjectiveEndings("e", "e", "i", "i") },
+    { name: "-co/-ca/-chi/-che", endings: adjectiveEndings("co", "ca", "chi", "che") },
+    { name: "-co/-ca/-ci/-che", endings: adjectiveEndings("co", "ca", "ci", "che") },
+    { name: "-go/-ga/-ghi/-ghe", endings: adjectiveEndings("go", "ga", "ghi", "ghe") },
+    { name: "-io/-ia/-i/-ie", endings: adjectiveEndings("io", "ia", "i", "ie") },
+    { name: "-cio/-cia/-ci/-ce", endings: adjectiveEndings("cio", "cia", "ci", "ce") },
+    { name: "-ista/-ista/-isti/-iste", endings: adjectiveEndings("ista", "ista", "isti", "iste") },
+    { name: "Invariable", endings: adjectiveEndings("", "", "", "") },
+  ],
+};
+
 const defaultStudyPreferences = {
   answerKeywords: { masculine: "m", feminine: "f", singularOnly: "s", pluralOnly: "p" },
-  fullDeclensionRules: [],
+  nounFullDeclensionRules: [],
+  adjectiveFullDeclensionRules: [],
   fullDeclensionCards: [],
 };
 
@@ -90,12 +111,24 @@ function nounIdentity(declension) {
     : `irregular\u0000${normalizeIdentityText(declension.singular)}\u0000${normalizeIdentityText(declension.plural)}`;
 }
 
+function adjectiveIdentity(declension) {
+  return declension.kind === "rule"
+    ? `rule\u0000${normalizeIdentityText(declension.rule)}\u0000${normalizeIdentityText(declension.base)}`
+    : `irregular\u0000${adjectiveForms.map((form) => normalizeIdentityText(declension[form])).join("\u0000")}`;
+}
+
 function cardDuplicateKey(card) {
-  const italianIdentity = card.type === "noun" ? nounIdentity(card.details.declension) : normalizeIdentityText(card.italian);
+  const italianIdentity = card.type === "noun"
+    ? nounIdentity(card.details.declension)
+    : card.type === "adjective" ? adjectiveIdentity(card.details.declension) : normalizeIdentityText(card.italian);
   return `${card.type}\u0000${normalizeIdentityText(card.english)}\u0000${italianIdentity}`;
 }
 
 function cardIdentityLabel(card) {
+  if (card.type === "adjective") {
+    const declension = card.details.declension;
+    return declension.kind === "rule" ? `${declension.rule} / base ${declension.base}` : declension.masculineSingular;
+  }
   if (card.type !== "noun") return card.italian;
   const declension = card.details.declension;
   return declension.kind === "rule" ? `${declension.rule} / base ${declension.base || "∅"}` : [declension.singular, declension.plural].filter(Boolean).join(" / ");
@@ -189,6 +222,10 @@ function normalizeCard(value, { requireId = false } = {}) {
       articleProfile: normalizeNounArticleProfile(rawDetails.articleProfile),
       articleGroups: normalizeArticleGroupOverrides(rawDetails.articleGroups),
     };
+  } else if (type === "adjective") {
+    if (Object.prototype.hasOwnProperty.call(value, "italian")) throw new Error("Adjective cards must not store a derived italian field.");
+    assertExactKeys(rawDetails, "Adjective card details", ["declension"]);
+    details = { declension: normalizeAdjectiveDeclension(rawDetails.declension) };
   } else {
     italian = String(value.italian || "").trim();
     if (!italian) throw new Error(`${type} card needs Italian text.`);
@@ -199,11 +236,41 @@ function normalizeCard(value, { requireId = false } = {}) {
     ...(requireId ? { id } : {}),
     type,
     english,
-    ...(type === "noun" ? {} : { italian }),
+    ...(type === "noun" || type === "adjective" ? {} : { italian }),
     setName: typeof value.setName === "string" && value.setName.trim() ? value.setName.trim() : null,
     tags: Array.isArray(value.tags) ? [...new Set(value.tags.map(String).map((tag) => tag.trim()).filter(Boolean))] : [],
     details,
   };
+}
+
+function normalizeAdjectiveDeclension(value) {
+  const declension = objectValue(value, "Adjective declension");
+  if (declension.kind === "rule") {
+    assertExactKeys(declension, "Adjective declension", ["kind", "rule", "base"]);
+    return { kind: "rule", rule: nonEmptyString(declension.rule, "Adjective declension rule"), base: nonEmptyString(declension.base, "Adjective declension base").normalize("NFC") };
+  }
+  if (declension.kind === "irregular") {
+    assertExactKeys(declension, "Adjective declension", ["kind", ...adjectiveForms]);
+    return { kind: "irregular", ...Object.fromEntries(adjectiveForms.map((form) => [form, nonEmptyString(declension[form], `Irregular adjective ${form}`).normalize("NFC")])) };
+  }
+  throw new Error('Adjective declension kind must be "rule" or "irregular".');
+}
+
+function normalizeAdjectiveMorphology(value) {
+  const payload = objectValue(value, "Adjective morphology");
+  assertExactKeys(payload, "Adjective morphology", ["declensionRules"]);
+  if (!Array.isArray(payload.declensionRules)) throw new Error("Adjective morphology needs a declensionRules array.");
+  const declensionRules = payload.declensionRules.map((raw) => {
+    const rule = objectValue(raw, "Adjective rule");
+    assertExactKeys(rule, "Adjective rule", ["name", "endings"]);
+    const name = nonEmptyString(rule.name, "Adjective rule name");
+    if (name === "Irregular" || name.startsWith(":")) throw new Error(`“${name}” is reserved; choose another adjective rule name.`);
+    const endings = objectValue(rule.endings, `Adjective rule ${name} endings`);
+    assertExactKeys(endings, `Adjective rule ${name} endings`, adjectiveForms);
+    return { name, endings: Object.fromEntries(adjectiveForms.map((form) => [form, String(endings[form] ?? "").normalize("NFC").trim()])) };
+  });
+  assertUniqueNames(declensionRules, "adjective rule");
+  return { declensionRules };
 }
 
 function nonEmptyString(value, label) {
@@ -330,35 +397,45 @@ function normalizeAnswerKeywords(value) {
   return keywords;
 }
 
+function ruleNameList(value, label) {
+  if (!Array.isArray(value)) throw new Error(`Study preferences need a ${label} array.`);
+  return [...new Set(value.map((name) => nonEmptyString(name, "Full-declension rule name")))];
+}
+
 function normalizeStudyPreferences(value) {
   const raw = objectValue(value, "Study preferences");
-  assertExactKeys(raw, "Study preferences", ["answerKeywords", "fullDeclensionRules", "fullDeclensionCards"]);
-  if (!Array.isArray(raw.fullDeclensionRules) || !Array.isArray(raw.fullDeclensionCards)) {
-    throw new Error("Study preferences need fullDeclensionRules and fullDeclensionCards arrays.");
-  }
+  assertExactKeys(raw, "Study preferences", ["answerKeywords", "nounFullDeclensionRules", "adjectiveFullDeclensionRules", "fullDeclensionCards"]);
+  if (!Array.isArray(raw.fullDeclensionCards)) throw new Error("Study preferences need a fullDeclensionCards array.");
   const cards = raw.fullDeclensionCards.map((id) => {
     if (!Number.isSafeInteger(id)) throw new Error("Full-declension card ids must be integers.");
     return id;
   });
   return {
     answerKeywords: normalizeAnswerKeywords(raw.answerKeywords),
-    fullDeclensionRules: [...new Set(raw.fullDeclensionRules.map((name) => nonEmptyString(name, "Full-declension rule name")))],
+    nounFullDeclensionRules: ruleNameList(raw.nounFullDeclensionRules, "nounFullDeclensionRules"),
+    adjectiveFullDeclensionRules: ruleNameList(raw.adjectiveFullDeclensionRules, "adjectiveFullDeclensionRules"),
     fullDeclensionCards: [...new Set(cards)],
   };
 }
 
-/** Study preferences without references to deleted nouns or rules. */
-function prunedStudyPreferences(preferences, cards, nounMorphology) {
-  const ruleNames = new Set(nounMorphology.declensionRules.map((rule) => rule.name));
-  const nounIds = new Set(cards.filter((card) => card.type === "noun").map((card) => card.id));
+function declinedCardIds(cards) {
+  return new Set(cards.filter((card) => card.type === "noun" || card.type === "adjective").map((card) => card.id));
+}
+
+/** Study preferences without references to deleted words or rules. */
+function prunedStudyPreferences({ cards, nounMorphology, adjectiveMorphology, studyPreferences }) {
+  const nounRules = new Set(nounMorphology.declensionRules.map((rule) => rule.name));
+  const adjectiveRules = new Set(adjectiveMorphology.declensionRules.map((rule) => rule.name));
+  const ids = declinedCardIds(cards);
   return {
-    ...preferences,
-    fullDeclensionRules: preferences.fullDeclensionRules.filter((name) => ruleNames.has(name)),
-    fullDeclensionCards: preferences.fullDeclensionCards.filter((id) => nounIds.has(id)),
+    ...studyPreferences,
+    nounFullDeclensionRules: studyPreferences.nounFullDeclensionRules.filter((name) => nounRules.has(name)),
+    adjectiveFullDeclensionRules: studyPreferences.adjectiveFullDeclensionRules.filter((name) => adjectiveRules.has(name)),
+    fullDeclensionCards: studyPreferences.fullDeclensionCards.filter((id) => ids.has(id)),
   };
 }
 
-function validateState(cards, nounMorphology, studyPreferences) {
+function validateState({ cards, nounMorphology, adjectiveMorphology, studyPreferences }) {
   const duplicateKeys = new Set();
   for (const card of cards) {
     const duplicateKey = cardDuplicateKey(card);
@@ -392,12 +469,21 @@ function validateState(cards, nounMorphology, studyPreferences) {
     }
   }
 
-  for (const name of studyPreferences.fullDeclensionRules) {
+  const adjectiveRules = new Map(adjectiveMorphology.declensionRules.map((rule) => [rule.name, rule]));
+  for (const card of cards) {
+    if (card.type !== "adjective" || card.details.declension.kind !== "rule") continue;
+    if (!adjectiveRules.has(card.details.declension.rule)) throw new Error(`Adjective card ${card.id ?? card.english} references unknown adjective rule ${card.details.declension.rule}.`);
+  }
+
+  for (const name of studyPreferences.nounFullDeclensionRules) {
     if (!rules.has(name)) throw new Error(`Study preferences name unknown declension rule ${name}.`);
   }
-  const nounIds = new Set(cards.filter((card) => card.type === "noun").map((card) => card.id));
+  for (const name of studyPreferences.adjectiveFullDeclensionRules) {
+    if (!adjectiveRules.has(name)) throw new Error(`Study preferences name unknown adjective rule ${name}.`);
+  }
+  const ids = declinedCardIds(cards);
   for (const id of studyPreferences.fullDeclensionCards) {
-    if (!nounIds.has(id)) throw new Error(`Study preferences name unknown noun card ${id}.`);
+    if (!ids.has(id)) throw new Error(`Study preferences name unknown noun or adjective card ${id}.`);
   }
 }
 
@@ -405,6 +491,7 @@ function emptyState() {
   return {
     cards: [],
     nounMorphology: structuredClone(defaultNounMorphology),
+    adjectiveMorphology: structuredClone(defaultAdjectiveMorphology),
     studyPreferences: structuredClone(defaultStudyPreferences),
     updatedAt: null,
   };
@@ -420,17 +507,20 @@ async function readState() {
     const parsed = objectValue(JSON.parse(await readFile(dataPath, "utf8")), "Inventory state");
     if (!Array.isArray(parsed.cards)) throw new Error("Inventory state needs a cards array.");
     if (!parsed.nounMorphology) throw new Error("Inventory state needs nounMorphology.");
+    if (!parsed.adjectiveMorphology) throw new Error("Inventory state needs adjectiveMorphology.");
     if (!parsed.studyPreferences) throw new Error("Inventory state needs studyPreferences.");
     const cards = parsed.cards.map((card) => normalizeCard(card, { requireId: true }));
     const nounMorphology = normalizeNounMorphology(parsed.nounMorphology);
+    const adjectiveMorphology = normalizeAdjectiveMorphology(parsed.adjectiveMorphology);
     const studyPreferences = normalizeStudyPreferences(parsed.studyPreferences);
     const updatedAt = parsed.updatedAt === null || parsed.updatedAt === undefined
       ? null
       : typeof parsed.updatedAt === "string" && Number.isFinite(Date.parse(parsed.updatedAt))
         ? parsed.updatedAt
         : (() => { throw new Error("Inventory state has an invalid updatedAt timestamp."); })();
-    validateState(cards, nounMorphology, studyPreferences);
-    return { cards, nounMorphology, studyPreferences, updatedAt };
+    const state = { cards, nounMorphology, adjectiveMorphology, studyPreferences, updatedAt };
+    validateState(state);
+    return state;
   } catch (error) {
     if (error?.code === "ENOENT") return emptyState();
     throw error;
@@ -445,7 +535,7 @@ async function writeAtomic(path, contents) {
 }
 
 async function writeState(state) {
-  validateState(state.cards, state.nounMorphology, state.studyPreferences);
+  validateState(state);
   await writeAtomic(dataPath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
@@ -459,27 +549,26 @@ function mutateCards(operation) {
   return queueWrite(async () => {
     const state = await readState();
     const result = await operation(state.cards);
-    const studyPreferences = prunedStudyPreferences(state.studyPreferences, state.cards, state.nounMorphology);
+    const studyPreferences = prunedStudyPreferences(state);
     await writeState({ ...state, studyPreferences, updatedAt: new Date().toISOString() });
     return result;
   });
 }
 
-function replaceStateIfNewer(cards, nounMorphology, studyPreferences, updatedAt) {
+function replaceStateIfNewer(incoming) {
+  const { updatedAt } = incoming;
   return queueWrite(async () => {
     const current = await readState();
     const incomingTime = Date.parse(updatedAt);
     const currentTime = current.updatedAt ? Date.parse(current.updatedAt) : Number.NEGATIVE_INFINITY;
     if (incomingTime < currentTime) return { conflict: true, state: current };
     if (incomingTime === currentTime) {
-      const sameState = JSON.stringify(cards) === JSON.stringify(current.cards)
-        && JSON.stringify(nounMorphology) === JSON.stringify(current.nounMorphology)
-        && JSON.stringify(studyPreferences) === JSON.stringify(current.studyPreferences);
+      const sameState = ["cards", "nounMorphology", "adjectiveMorphology", "studyPreferences"]
+        .every((key) => JSON.stringify(incoming[key]) === JSON.stringify(current[key]));
       return sameState ? { conflict: false, state: current } : { conflict: true, state: current };
     }
-    const state = { cards, nounMorphology, studyPreferences, updatedAt };
-    await writeState(state);
-    return { conflict: false, state };
+    await writeState(incoming);
+    return { conflict: false, state: incoming };
   });
 }
 
@@ -512,13 +601,19 @@ const server = createServer(async (req, res) => {
         const body = await readJsonBody(req);
         if (!body || !Array.isArray(body.cards)) return sendJson(res, 400, { error: "PUT /state requires a cards array." }, cors);
         if (!body.nounMorphology) return sendJson(res, 400, { error: "PUT /state requires nounMorphology." }, cors);
+        if (!body.adjectiveMorphology) return sendJson(res, 400, { error: "PUT /state requires adjectiveMorphology." }, cors);
         if (!body.studyPreferences) return sendJson(res, 400, { error: "PUT /state requires studyPreferences." }, cors);
         if (typeof body.updatedAt !== "string" || !Number.isFinite(Date.parse(body.updatedAt))) return sendJson(res, 400, { error: "PUT /state requires a valid updatedAt timestamp." }, cors);
         const cards = body.cards.map((card) => normalizeCard(card, { requireId: true }));
-        const nounMorphology = normalizeNounMorphology(body.nounMorphology);
-        const studyPreferences = normalizeStudyPreferences(body.studyPreferences);
-        validateState(cards, nounMorphology, studyPreferences);
-        const result = await replaceStateIfNewer(cards, nounMorphology, studyPreferences, body.updatedAt);
+        const state = {
+          cards,
+          nounMorphology: normalizeNounMorphology(body.nounMorphology),
+          adjectiveMorphology: normalizeAdjectiveMorphology(body.adjectiveMorphology),
+          studyPreferences: normalizeStudyPreferences(body.studyPreferences),
+          updatedAt: body.updatedAt,
+        };
+        validateState(state);
+        const result = await replaceStateIfNewer(state);
         if (result.conflict) return sendJson(res, 409, { error: "Remote inventory is newer.", state: result.state }, cors);
         return sendJson(res, 200, result.state, cors);
       }

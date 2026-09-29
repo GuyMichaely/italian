@@ -63,9 +63,13 @@ const currentInventory = {
     },
   ],
   nounMorphology: morphology,
+  adjectiveMorphology: {
+    declensionRules: [{ name: "-o/-a/-i/-e", endings: { masculineSingular: "o", feminineSingular: "a", masculinePlural: "i", femininePlural: "e" } }],
+  },
   studyPreferences: {
     answerKeywords: { masculine: "m", feminine: "f", singularOnly: "s", pluralOnly: "p" },
-    fullDeclensionRules: [],
+    nounFullDeclensionRules: [],
+    adjectiveFullDeclensionRules: [],
     fullDeclensionCards: [],
   },
 };

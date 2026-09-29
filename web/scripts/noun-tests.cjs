@@ -31,6 +31,7 @@ const { buildStudyItems } = require(path.join(testDist, "study", "order.js"));
 const { articlePromptForms, promptGender } = require(path.join(testDist, "study", "prompts.js"));
 const { analyzeAnswerSyntax } = require(path.join(testDist, "components", "AnswerParsePreview.js"));
 const { consistentInventoryState, parseInventoryState } = require(path.join(testDist, "storage", "inventoryState.js"));
+const { defaultAdjectiveMorphology } = require(path.join(testDist, "cards", "adjectiveMorphology.js"));
 
 const rules = {
   singularBase: "Singular form is the base",
@@ -273,7 +274,7 @@ test("equally specific rules that disagree make a noun need both forms", () => {
 
 test("drilled rules and marked words need both forms", () => {
   const card = nounCard({ english: "book", rule: rules.oI, base: "libr" });
-  const drilling = { ...defaultStudyPreferences, fullDeclensionRules: [rules.oI] };
+  const drilling = { ...defaultStudyPreferences, nounFullDeclensionRules: [rules.oI] };
   assert.equal(word(card, "il libro", { preferences: drilling }).correct, false);
   assert.equal(word(card, "il libro i libri", { preferences: drilling }).correct, true);
   const marked = { ...defaultStudyPreferences, fullDeclensionCards: [card.id] };
@@ -453,7 +454,7 @@ test("words with articles need every article plus the forms word mode asks for",
   assert.equal(both(nozze, "s le nozze").correct, false);
 
   const specchio = nounCard({ english: "mirror", rule: rules.chioChi, base: "spec" });
-  const drilling = { ...defaultStudyPreferences, fullDeclensionRules: [rules.chioChi] };
+  const drilling = { ...defaultStudyPreferences, nounFullDeclensionRules: [rules.chioChi] };
   assert.equal(both(specchio, "lo specchio gli uno", { preferences: drilling }).correct, false);
   assert.equal(both(specchio, "lo specchio gli specchi uno", { preferences: drilling }).correct, true);
 });
@@ -495,11 +496,13 @@ test("study preferences validate keywords and prune deleted references", () => {
   const state = {
     cards: [card],
     nounMorphology: defaultNounMorphology,
-    studyPreferences: { ...defaultStudyPreferences, fullDeclensionCards: [card.id, 9999], fullDeclensionRules: [rules.oI, "gone"] },
+    adjectiveMorphology: defaultAdjectiveMorphology,
+    studyPreferences: { ...defaultStudyPreferences, fullDeclensionCards: [card.id, 9999], nounFullDeclensionRules: [rules.oI, "gone"], adjectiveFullDeclensionRules: ["gone"] },
   };
   assert.throws(() => parseInventoryState(state, "Inventory"), /unknown/i);
   const consistent = consistentInventoryState(state);
   assert.deepEqual(consistent.studyPreferences.fullDeclensionCards, [card.id]);
-  assert.deepEqual(consistent.studyPreferences.fullDeclensionRules, [rules.oI]);
+  assert.deepEqual(consistent.studyPreferences.nounFullDeclensionRules, [rules.oI]);
+  assert.deepEqual(consistent.studyPreferences.adjectiveFullDeclensionRules, []);
   assert.doesNotThrow(() => parseInventoryState(consistent, "Inventory"));
 });

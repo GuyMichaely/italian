@@ -3,7 +3,6 @@ import type { CardType, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import { cardTypes, typeLabels } from "../cardTypes";
 import {
-  adjectiveCard,
   adverbCard,
   clearBatchDraft,
   emptyAdjectiveBatchRow,
@@ -24,6 +23,8 @@ import {
   writeCardAdderType,
 } from "../cards/editorModel";
 import { nounCardFromDraft, suggestedPlural, type NounDraft } from "../cards/nounDraft";
+import { adjectiveCardFromDraft, suggestedAdjectiveForms, type AdjectiveDraft } from "../cards/adjectiveDraft";
+import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import {
   AdjectiveRowCells,
   AdverbRowCells,
@@ -227,14 +228,33 @@ export function BatchVerbs({
   );
 }
 
+function updateAdjectiveBatchRow<K extends keyof AdjectiveDraft>(row: AdjectiveBatchRow, field: K, value: AdjectiveDraft[K], morphology: AdjectiveMorphology): AdjectiveBatchRow {
+  const next = { ...row, [field]: value } as AdjectiveBatchRow;
+  if (field === "feminineSingular" || field === "masculinePlural" || field === "femininePlural") return { ...next, suggested: false };
+  const othersEmpty = !row.feminineSingular.trim() && !row.masculinePlural.trim() && !row.femininePlural.trim();
+  if (field === "masculineSingular" && (row.suggested || othersEmpty)) {
+    const suggestion = suggestedAdjectiveForms(next.masculineSingular, morphology);
+    return suggestion
+      ? { ...next, feminineSingular: suggestion.feminineSingular, masculinePlural: suggestion.masculinePlural, femininePlural: suggestion.femininePlural, suggested: true }
+      : { ...next, feminineSingular: "", masculinePlural: "", femininePlural: "", suggested: false };
+  }
+  return next;
+}
+
+function adjectiveRowUsed(row: AdjectiveBatchRow) {
+  return Boolean(row.english.trim() || row.masculineSingular.trim() || (!row.suggested && [row.feminineSingular, row.masculinePlural, row.femininePlural].some((form) => form.trim())));
+}
+
 export function BatchAdjectives({
   knownSets,
+  morphology,
   saving,
   error,
   onSave,
   onCancel,
 }: {
   knownSets: string[];
+  morphology: AdjectiveMorphology;
   saving: boolean;
   error: string;
   onSave: (cards: Flashcard[]) => Promise<void>;
@@ -248,13 +268,11 @@ export function BatchAdjectives({
     writeBatchDraft("adjective", draft);
   }, [draft]);
 
-  function updateRow(id: string, field: keyof AdjectiveBatchRow, value: string) {
+  function updateRow<K extends keyof AdjectiveDraft>(id: string, field: K, value: AdjectiveDraft[K]) {
     setDraft((currentDraft) => {
-      const updated = currentDraft.rows.map((row) => row.id === id ? { ...row, [field]: value } : row);
+      const updated = currentDraft.rows.map((row) => row.id === id ? updateAdjectiveBatchRow(row, field, value, morphology) : row);
       const last = updated.at(-1);
-      const nextRows = last && [last.english, last.masculineSingular, last.feminineSingular, last.masculinePlural, last.femininePlural].some((item) => item.trim())
-        ? [...updated, emptyAdjectiveBatchRow(newRowId())]
-        : updated;
+      const nextRows = last && adjectiveRowUsed(last) ? [...updated, emptyAdjectiveBatchRow(newRowId())] : updated;
       return { ...currentDraft, rows: nextRows };
     });
   }
@@ -267,27 +285,20 @@ export function BatchAdjectives({
     event.preventDefault();
     const setName = draft.setName.trim() || null;
     const tags = parseTags(draft.tags);
-    const used = rows.filter((row) => [row.english, row.masculineSingular, row.feminineSingular, row.masculinePlural, row.femininePlural].some((item) => item.trim()));
+    const used = rows.filter(adjectiveRowUsed);
     if (!used.length) {
       setLocalError("Enter at least one adjective.");
       return;
     }
-    if (used.some((row) => [row.english, row.masculineSingular, row.feminineSingular, row.masculinePlural, row.femininePlural].some((item) => !item.trim()))) {
-      setLocalError("Every used adjective row needs English and all four Italian forms.");
+    let cards: Flashcard[];
+    try {
+      cards = used.map((row, index) => adjectiveCardFromDraft(row, { id: Date.now() + index, setName, tags }, morphology));
+    } catch (caught) {
+      setLocalError(caught instanceof Error ? caught.message : "The adjective rows do not match the adjective rules.");
       return;
     }
     setLocalError("");
-    await onSave(used.map((row, index) => adjectiveCard({
-      ...row,
-      id: Date.now() + index,
-      english: row.english.trim(),
-      masculineSingular: row.masculineSingular.trim(),
-      feminineSingular: row.feminineSingular.trim(),
-      masculinePlural: row.masculinePlural.trim(),
-      femininePlural: row.femininePlural.trim(),
-      setName,
-      tags,
-    })));
+    await onSave(cards);
   }
 
   return (
@@ -296,13 +307,13 @@ export function BatchAdjectives({
       <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
       <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
       </div>
-      <p className="batch-help">One adjective per row. A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
+      <p className="batch-help">Type the masculine singular and Parola suggests the other forms and the rule when the rules agree on them. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table adjective-batch-table">
-          <thead><tr><th>English</th><th>Masculine singular</th><th>Feminine singular</th><th>Masculine plural</th><th>Feminine plural</th><th><span className="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th>English</th><th>Masculine singular</th><th>Feminine singular</th><th>Masculine plural</th><th>Feminine plural</th><th>Rule</th><th>Forms</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {rows.map((row, index) => <tr key={row.id}>
-              <AdjectiveRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
+              <AdjectiveRowCells row={row} index={index} morphology={morphology} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
             </tr>)}
           </tbody>
         </table>
@@ -358,11 +369,13 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
 export function AddWordsSheet({
   knownSets,
   morphology,
+  adjectiveMorphology,
   onClose,
   onBatch,
 }: {
   knownSets: string[];
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   onClose: () => void;
   onBatch: (cards: Flashcard[]) => Promise<void>;
 }) {
@@ -396,7 +409,7 @@ export function AddWordsSheet({
       </div>
       {type === "noun" && <BatchNouns knownSets={knownSets} morphology={morphology} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
       {type === "verb" && <BatchVerbs knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
-      {type === "adjective" && <BatchAdjectives knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
+      {type === "adjective" && <BatchAdjectives knownSets={knownSets} morphology={adjectiveMorphology} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
       {type === "adverb" && <BatchAdverbs knownSets={knownSets} saving={saving} error={error} onSave={saveBatch} onCancel={onClose} />}
     </Sheet>
   );

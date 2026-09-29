@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Flashcard, NounCard } from "../cards/types";
+import type { AdjectiveCard, Flashcard, NounCard } from "../cards/types";
 import { nounFormPhrases } from "../cards/nounDraft";
 import {
   cloneNounMorphology,
@@ -13,6 +13,17 @@ import {
   type NounGender,
   type NounMorphology,
 } from "../cards/nounMorphology";
+import {
+  adjectiveFormAbbreviations,
+  adjectiveForms,
+  cloneAdjectiveMorphology,
+  normalizeAdjectiveMorphology,
+  followsLessSpecificRule,
+  resolvedAdjectiveForms,
+  type AdjectiveDeclensionRule,
+  type AdjectiveForm,
+  type AdjectiveMorphology,
+} from "../cards/adjectiveMorphology";
 import type { InventoryState } from "../storage";
 import type { StudyPreferences } from "../study/preferences";
 
@@ -28,6 +39,13 @@ function newRule(existing: NounDeclensionRule[]): NounDeclensionRule {
     name: uniqueName("New declension", existing.map((rule) => rule.name)),
     gender: null,
     forms: { singular: { suffix: "" }, plural: { suffix: "" } },
+  };
+}
+
+function newAdjectiveRule(existing: AdjectiveDeclensionRule[]): AdjectiveDeclensionRule {
+  return {
+    name: uniqueName("New adjective rule", existing.map((rule) => rule.name)),
+    endings: { masculineSingular: "", feminineSingular: "", masculinePlural: "", femininePlural: "" },
   };
 }
 
@@ -73,17 +91,39 @@ function exceptionalNouns(cards: Flashcard[]) {
     && (card.details.declension.kind === "irregular" || card.details.genderDiffersWithPlurality || Boolean(card.details.articleGroups.singular || card.details.articleGroups.plural)));
 }
 
-function nounSourceFingerprint(cards: Flashcard[], morphology: NounMorphology) {
+/** Irregular adjectives, and those following a less specific rule than their ending suggests (likely typos). */
+function notableAdjectives(cards: Flashcard[], morphology: AdjectiveMorphology) {
+  return cards.flatMap((card): { card: AdjectiveCard; forms: string[]; note: string }[] => {
+    if (card.type !== "adjective") return [];
+    try {
+      const { forms, rule } = resolvedAdjectiveForms(card, morphology);
+      const list = adjectiveForms.map((form) => forms[form]);
+      if (rule === null) return [{ card, forms: list, note: "irregular" }];
+      return followsLessSpecificRule(rule, forms.masculineSingular, morphology)
+        ? [{ card, forms: list, note: `follows ${rule}, though a rule with a longer ending fits: check for typos` }]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function nounSourceFingerprint(cards: Flashcard[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
   return JSON.stringify({
     morphology,
-    nouns: cards
-      .filter((card) => card.type === "noun")
+    adjectiveMorphology,
+    words: cards
+      .filter((card) => card.type === "noun" || card.type === "adjective")
       .map((card) => ({ id: card.id, details: card.details })),
   });
 }
 
-function identityRuleNames(morphology: NounMorphology) {
+function identityRuleNames(morphology: { declensionRules: { name: string }[] }) {
   return Object.fromEntries(morphology.declensionRules.map((rule) => [rule.name, rule.name])) as Record<string, string>;
+}
+
+function renamedEntries(current: Record<string, string>, oldName: string, name: string) {
+  return Object.fromEntries(Object.entries(current).map(([original, currentName]) => [original, currentName === oldName ? name : currentName]));
 }
 
 function identityGroupNames(morphology: NounMorphology) {
@@ -93,17 +133,21 @@ function identityGroupNames(morphology: NounMorphology) {
 export function NounMorphologyPanel({
   cards,
   morphology,
+  adjectiveMorphology,
   studyPreferences,
   onSave,
   onOpenCard,
 }: {
   cards: Flashcard[];
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   studyPreferences: StudyPreferences;
   onSave: (state: InventoryState) => Promise<void>;
   onOpenCard: (card: Flashcard) => void;
 }) {
   const [draft, setDraft] = useState(() => cloneNounMorphology(morphology));
+  const [adjectiveDraft, setAdjectiveDraft] = useState(() => cloneAdjectiveMorphology(adjectiveMorphology));
+  const [adjectiveRuleNamesByOriginal, setAdjectiveRuleNamesByOriginal] = useState(() => identityRuleNames(adjectiveMorphology));
   const [ruleNamesByOriginal, setRuleNamesByOriginal] = useState(() => identityRuleNames(morphology));
   const [groupNamesByOriginal, setGroupNamesByOriginal] = useState(() => identityGroupNames(morphology));
   const [saving, setSaving] = useState(false);
@@ -111,21 +155,23 @@ export function NounMorphologyPanel({
   const [sourceChanged, setSourceChanged] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const appliedSourceRef = useRef(nounSourceFingerprint(cards, morphology));
+  const appliedSourceRef = useRef(nounSourceFingerprint(cards, morphology, adjectiveMorphology));
 
   useEffect(() => {
-    const nextFingerprint = nounSourceFingerprint(cards, morphology);
+    const nextFingerprint = nounSourceFingerprint(cards, morphology, adjectiveMorphology);
     if (nextFingerprint === appliedSourceRef.current) return;
     if (dirty) {
       setSourceChanged(true);
       return;
     }
     setDraft(cloneNounMorphology(morphology));
+    setAdjectiveDraft(cloneAdjectiveMorphology(adjectiveMorphology));
     setRuleNamesByOriginal(identityRuleNames(morphology));
+    setAdjectiveRuleNamesByOriginal(identityRuleNames(adjectiveMorphology));
     setGroupNamesByOriginal(identityGroupNames(morphology));
     appliedSourceRef.current = nextFingerprint;
     setSourceChanged(false);
-  }, [cards, dirty, morphology]);
+  }, [adjectiveMorphology, cards, dirty, morphology]);
 
   function markEdited() {
     setDirty(true);
@@ -136,6 +182,45 @@ export function NounMorphologyPanel({
   function changeMorphology(update: (value: NounMorphology) => NounMorphology) {
     setDraft((current) => update(cloneNounMorphology(current)));
     markEdited();
+  }
+
+  function changeAdjectiveMorphology(update: (value: AdjectiveMorphology) => AdjectiveMorphology) {
+    setAdjectiveDraft((current) => update(cloneAdjectiveMorphology(current)));
+    markEdited();
+  }
+
+  function renameAdjectiveRule(index: number, name: string) {
+    const oldName = adjectiveDraft.declensionRules[index]?.name;
+    if (oldName === undefined || oldName === name) return;
+    if (adjectiveDraft.declensionRules.some((rule, ruleIndex) => ruleIndex !== index && rule.name === name)) {
+      setError(`An adjective rule named ${name} already exists.`);
+      return;
+    }
+    changeAdjectiveMorphology((current) => ({
+      declensionRules: current.declensionRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, name } : rule),
+    }));
+    setAdjectiveRuleNamesByOriginal((current) => renamedEntries(current, oldName, name));
+  }
+
+  function updateAdjectiveEnding(index: number, form: AdjectiveForm, ending: string) {
+    changeAdjectiveMorphology((current) => ({
+      declensionRules: current.declensionRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, endings: { ...rule.endings, [form]: ending } } : rule),
+    }));
+  }
+
+  function removeAdjectiveRule(index: number) {
+    const name = adjectiveDraft.declensionRules[index]?.name;
+    if (!name) return;
+    const usedByCard = cards.some((card) => {
+      if (card.type !== "adjective" || card.details.declension.kind !== "rule") return false;
+      const originalName = card.details.declension.rule;
+      return (adjectiveRuleNamesByOriginal[originalName] ?? originalName) === name;
+    });
+    if (usedByCard) {
+      setError("This rule is still used by an adjective. Reassign those adjectives first.");
+      return;
+    }
+    changeAdjectiveMorphology((current) => ({ declensionRules: current.declensionRules.filter((_, ruleIndex) => ruleIndex !== index) }));
   }
 
   function renameRule(index: number, name: string) {
@@ -252,12 +337,14 @@ export function NounMorphologyPanel({
 
   function reloadCurrentSource() {
     setDraft(cloneNounMorphology(morphology));
+    setAdjectiveDraft(cloneAdjectiveMorphology(adjectiveMorphology));
     setRuleNamesByOriginal(identityRuleNames(morphology));
+    setAdjectiveRuleNamesByOriginal(identityRuleNames(adjectiveMorphology));
     setGroupNamesByOriginal(identityGroupNames(morphology));
-    appliedSourceRef.current = nounSourceFingerprint(cards, morphology);
+    appliedSourceRef.current = nounSourceFingerprint(cards, morphology, adjectiveMorphology);
     setDirty(false);
     setSourceChanged(false);
-    setMessage("Reloaded current noun morphology.");
+    setMessage("Reloaded the current grammar.");
     setError("");
   }
 
@@ -268,7 +355,16 @@ export function NounMorphologyPanel({
     setError("");
     try {
       const normalized = normalizeNounMorphology(draft);
+      const normalizedAdjectives = normalizeAdjectiveMorphology(adjectiveDraft);
       const updatedCards = cards.map((card) => {
+        if (card.type === "adjective") {
+          const declension = card.details.declension;
+          const nextCard: Flashcard = declension.kind === "rule"
+            ? { ...card, details: { declension: { ...declension, rule: adjectiveRuleNamesByOriginal[declension.rule] ?? declension.rule } } }
+            : card;
+          resolvedAdjectiveForms(nextCard, normalizedAdjectives);
+          return nextCard;
+        }
         if (card.type !== "noun") return card;
         const definition = nounDefinitionForCard(card);
         const renameGroup = (name: string | null) => name === null ? null : groupNamesByOriginal[name] ?? name;
@@ -287,30 +383,40 @@ export function NounMorphologyPanel({
         return nextCard;
       });
       // Drilled rules follow renames; a removed rule simply stops being drilled.
-      const fullDeclensionRules = studyPreferences.fullDeclensionRules.map((name) => ruleNamesByOriginal[name] ?? name);
-      await onSave({ cards: updatedCards, nounMorphology: normalized, studyPreferences: { ...studyPreferences, fullDeclensionRules } });
+      const nounFullDeclensionRules = studyPreferences.nounFullDeclensionRules.map((name) => ruleNamesByOriginal[name] ?? name);
+      const adjectiveFullDeclensionRules = studyPreferences.adjectiveFullDeclensionRules.map((name) => adjectiveRuleNamesByOriginal[name] ?? name);
+      await onSave({
+        cards: updatedCards,
+        nounMorphology: normalized,
+        adjectiveMorphology: normalizedAdjectives,
+        studyPreferences: { ...studyPreferences, nounFullDeclensionRules, adjectiveFullDeclensionRules },
+      });
       setDraft(cloneNounMorphology(normalized));
+      setAdjectiveDraft(cloneAdjectiveMorphology(normalizedAdjectives));
       setRuleNamesByOriginal(identityRuleNames(normalized));
+      setAdjectiveRuleNamesByOriginal(identityRuleNames(normalizedAdjectives));
       setGroupNamesByOriginal(identityGroupNames(normalized));
-      appliedSourceRef.current = nounSourceFingerprint(updatedCards, normalized);
+      appliedSourceRef.current = nounSourceFingerprint(updatedCards, normalized, normalizedAdjectives);
       setDirty(false);
       setSourceChanged(false);
-      setMessage("Saved noun morphology.");
+      setMessage("Saved grammar.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Noun morphology could not be saved.");
+      setError(caught instanceof Error ? caught.message : "The grammar could not be saved.");
     } finally {
       setSaving(false);
     }
   }
 
   const exceptions = exceptionalNouns(cards);
+  const notable = notableAdjectives(cards, adjectiveMorphology);
   const sections = [
     { id: "declensions", label: "Declensions", count: draft.declensionRules.length },
     { id: "articles", label: "Articles", count: draft.articleGroups.length },
     { id: "noun-exceptions", label: "Exceptions", count: exceptions.length },
+    { id: "adjectives", label: "Adjectives", count: adjectiveDraft.declensionRules.length },
   ];
 
-  return <section className="noun-patterns-panel" aria-label="Noun morphology">
+  return <section className="noun-patterns-panel" aria-label="Grammar">
     <nav className="jump-links" aria-label="Grammar sections">
       {sections.map((section) => <a key={section.id} href={`#/grammar`} onClick={(event) => { event.preventDefault(); document.getElementById(section.id)?.scrollIntoView({ behavior: "instant", block: "start" }); }}>{section.label} <span className="tab-count">{section.count}</span></a>)}
     </nav>
@@ -386,6 +492,29 @@ export function NounMorphologyPanel({
           <small>{notes.join(" · ")}</small>
         </button></li>;
       })}</ul> : <p className="filter-empty">No exceptions yet.</p>}
+      </section>
+
+      <section className="grammar-section" id="adjectives" aria-labelledby="adjectives-heading">
+      <h2 id="adjectives-heading">Adjectives</h2>
+      <p className="section-intro">An adjective rule gives the ending each of the four forms adds to a stored base. Renaming a rule updates every adjective that uses it.</p>
+      <p className="section-intro">In a typed answer, the masculine singular alone is enough when the rules predict the other forms from it: the rule with the longest matching masculine singular ending wins. When equally specific rules disagree (<code>bianco</code> / <code>economico</code>), or an adjective doesn’t follow the winning rule, the answer needs all four forms.</p>
+      <div className="noun-patterns-table-wrap">
+        <table className="noun-patterns-table adjective-rules-table">
+          <thead><tr><th>Name</th>{adjectiveForms.map((form) => <th key={form}>{adjectiveFormAbbreviations[form]}</th>)}<th /></tr></thead>
+          <tbody>{adjectiveDraft.declensionRules.map((rule, index) => <tr key={`adjective-rule:${index}`}>
+            <td><input value={rule.name} onChange={(event) => renameAdjectiveRule(index, event.target.value)} aria-label="Adjective rule name" /></td>
+            {adjectiveForms.map((form) => <td key={form}><input className="morphology-suffix-input" lang="it" value={rule.endings[form]} onChange={(event) => updateAdjectiveEnding(index, form, event.target.value)} placeholder="(none)" aria-label={`${rule.name} ${adjectiveFormAbbreviations[form]} ending`} spellCheck={false} /></td>)}
+            <td><button type="button" className="row-remove" onClick={() => removeAdjectiveRule(index)} aria-label={`Remove adjective rule ${rule.name}`}>×</button></td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      <div className="noun-pattern-actions"><button type="button" className="neutral-button" onClick={() => changeAdjectiveMorphology((current) => ({ declensionRules: [...current.declensionRules, newAdjectiveRule(current.declensionRules)] }))}>Add rule</button></div>
+      <h3 className="grammar-subheading">Irregular and unusual adjectives</h3>
+      {notable.length ? <ul className="exception-list">{notable.map(({ card, forms, note }) => <li key={card.id}><button type="button" className="exception-item" onClick={() => onOpenCard(card)}>
+        <strong lang="it">{forms.join(" · ")}</strong>
+        <span>{card.english}</span>
+        <small>{note}</small>
+      </button></li>)}</ul> : <p className="filter-empty">No irregular or unusual adjectives.</p>}
       </section>
     </div>
     {(dirty || message || error) && <div className="grid-save-bar" role="region" aria-label="Grammar changes">

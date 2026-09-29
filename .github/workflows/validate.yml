@@ -60,6 +60,7 @@ jobs:
           node --check scripts/migrate-noun-declensions.mjs
           node --check scripts/migrate-study-modes.mjs
           node --check scripts/migrate-gender-plurality.mjs
+          node --check scripts/migrate-adjective-declensions.mjs
 
       - name: Check extension syntax
         working-directory: extension

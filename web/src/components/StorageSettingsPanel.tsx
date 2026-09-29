@@ -228,7 +228,7 @@ export function StorageSettingsPanel({
           <textarea
             value={importText}
             onChange={(event) => setImportText(event.target.value)}
-            placeholder={'{\n  "cards": [...],\n  "nounMorphology": { ... },\n  "studyPreferences": { ... }\n}'}
+            placeholder={'{\n  "cards": [...],\n  "nounMorphology": { ... },\n  "adjectiveMorphology": { ... },\n  "studyPreferences": { ... }\n}'}
             rows={6}
             disabled={saving || transferBusy}
             spellCheck={false}

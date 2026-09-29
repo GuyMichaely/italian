@@ -52,7 +52,7 @@ Study supports English, Italian, or both prompt directions; optional typed Itali
 
 Study has two checkboxes, Words and Articles, and at least one stays checked. Words prompts each card in the chosen directions; a noun's answer is the noun, one form or both, with an optional article, plus gender and singular-/plural-only keywords (default `m`, `f`, `s`, `p`) where nothing else shows them. Both forms are required for irregular nouns, nouns whose plural the rules don't predict, nouns using a drilled rule, and nouns marked individually. Articles alone prompts each noun that takes an article with its Italian form and asks for every article it takes. With both checked, English prompts for such nouns ask for every article plus the forms a word answer needs. Articles and forms can be typed in any order, and every combination is a shuffled round over the cards in scope. The live preview is card-blind; a wrong answer lists what was wrong. Answer keywords, drilled rules, and marked nouns are `studyPreferences` in the inventory, so they sync with it. Nouns taking both genders are two cards, and shared prompts show `(m)`/`(f)`.
 
-Verb, adjective, and adverb typed verification use their current canonical stored forms. Regular adjective shorthand is supported where the stored adjective matches the standard pattern.
+Verb and adverb typed verification use their stored forms. Adjectives are generated from editable adjective rules (`adjectiveMorphology`) or stored as irregular forms; a typed answer is the masculine singular alone when the rules predict the rest, otherwise all four forms (irregular, unpredicted, drilled, or marked adjectives). See `docs/ADJECTIVE_DECLENSIONS.md`.
 
 ## Noun morphology
 
@@ -98,7 +98,7 @@ The former Pages extension compatibility feed/package path has been removed.
 
 ## Inventory migration state
 
-The current noun schema is intentionally canonical and does not read previous noun representations. `scripts/migrate-article-profiles.mjs` is a one-off utility for converting retired `articleMode` inventories outside application runtime and removes the retired stored noun `italian` value as part of that conversion.
+The current noun and adjective schemas are intentionally canonical and do not read previous representations. `scripts/migrate-adjective-declensions.mjs` converts inventories from before adjective rules, and renames the drilled noun rules to `nounFullDeclensionRules`. `scripts/migrate-article-profiles.mjs` is a one-off utility for converting retired `articleMode` inventories outside application runtime and removes the retired stored noun `italian` value as part of that conversion.
 
 ## Parola-only remaining work
 

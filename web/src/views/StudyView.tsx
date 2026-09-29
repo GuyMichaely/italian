@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
+import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { typeLabels } from "../cardTypes";
 import { AnswerProblems, CardAnswer, ItalianVerificationForm, italianHeadword } from "../components/CardAnswer";
 import { Icon } from "../components/Icons";
@@ -193,19 +194,20 @@ function CardTop({ item }: { item: StudyItem }) {
 }
 
 /** The prompt line: English, the Italian headword, or the forms whose articles are asked, plus a gender when it's ambiguous. */
-function PromptWord({ item, morphology }: { item: StudyItem; morphology: NounMorphology }) {
+function PromptWord({ item, morphology, adjectiveMorphology }: { item: StudyItem; morphology: NounMorphology; adjectiveMorphology: AdjectiveMorphology }) {
   const gender = item.promptGender ? <span className="prompt-gender"> ({genderAbbreviations[item.promptGender]})</span> : null;
   if (item.mode === "article" && item.card.type === "noun") {
     return <h2 className="prompt-word italian-word" lang="it">{articlePromptForms(item.card, morphology).join(" / ")}{gender}</h2>;
   }
   if (item.promptLanguage === "english") return <h2 className="prompt-word">{item.card.english}{gender}</h2>;
-  return <h2 className="prompt-word italian-word" lang="it">{italianHeadword(item.card, morphology)}{gender}</h2>;
+  return <h2 className="prompt-word italian-word" lang="it">{italianHeadword(item.card, morphology, adjectiveMorphology)}{gender}</h2>;
 }
 
 export type StudyViewProps = {
   loading: boolean;
   cards: Flashcard[];
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   preferences: StudyPreferences;
   setup: StudySetup;
   setupOpen: boolean;
@@ -243,7 +245,7 @@ export type StudyViewProps = {
 };
 
 export function StudyView(props: StudyViewProps) {
-  const { studyItem, morphology } = props;
+  const { studyItem, morphology, adjectiveMorphology } = props;
   const answered = props.session.right + props.session.wrong + props.session.skipped;
 
   if (props.loading) return <section className="study-view"><div className="empty-state" role="status"><p>Loading your words…</p></div></section>;
@@ -276,7 +278,7 @@ export function StudyView(props: StudyViewProps) {
         <p className="score-breakdown"><b className="right">{props.session.right} right</b> · <b className="wrong">{props.session.wrong} wrong</b> · {props.session.skipped} skipped</p>
         {props.missedItems.length > 0 && <div className="missed-list">
           <h3>Mistakes this round</h3>
-          <ul>{props.missedItems.map((item) => <li key={item.key}><span className="italian" lang="it">{italianHeadword(item.card, morphology)}</span><span className="english">{item.card.english}</span></li>)}</ul>
+          <ul>{props.missedItems.map((item) => <li key={item.key}><span className="italian" lang="it">{italianHeadword(item.card, morphology, adjectiveMorphology)}</span><span className="english">{item.card.english}</span></li>)}</ul>
         </div>}
         {props.reviewSets.length > 0 && <section className="review-sets" aria-label="Mistake review sets">
           <h3>Review sets</h3>
@@ -305,9 +307,9 @@ export function StudyView(props: StudyViewProps) {
       {props.typing ? (
         <article className={`study-card typing pos-${studyItem.card.type}${props.verificationResult ? ` result-${props.verificationResult}` : ""}`}>
           <CardTop item={studyItem} />
-          <PromptWord item={studyItem} morphology={morphology} />
+          <PromptWord item={studyItem} morphology={morphology} adjectiveMorphology={adjectiveMorphology} />
           {!props.verificationResult
-            ? <ItalianVerificationForm key={studyItem.key} item={studyItem} preferences={props.preferences} morphology={morphology} onResult={props.onVerify} />
+            ? <ItalianVerificationForm key={studyItem.key} item={studyItem} preferences={props.preferences} morphology={morphology} adjectiveMorphology={adjectiveMorphology} onResult={props.onVerify} />
             : <div className="result-body">
               <div className={`result-banner ${props.verificationResult}`} role="status">
                 <Icon name={props.verificationResult === "correct" ? "check" : "cross"} />
@@ -319,7 +321,7 @@ export function StudyView(props: StudyViewProps) {
                   <code lang="it">{props.submittedAnswer}</code>
                   <AnswerProblems problems={props.submittedProblems} />
                 </div>
-                <div className="expected"><span className="field-label">Answer</span><CardAnswer card={studyItem.card} morphology={morphology} /></div>
+                <div className="expected"><span className="field-label">Answer</span><CardAnswer card={studyItem.card} morphology={morphology} adjectiveMorphology={adjectiveMorphology} /></div>
               </div>
             </div>}
         </article>
@@ -327,10 +329,10 @@ export function StudyView(props: StudyViewProps) {
         <article className={`study-card flip pos-${studyItem.card.type}${props.revealed ? " revealed" : ""}`}>
           <CardTop item={studyItem} />
           <button type="button" className="flip-surface" onClick={() => props.onReveal(!props.revealed)} aria-label={props.revealed ? "Hide answer" : "Show answer"}>
-            <PromptWord item={studyItem} morphology={morphology} />
+            <PromptWord item={studyItem} morphology={morphology} adjectiveMorphology={adjectiveMorphology} />
             {props.revealed && <div className="flip-answer">
               {studyItem.mode === "article" || studyItem.promptLanguage === "english"
-                ? <CardAnswer card={studyItem.card} morphology={morphology} />
+                ? <CardAnswer card={studyItem.card} morphology={morphology} adjectiveMorphology={adjectiveMorphology} />
                 : <div className="answer-block"><p className="answer-meta">English · {typeLabels[studyItem.card.type].toLowerCase()}</p><p className="english-answer">{studyItem.card.english}</p></div>}
             </div>}
             {!props.revealed && <span className="tap-hint">Tap to reveal</span>}

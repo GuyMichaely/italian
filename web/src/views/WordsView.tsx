@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { CardType, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
+import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { cardTypes, typeLabels } from "../cardTypes";
 import { Icon } from "../components/Icons";
 import { WordsGrid } from "../components/WordsGrid";
@@ -98,6 +99,7 @@ export function WordsView({
   matchingCards,
   filteredCards,
   morphology,
+  adjectiveMorphology,
   knownSets,
   query,
   onQuery,
@@ -123,6 +125,7 @@ export function WordsView({
   matchingCards: Flashcard[];
   filteredCards: Flashcard[];
   morphology: NounMorphology;
+  adjectiveMorphology: AdjectiveMorphology;
   knownSets: string[];
   query: string;
   onQuery: (value: string) => void;
@@ -219,6 +222,7 @@ export function WordsView({
           tab={typeFilter}
           knownSets={knownSets}
           morphology={morphology}
+          adjectiveMorphology={adjectiveMorphology}
           selectedIds={selectedIds}
           onToggleSelected={toggleSelected}
           onSelectAll={selectAll}

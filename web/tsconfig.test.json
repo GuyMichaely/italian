@@ -16,6 +16,10 @@
     "src/study/reviews.ts",
     "src/components/AnswerParsePreview.tsx",
     "src/storage/sync.ts",
-    "src/extensionImport.ts"
+    "src/extensionImport.ts",
+    "src/cards/adjectiveMorphology.ts",
+    "src/cards/adjectiveDraft.ts",
+    "src/study/verification.ts",
+    "src/storage/cardCodec.ts"
   ]
 }

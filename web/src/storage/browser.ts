@@ -32,6 +32,7 @@ export function writeLocalSnapshot(snapshot: InventorySnapshot) {
   window.localStorage.setItem(inventoryKey, JSON.stringify({
     cards: snapshot.cards,
     nounMorphology: snapshot.nounMorphology,
+    adjectiveMorphology: snapshot.adjectiveMorphology,
     studyPreferences: snapshot.studyPreferences,
     updatedAt: snapshot.updatedAt,
   }));
