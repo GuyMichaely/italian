@@ -6,7 +6,7 @@ import {
 } from "../cards/editorModel";
 import { articleProfileOptions, irregularRuleValue, nounFormPhrases, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
 import { resolveAdjectiveDraft, type AdjectiveDraft } from "../cards/adjectiveDraft";
-import { adjectiveFormAbbreviations, adjectiveFormLabels, adjectiveForms, adjectiveFormsArePredictable, followsLessSpecificRule, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
+import { adjectiveFormAbbreviations, adjectiveFormLabels, adjectiveForms, determiningAdjectiveForms, followsLessSpecificRule, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { irregularDeclensionName, type NounMorphology } from "../cards/nounMorphology";
 import type { NounDetails } from "../cards/types";
 
@@ -126,7 +126,7 @@ export function AdjectiveDerivedPreview({ draft, morphology }: { draft: Adjectiv
   const resolved = resolveAdjectiveDraft(draft, morphology);
   if (!resolved.ok) return <span className="derived-preview invalid" role="status">{resolved.error}</span>;
   const suspicious = resolved.rule !== null && followsLessSpecificRule(resolved.rule, resolved.forms.masculineSingular, morphology);
-  const allFour = !adjectiveFormsArePredictable(resolved.forms, morphology);
+  const allFour = !determiningAdjectiveForms(resolved.forms, morphology).length;
   return <span className="derived-preview valid">
     <span className="derived-forms">{adjectiveForms.map((form) => resolved.forms[form]).join(" · ")}</span>
     <small>{resolved.inferred ? "auto: " : ""}{resolved.rule ?? irregularDeclensionName}{allFour ? " · answers need all four forms" : ""}</small>

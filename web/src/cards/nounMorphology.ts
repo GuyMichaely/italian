@@ -436,6 +436,37 @@ export function predictedPlurals(singular: string, gender: NounGender, morpholog
   return plurals;
 }
 
+/**
+ * The singulars the rules predict from a plural: among two-number rules allowed for the gender whose
+ * plural ending matches, only the most specific (longest ending) ones count.
+ */
+export function predictedSingulars(plural: string, gender: NounGender, morphology: NounMorphology) {
+  const word = plural.normalize("NFC").trim();
+  let best = -1;
+  let singulars: string[] = [];
+  for (const rule of morphology.declensionRules) {
+    if (!rule.forms.singular || !rule.forms.plural || !ruleAllowsGender(rule, gender)) continue;
+    const base = recognizeNounForm(rule, word, "plural");
+    if (base === null) continue;
+    const specificity = [...rule.forms.plural.suffix].length;
+    if (specificity < best) continue;
+    const singular = generateNounForm(rule, base, "singular") ?? "";
+    if (specificity > best) {
+      best = specificity;
+      singulars = [];
+    }
+    if (!singulars.some((item) => normalizeText(item) === normalizeText(singular))) singulars.push(singular);
+  }
+  return singulars;
+}
+
+/** Whether a two-number noun's singular follows from its plural and gender alone. */
+export function singularIsPredictable(forms: Pick<ResolvedNounForms, "singular" | "plural" | "gender">, morphology: NounMorphology) {
+  if (!forms.singular || !forms.plural) return true;
+  const singulars = predictedSingulars(forms.plural, forms.gender, morphology);
+  return singulars.length === 1 && normalizeText(singulars[0]!) === normalizeText(forms.singular);
+}
+
 /** Whether a two-number noun's plural follows from its singular and gender alone. */
 export function pluralIsPredictable(forms: Pick<ResolvedNounForms, "singular" | "plural" | "gender">, morphology: NounMorphology) {
   if (!forms.singular || !forms.plural) return true;

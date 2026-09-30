@@ -1,6 +1,6 @@
 import type { AdjectiveCard, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
-import { adjectiveFormLabels, adjectiveForms, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
+import { adjectiveFormLabels, adjectiveForms, adjectiveFormsArePredictable, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { checkNounAnswer, type AnswerCheck } from "./nounAnswers";
 import type { StudyItem } from "./order";
 import { adjectiveFullFormsReasonLabels, adjectiveFullFormsReasons, type StudyPreferences } from "./preferences";
@@ -35,21 +35,24 @@ export function checkTypedAnswer(item: StudyItem, rawValue: string, morphology: 
   return { correct: verifyPowerAnswer(card, rawValue), problems: [] };
 }
 
-const allFormsHint = `Type the masculine singular, or all four forms: ${adjectiveForms.map((form) => adjectiveFormLabels[form]).join(", ")}.`;
+const allFormsHint = `Type one form, or all four: ${adjectiveForms.map((form) => adjectiveFormLabels[form]).join(", ")}.`;
 
 /**
- * An adjective answer is its masculine singular alone, when the rules predict the rest and it isn't
- * being drilled, or its four forms in order.
+ * An adjective answer is any one of its forms, when the rules work out the other three from it and
+ * the adjective isn't irregular, drilled, or marked, or all four forms in order.
  */
 export function checkAdjectiveAnswer(card: AdjectiveCard, rawValue: string, morphology: AdjectiveMorphology, preferences: StudyPreferences): AnswerCheck {
   const { forms } = resolvedAdjectiveForms(card, morphology);
   const parts = whitespaceParts(rawValue.trim());
   if (parts.length === 1) {
-    if (normalizeAnswer(parts[0]!) !== normalizeAnswer(forms.masculineSingular)) return { correct: false, problems: [`The masculine singular isn’t “${parts[0]}”.`] };
+    const typed = parts[0]!;
+    const matching = adjectiveForms.filter((form) => normalizeAnswer(forms[form]) === normalizeAnswer(typed));
+    if (!matching.length) return { correct: false, problems: [`“${typed}” isn’t a form of this adjective.`] };
     const reasons = adjectiveFullFormsReasons(card, morphology, preferences);
-    return reasons.length
-      ? { correct: false, problems: [`Give all four forms: ${adjectiveFullFormsReasonLabels[reasons[0]!]}.`] }
-      : { correct: true, problems: [] };
+    if (reasons.length) return { correct: false, problems: [`Give all four forms: ${adjectiveFullFormsReasonLabels[reasons[0]!]}.`] };
+    return matching.some((form) => adjectiveFormsArePredictable(forms, morphology, form))
+      ? { correct: true, problems: [] }
+      : { correct: false, problems: [`“${typed}” could come from more than one adjective rule; type a form that fits only one, or all four forms.`] };
   }
   if (parts.length !== adjectiveForms.length) return { correct: false, problems: [allFormsHint] };
   const problems = adjectiveForms.flatMap((form, index) => normalizeAnswer(parts[index]!) === normalizeAnswer(forms[form])

@@ -106,6 +106,8 @@ cinema (m)     -a → -i beats Unchanged             -> cinemi, but the plural i
 parco (m) with -co → -chi and -co → -ci both defined -> parchi or parci: not predictable
 ```
 
+The same works in reverse from the plural, using the rules' plural endings. A plural in `-i` fits `-o → -i` and `-e → -i` equally (libri: libro or libre?), so it predicts no singular; `case` (only `-a → -e` ends in `-e` for a feminine noun) and `specchi` (`-chio → -chi`) do. `cinema` predicts the singular `cinema`, since only the unchanged rule makes that plural.
+
 ## Articles
 
 Articles come from an editable table of article groups. Each group has a name, spelling patterns, and the masculine and feminine definite singular, definite plural, and indefinite singular articles:
@@ -178,7 +180,7 @@ All three read the same answer format: gender and singular-/plural-only keywords
 With Words alone, the answer is the noun with or without an article: `il libro`, `i libri`, `un libro`, `m libro`, or both numbers `il libro i libri`.
 
 - Each form must be one of the noun's forms. An article is optional, but a typed article must be one the noun takes for that number (per its article profile); a form that takes no article must have none.
-- **Both forms** are required when the gender differs with plurality, when the declension is Irregular, when the plural is not predictable (above), when the noun's rule is in `nounFullDeclensionRules`, or when the noun is in `fullDeclensionCards`. One form is enough otherwise, singular or plural. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
+- **Both forms** are required when the gender differs with plurality, when the declension is Irregular, when neither form predicts the other (above), when the noun's rule is in `nounFullDeclensionRules`, or when the noun is in `fullDeclensionCards`. Otherwise one form is enough if it predicts the other: `il libro` alone is right, `i libri` alone is not (give the singular too), and `le case` alone is. Forms spelled alike are placed by their article, or fill whichever number is still missing (`f città città`).
 - **Singular-/plural-only marker** is required for a noun with only one form and wrong on a noun with both: `p i pantaloni`, `f s Venezia`. A gender and a singular-/plural-only keyword can be typed together, in either order: `fs Venezia`, `sf Venezia`.
 - **Gender marker** is required when the typed articles don't settle the gender (`m l’albero`; `gli alberi` needs none) and when there is no article (`m libro`). It is not required when the prompt shows the gender. A marker that disagrees with the noun is wrong.
 - **Gender differing with plurality**: each typed form's gender must be shown. A single marker gives the singular's gender. The two gender keywords together (`mf` or `fm`) give each typed form's gender in the order the forms are typed, and fit only these nouns. A plural article always shows the plural's gender.

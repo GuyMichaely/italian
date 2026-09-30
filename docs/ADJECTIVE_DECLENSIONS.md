@@ -50,16 +50,25 @@ These are the defaults; the Grammar page edits them. Rule names are unique refer
 
 ## Prediction
 
-The rules predict an adjective's forms from its masculine singular: among the rules whose masculine singular ending fits, only the longest ending counts. A single prediction that matches the adjective's forms makes it predictable. Two equally specific rules that disagree, as the two `-co` rules always do, predict nothing.
+The rules predict an adjective's forms from any one of them: among the rules whose ending for that form fits, only the longest ending counts. A single prediction that matches the adjective's forms means that form predicts the rest. Two equally specific rules that disagree predict nothing.
+
+| Form | Rules that fit, longest ending | Predicts |
+|---|---|---|
+| bella (fem. sg.) | -o/-a/-i/-e | bello, bella, belli, belle |
+| rossi (masc. pl.) | -o, -e, and -io all end in -i | nothing |
+| verdi (fem. pl.) | only -e/-e/-i/-i has a feminine plural in -i | verde, verde, verdi, verdi |
+| vecchie (fem. pl.) | -io/-ia/-i/-ie | vecchio, vecchia, vecchi, vecchie |
+| bianco, bianca, bianche | both -co rules | nothing |
+| bianchi (masc. pl.) | only -co/-ca/-chi/-che | bianco, bianca, bianchi, bianche |
 
 The editor uses this to suggest the other three forms as the masculine singular is typed, and Auto picks the most specific rule that makes exactly the typed forms. When a rule with a longer ending also fits the word (`bianco` with `bianci` / `biance` under `-o/-a/-i/-e`), the editor and the Grammar page flag it as a likely typo.
 
 ## Study answers
 
-A typed adjective answer is either the masculine singular alone or all four forms in order: masculine singular, feminine singular, masculine plural, feminine plural. The masculine singular alone is enough unless:
+A typed adjective answer is either one form or all four forms in order: masculine singular, feminine singular, masculine plural, feminine plural. One form is enough when it predicts the rest (above) and none of these applies:
 
 - the adjective is irregular;
-- the rules don't predict its forms;
+- no form predicts the rest;
 - its rule is in `studyPreferences.adjectiveFullDeclensionRules` (a rule being drilled, set in Settings);
 - its id is in `studyPreferences.fullDeclensionCards` (“Always ask for all four forms” in the word editor).
 

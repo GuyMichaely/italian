@@ -193,7 +193,13 @@ test("article profile is independent from whether a declension has plural forms"
 
 test("one form with a fitting article answers a predictable noun", () => {
   const card = nounCard({ english: "cucumber", rule: rules.oI, base: "cetriol" });
-  for (const answer of ["il cetriolo", "i cetrioli", "un cetriolo", "il cetriolo i cetrioli"]) assert.equal(word(card, answer).correct, true, answer);
+  for (const answer of ["il cetriolo", "un cetriolo", "il cetriolo i cetrioli"]) assert.equal(word(card, answer).correct, true, answer);
+  // -o → -i and -e → -i both make a plural in -i, so the plural alone doesn't show the singular.
+  assert.match(word(card, "i cetrioli").problems.join(" "), /more than one declension rule; give the singular too/);
+  const casa = nounCard({ english: "house", rule: rules.aE, base: "cas", gender: "feminine" });
+  assert.equal(word(casa, "le case").correct, true);
+  const specchio = nounCard({ english: "mirror", rule: rules.chioChi, base: "spec" });
+  assert.equal(word(specchio, "gli specchi").correct, true);
   assert.equal(word(card, "lo cetriolo").correct, false);
   assert.equal(word(card, "il cetriolo un cetriolo i cetrioli").correct, true);
   assert.equal(word(card, "il un cetriolo").correct, true);
@@ -213,14 +219,14 @@ test("an elided article needs a gender marker unless the prompt gives the gender
   assert.equal(word(card, "m l'albero").correct, true);
   assert.equal(word(card, "l'albero m").correct, true);
   assert.equal(word(card, "f l'albero").correct, false);
-  assert.equal(word(card, "gli alberi").correct, true);
+  assert.equal(word(card, "gli alberi l'albero").correct, true);
   assert.equal(word(card, "l'albero", { genderGiven: true }).correct, true);
 });
 
 test("a gender marker can stand in for the article", () => {
   const card = nounCard({ english: "cucumber", rule: rules.oI, base: "cetriol" });
   assert.equal(word(card, "m cetriolo").correct, true);
-  assert.equal(word(card, "cetrioli m").correct, true);
+  assert.equal(word(card, "cetrioli m").correct, false);
   const bare = word(card, "cetriolo");
   assert.equal(bare.correct, false);
   assert.match(bare.problems.join(" "), /nothing shows the gender/);
@@ -250,8 +256,10 @@ test("irregular nouns need both forms", () => {
 
 test("a noun that doesn't follow the winning rule needs both forms", () => {
   const cinema = nounCard({ english: "cinema", rule: rules.identity, base: "cinema" });
-  assert.deepEqual(fullDeclensionReasons(cinema, defaultNounMorphology, defaultStudyPreferences), ["unpredictable"]);
-  assert.equal(word(cinema, "il cinema").correct, false);
+  // -a → -i predicts “cinemi”, but only the unchanged rule makes a plural “cinema”: the plural shows the singular.
+  assert.deepEqual(fullDeclensionReasons(cinema, defaultNounMorphology, defaultStudyPreferences), []);
+  assert.match(word(cinema, "il cinema").problems.join(" "), /give the plural too/);
+  assert.equal(word(cinema, "i cinema").correct, true);
   assert.equal(word(cinema, "il cinema i cinema").correct, true);
 });
 

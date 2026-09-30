@@ -68,10 +68,10 @@ export function generateAdjectiveForms(rule: AdjectiveDeclensionRule, base: stri
   );
 }
 
-/** The base a rule reads from a masculine singular, or null when the form doesn't end in the rule's ending. */
-export function recognizeAdjectiveBase(rule: AdjectiveDeclensionRule, masculineSingular: string) {
-  const value = masculineSingular.normalize("NFC").trim();
-  const ending = rule.endings.masculineSingular.normalize("NFC");
+/** The base a rule reads from one of its forms (the masculine singular by default), or null when the word doesn't end in that form's ending. */
+export function recognizeAdjectiveBase(rule: AdjectiveDeclensionRule, word: string, form: AdjectiveForm = "masculineSingular") {
+  const value = word.normalize("NFC").trim();
+  const ending = rule.endings[form].normalize("NFC");
   if (!ending) return value || null;
   if (!normalizeText(value).endsWith(normalizeText(ending)) || value.length <= ending.length) return null;
   return value.slice(0, value.length - ending.length);
@@ -101,17 +101,17 @@ export function resolvedAdjectiveForms(card: Flashcard, morphology: AdjectiveMor
 }
 
 /**
- * The form sets the rules predict from a masculine singular: among rules whose masculine singular
- * ending matches, only the most specific (longest ending) count. More than one entry means equally
- * specific rules disagree.
+ * The form sets the rules predict from one form (the masculine singular by default): among rules
+ * whose ending for that form matches, only the most specific (longest ending) count. More than one
+ * entry means equally specific rules disagree.
  */
-export function predictedAdjectiveForms(masculineSingular: string, morphology: AdjectiveMorphology) {
+export function predictedAdjectiveForms(word: string, morphology: AdjectiveMorphology, form: AdjectiveForm = "masculineSingular") {
   let best = -1;
   let predictions: AdjectiveForms[] = [];
   for (const rule of morphology.declensionRules) {
-    const base = recognizeAdjectiveBase(rule, masculineSingular);
+    const base = recognizeAdjectiveBase(rule, word, form);
     if (base === null) continue;
-    const specificity = [...rule.endings.masculineSingular].length;
+    const specificity = [...rule.endings[form]].length;
     if (specificity < best) continue;
     if (specificity > best) {
       best = specificity;
@@ -123,10 +123,15 @@ export function predictedAdjectiveForms(masculineSingular: string, morphology: A
   return predictions;
 }
 
-/** Whether all four forms follow from the masculine singular alone. */
-export function adjectiveFormsArePredictable(forms: AdjectiveForms, morphology: AdjectiveMorphology) {
-  const predictions = predictedAdjectiveForms(forms.masculineSingular, morphology);
+/** Whether all four forms follow from the given form alone (the masculine singular by default). */
+export function adjectiveFormsArePredictable(forms: AdjectiveForms, morphology: AdjectiveMorphology, form: AdjectiveForm = "masculineSingular") {
+  const predictions = predictedAdjectiveForms(forms[form], morphology, form);
   return predictions.length === 1 && adjectiveFormsEqual(predictions[0]!, forms);
+}
+
+/** The forms that on their own let the rules work out the other three. */
+export function determiningAdjectiveForms(forms: AdjectiveForms, morphology: AdjectiveMorphology) {
+  return adjectiveForms.filter((form) => adjectiveFormsArePredictable(forms, morphology, form));
 }
 
 /** The most specific rule that produces exactly these forms; null when none does or two tie. */

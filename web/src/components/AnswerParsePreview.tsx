@@ -96,12 +96,12 @@ export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawV
     if (values.length === 1) {
       const status: AnswerSyntaxStatus = unclosedQuote ? "partial" : "complete";
       return {
-        pieces: labeledPieces(values, labels),
-        message: "One form: the masculine singular.",
+        pieces: [{ label: "Form", value: values[0] ?? "" }],
+        message: "One form of the adjective.",
         status,
         checkable: status === "complete",
         missing: unclosedQuote ? ["Closing quote"] : [],
-        syntaxName: "Masculine singular",
+        syntaxName: "One form",
       };
     }
     const status: AnswerSyntaxStatus = values.length > labels.length ? "invalid" : values.length === labels.length ? "complete" : "partial";

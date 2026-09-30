@@ -429,7 +429,7 @@ export function NounMorphologyPanel({
       <section className="grammar-section" id="declensions" aria-labelledby="declensions-heading">
       <h2 id="declensions-heading">Declensions</h2>
       <p className="section-intro">A rule turns a stored base into singular and/or plural forms. Leaving a form unsupported makes the rule singular-only or plural-only. A rule limited to one gender is only used for nouns of that gender. Renaming a rule updates every noun that uses it.</p>
-      <p className="section-intro">In word mode, one form is enough when the rules predict the plural from the singular: the rule with the longest matching singular ending wins. When equally specific rules disagree, or a noun doesn’t follow the winning rule, word mode asks for both forms.</p>
+      <p className="section-intro">In word mode, one form is enough when the rules predict the other from it: the rule with the longest matching ending wins. A plural in -i fits -o → -i and -e → -i alike, so it doesn’t show the singular. When neither form predicts the other, word mode asks for both.</p>
       <div className="noun-patterns-table-wrap">
         <table className="noun-patterns-table declension-rules-table">
           <thead><tr><th>Name</th><th>Gender</th><th>Singular form</th><th>Plural form</th><th /></tr></thead>
@@ -497,7 +497,7 @@ export function NounMorphologyPanel({
       <section className="grammar-section" id="adjectives" aria-labelledby="adjectives-heading">
       <h2 id="adjectives-heading">Adjectives</h2>
       <p className="section-intro">An adjective rule gives the ending each of the four forms adds to a stored base. Renaming a rule updates every adjective that uses it.</p>
-      <p className="section-intro">In a typed answer, the masculine singular alone is enough when the rules predict the other forms from it: the rule with the longest matching masculine singular ending wins. When equally specific rules disagree (<code>bianco</code> / <code>economico</code>), or an adjective doesn’t follow the winning rule, the answer needs all four forms.</p>
+      <p className="section-intro">In a typed answer, any one form is enough when the rules predict the other three from it: the rule with the longest matching ending for that form wins. <code>bella</code> works; <code>rossi</code> doesn’t, since several rules make a masculine plural in -i. When no form predicts the rest, the answer needs all four.</p>
       <div className="noun-patterns-table-wrap">
         <table className="noun-patterns-table adjective-rules-table">
           <thead><tr><th>Name</th>{adjectiveForms.map((form) => <th key={form}>{adjectiveFormAbbreviations[form]}</th>)}<th /></tr></thead>

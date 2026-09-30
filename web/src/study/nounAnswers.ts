@@ -3,7 +3,9 @@ import {
   articleReadings,
   elidedArticles,
   normalizeText,
+  pluralIsPredictable,
   resolvedNounForms,
+  singularIsPredictable,
   type NounFormNumber,
   type NounGender,
   type NounMorphology,
@@ -267,6 +269,11 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
     const reasons = fullDeclensionReasons(card, morphology, preferences);
     if (reasons.length && existing.some((number) => !given.includes(number))) {
       problems.push(`Give both the singular and the plural: ${fullDeclensionReasonLabels[reasons[0]!]}.`);
+    } else if (existing.length === 2 && given.length === 1) {
+      // One form is enough only when the rules work the other one out from it.
+      const typed = given[0]!;
+      const determines = typed === "singular" ? pluralIsPredictable(forms, morphology) : singularIsPredictable(forms, morphology);
+      if (!determines) problems.push(`“${forms[typed]}” could come from more than one declension rule; give the ${typed === "singular" ? "plural" : "singular"} too.`);
     }
   }
 

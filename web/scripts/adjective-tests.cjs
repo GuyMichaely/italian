@@ -73,17 +73,32 @@ test("the masculine singular alone answers a predictable adjective", () => {
   const rosso = ruled("red", "-o/-a/-i/-e", "ross");
   assert.equal(check(rosso, "rosso").correct, true);
   assert.equal(check(rosso, "rosso rossa rossi rosse").correct, true);
-  assert.equal(check(rosso, "rossa").correct, false);
+  assert.equal(check(rosso, "rossa").correct, true);
+  assert.equal(check(rosso, "rosse").correct, true);
+  assert.match(check(rosso, "verde").problems.join(" "), /isn’t a form of this adjective/);
+  const verde = ruled("green", "-e/-e/-i/-i", "verd");
+  assert.equal(check(verde, "verde").correct, true);
+  // A masculine plural in -i fits several rules, but a feminine plural in -i only -e/-e/-i/-i, and verdi is both.
+  assert.match(check(rosso, "rossi").problems.join(" "), /more than one adjective rule/);
+  assert.equal(check(verde, "verdi").correct, true);
+  const vecchio = ruled("old", "-io/-ia/-i/-ie", "vecch");
+  assert.equal(check(vecchio, "vecchie").correct, true);
+  assert.equal(check(vecchio, "vecchi").correct, false);
   const wrong = check(rosso, "rosso rossa rossi rossi");
   assert.equal(wrong.correct, false);
   assert.match(wrong.problems.join(" "), /feminine plural isn’t “rossi”/);
-  assert.match(check(rosso, "rosso rossa").problems.join(" "), /all four forms/);
+  assert.match(check(rosso, "rosso rossa").problems.join(" "), /one form, or all four/);
 });
 
 test("ambiguous, irregular, drilled, and marked adjectives need all four forms", () => {
   const bianco = ruled("white", "-co/-ca/-chi/-che", "bian");
-  assert.deepEqual(adjectiveFullFormsReasons(bianco, morphology, defaultStudyPreferences), ["unpredictable"]);
-  assert.match(check(bianco, "bianco").problems.join(" "), /Give all four forms/);
+  // Only “bianchi” fits a single rule; the -co rules share every other ending.
+  assert.deepEqual(adjectiveFullFormsReasons(bianco, morphology, defaultStudyPreferences), []);
+  assert.match(check(bianco, "bianco").problems.join(" "), /more than one adjective rule/);
+  assert.equal(check(bianco, "bianchi").correct, true);
+  assert.equal(check(bianco, "bianche").correct, false);
+  const economico = ruled("cheap", "-co/-ca/-ci/-che", "economi");
+  assert.equal(check(economico, "economici").correct, false);
   assert.equal(check(bianco, "bianco bianca bianchi bianche").correct, true);
 
   const belga = adjective("Belgian", { kind: "irregular", ...forms("belga", "belga", "belgi", "belghe") });
@@ -129,7 +144,7 @@ test("the adjective preview reads one form or four without the card", () => {
   const keywords = defaultStudyPreferences.answerKeywords;
   const one = analyzeAnswerSyntax({ card, mode: "word" }, "rosso", keywords, undefined);
   assert.equal(one.status, "complete");
-  assert.equal(one.syntaxName, "Masculine singular");
+  assert.equal(one.syntaxName, "One form");
   assert.equal(analyzeAnswerSyntax({ card, mode: "word" }, "rosso rossa", keywords, undefined).status, "partial");
   assert.equal(analyzeAnswerSyntax({ card, mode: "word" }, "rosso rossa rossi rosse", keywords, undefined).status, "complete");
   assert.equal(analyzeAnswerSyntax({ card, mode: "word" }, "a b c d e", keywords, undefined).status, "invalid");

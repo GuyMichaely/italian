@@ -2,11 +2,12 @@ import type { AdjectiveCard, Flashcard, NounCard } from "../cards/types";
 import {
   pluralIsPredictable,
   resolvedNounForms,
+  singularIsPredictable,
   type NounMorphology,
   type NounFormNumber,
   type NounGender,
 } from "../cards/nounMorphology";
-import { adjectiveFormsArePredictable, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
+import { determiningAdjectiveForms, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 
 /** Words typed before or among a noun answer to state its gender or that it has only one number. */
 export type AnswerKeywords = {
@@ -174,7 +175,8 @@ export type FullDeclensionReason = "gender" | "irregular" | "unpredictable" | "r
 
 /**
  * Why word mode needs every form of this noun, most intrinsic reason first; empty when one form
- * is enough. Nouns with a single form never need more than that form.
+ * can be enough (it still has to be a form the rules work the other from; see checkNounAnswer).
+ * Nouns with a single form never need more than that form.
  */
 export function fullDeclensionReasons(card: NounCard, morphology: NounMorphology, preferences: StudyPreferences): FullDeclensionReason[] {
   const forms = resolvedNounForms(card, morphology);
@@ -183,7 +185,7 @@ export function fullDeclensionReasons(card: NounCard, morphology: NounMorphology
   const reasons: FullDeclensionReason[] = [];
   if (card.details.genderDiffersWithPlurality) reasons.push("gender");
   if (declension.kind === "irregular") reasons.push("irregular");
-  else if (!pluralIsPredictable(forms, morphology)) reasons.push("unpredictable");
+  else if (!pluralIsPredictable(forms, morphology) && !singularIsPredictable(forms, morphology)) reasons.push("unpredictable");
   if (declension.kind === "rule" && preferences.nounFullDeclensionRules.includes(declension.rule)) reasons.push("rule");
   if (preferences.fullDeclensionCards.includes(card.id)) reasons.push("card");
   return reasons;
@@ -191,13 +193,13 @@ export function fullDeclensionReasons(card: NounCard, morphology: NounMorphology
 
 export type AdjectiveFullFormsReason = Exclude<FullDeclensionReason, "gender">;
 
-/** Why a typed answer needs all four forms of this adjective; empty when the masculine singular is enough. */
+/** Why a typed answer needs all four forms of this adjective; empty when some single form is enough (see checkAdjectiveAnswer). */
 export function adjectiveFullFormsReasons(card: AdjectiveCard, morphology: AdjectiveMorphology, preferences: StudyPreferences): AdjectiveFullFormsReason[] {
   const { forms } = resolvedAdjectiveForms(card, morphology);
   const declension = card.details.declension;
   const reasons: AdjectiveFullFormsReason[] = [];
   if (declension.kind === "irregular") reasons.push("irregular");
-  else if (!adjectiveFormsArePredictable(forms, morphology)) reasons.push("unpredictable");
+  else if (!determiningAdjectiveForms(forms, morphology).length) reasons.push("unpredictable");
   if (declension.kind === "rule" && preferences.adjectiveFullDeclensionRules.includes(declension.rule)) reasons.push("rule");
   if (preferences.fullDeclensionCards.includes(card.id)) reasons.push("card");
   return reasons;
@@ -205,7 +207,7 @@ export function adjectiveFullFormsReasons(card: AdjectiveCard, morphology: Adjec
 
 export const adjectiveFullFormsReasonLabels: Record<AdjectiveFullFormsReason, string> = {
   irregular: "its forms are irregular",
-  unpredictable: "the adjective rules don’t predict its forms",
+  unpredictable: "no single form lets the adjective rules work out the others",
   rule: "you’re drilling its adjective rule",
   card: "you marked this word",
 };
@@ -213,7 +215,7 @@ export const adjectiveFullFormsReasonLabels: Record<AdjectiveFullFormsReason, st
 export const fullDeclensionReasonLabels: Record<FullDeclensionReason, string> = {
   gender: "its gender differs with plurality",
   irregular: "its declension is irregular",
-  unpredictable: "the declension rules don’t predict its plural",
+  unpredictable: "the declension rules can’t work out either form from the other",
   rule: "you’re drilling its declension rule",
   card: "you marked this word",
 };
