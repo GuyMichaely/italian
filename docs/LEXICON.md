@@ -8,6 +8,7 @@ The lexicon is a dictionary of Italian nouns, verbs, adjectives, and adverbs tha
 
 - `index.json`: the build id, each chunk's first key, and the table of form descriptions;
 - `<build>/NNNN.json`: about 930 chunks of about 30 KB each (about 6 KB compressed);
+- `<build>/en-NNNN.json`: the English index, about 160 chunks. Each English word in a headword's first three glosses points back to the headword. The best matches come first: a gloss that is just that word (“book”, “to book”), then earlier and shorter glosses, then words with more senses;
 - `ATTRIBUTION.txt`: the license notice.
 
 Every word is filed under a key, which is the word in lower case, without accents, and with ’ written as '. A key's records are the dictionary words spelled that way and the inflected forms spelled that way. The keys are sorted and cut into chunks of about equal size, so a lookup takes a binary search of `index.json` and one fetch. Chunks sit in a folder named for their contents, so a cached index never pairs with newer chunks.
@@ -32,6 +33,8 @@ A **form** points at its headword: “vado” is the “first-person singular pr
 1. spelled exactly as typed, before spelled with other accents;
 2. headwords, then inflected forms, then alternative spellings;
 3. headwords defined only by another word (“female equivalent of citto”) last.
+
+`Lexicon.searchEnglish` finds Italian headwords for an English word or phrase. When a query has several words, headwords whose glosses use all of them come first. The extension's popup uses it.
 
 `src/lexicon/suggestions.ts` turns a reading into the fields that Add words and the Words grid edit. This step uses the learner's own morphology:
 

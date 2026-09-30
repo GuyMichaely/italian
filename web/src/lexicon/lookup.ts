@@ -2,8 +2,11 @@ import {
   chunkFileName,
   chunkIndexForKey,
   decodeRecords,
+  englishChunkFileName,
+  englishSearchWords,
   isLexiconForm,
   lexiconKey,
+  type EnglishChunk,
   type LexiconChunk,
   type LexiconForm,
   type LexiconHeadword,
@@ -14,7 +17,8 @@ import {
 /** Where the lexicon's files come from: fetched from the site, or read from disk in tests. */
 export type LexiconSource = {
   index(): Promise<LexiconIndex>;
-  chunk(build: string, file: string): Promise<LexiconChunk>;
+  /** A chunk file: a LexiconChunk, or an EnglishChunk for en-NNNN.json. */
+  chunk(build: string, file: string): Promise<unknown>;
 };
 
 /** Fetches the lexicon published beside the app, e.g. `lexicon/` relative to the page. */
@@ -52,7 +56,7 @@ function sameSpelling(left: string, right: string) {
  */
 export class Lexicon {
   private indexPromise: Promise<LexiconIndex> | null = null;
-  private chunks = new Map<number, Promise<LexiconChunk>>();
+  private chunks = new Map<string, Promise<unknown>>();
 
   constructor(private source: LexiconSource) {}
 
@@ -64,20 +68,60 @@ export class Lexicon {
     return this.indexPromise;
   }
 
+  private chunk<Chunk>(build: string, file: string) {
+    let chunk = this.chunks.get(file);
+    if (!chunk) {
+      chunk = this.source.chunk(build, file);
+      this.chunks.set(file, chunk);
+      chunk.catch(() => this.chunks.delete(file));
+    }
+    return chunk as Promise<Chunk>;
+  }
+
   /** Every record filed under the word's key, whatever its accents. */
   async records(word: string): Promise<LexiconRecord[]> {
     const key = lexiconKey(word);
     if (!key) return [];
     const index = await this.index();
-    const number = chunkIndexForKey(index.chunks, key);
-    let chunk = this.chunks.get(number);
-    if (!chunk) {
-      chunk = this.source.chunk(index.build, chunkFileName(number));
-      this.chunks.set(number, chunk);
-      chunk.catch(() => this.chunks.delete(number));
-    }
-    const stored = (await chunk)[key];
+    const chunk = await this.chunk<LexiconChunk>(index.build, chunkFileName(chunkIndexForKey(index.chunks, key)));
+    const stored = chunk[key];
     return stored ? decodeRecords(key, stored, index.descriptions) : [];
+  }
+
+  /** Headwords whose glosses use an English word, best first, as "pos:word". */
+  async englishRefs(word: string): Promise<string[]> {
+    const key = lexiconKey(word);
+    const index = await this.index();
+    if (!key || !index.englishChunks?.length) return [];
+    const chunk = await this.chunk<EnglishChunk>(index.build, englishChunkFileName(chunkIndexForKey(index.englishChunks, key)));
+    return chunk[key] ?? [];
+  }
+
+  /**
+   * Italian headwords for an English word or phrase. With several words, headwords whose
+   * glosses use all of them come first.
+   */
+  async searchEnglish(query: string, limit = 8): Promise<LexiconReading[]> {
+    const words = englishSearchWords(query);
+    if (!words.length) return [];
+    const lists = await Promise.all(words.map((word) => this.englishRefs(word)));
+    const scores = new Map<string, number>();
+    lists.forEach((refs) => refs.forEach((ref, position) => scores.set(ref, (scores.get(ref) ?? 0) + position)));
+    for (const [ref, score] of scores) {
+      const missing = lists.filter((refs) => !refs.includes(ref)).length;
+      scores.set(ref, score + missing * 1000);
+    }
+    const ranked = Array.from(scores.entries()).sort((left, right) => left[1] - right[1]).slice(0, limit).map(([ref]) => ref);
+    const readings: LexiconReading[] = [];
+    for (const ref of ranked) {
+      const colon = ref.indexOf(":");
+      const pos = ref.slice(0, colon);
+      const word = ref.slice(colon + 1);
+      for (const record of await this.records(word)) {
+        if (!isLexiconForm(record) && record.pos === pos && record.word === word) readings.push({ headword: record, via: null });
+      }
+    }
+    return readings.slice(0, limit);
   }
 
   async lookup(word: string): Promise<LexiconReading[]> {

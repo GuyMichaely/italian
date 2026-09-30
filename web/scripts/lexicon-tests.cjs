@@ -7,7 +7,7 @@ const testDist = path.join(__dirname, "..", ".test-dist");
 fs.mkdirSync(testDist, { recursive: true });
 fs.writeFileSync(path.join(testDist, "package.json"), '{"type":"commonjs"}\n');
 
-const { LexiconBuilder, cleanGloss, lexiconChunks, stripStressMarks } = require(path.join(testDist, "lexicon", "extract.js"));
+const { LexiconBuilder, cleanGloss, englishChunks, englishIndex, lexiconChunks, stripStressMarks } = require(path.join(testDist, "lexicon", "extract.js"));
 const { chunkFileName, chunkIndexForKey, lexiconKey } = require(path.join(testDist, "lexicon", "format.js"));
 const { Lexicon } = require(path.join(testDist, "lexicon", "lookup.js"));
 const { describeSuggestion, suggestionsForReadings } = require(path.join(testDist, "lexicon", "suggestions.js"));
@@ -25,13 +25,15 @@ function sampleLexicon() {
   const builder = new LexiconBuilder();
   for (const entry of sample) builder.add(entry);
   // Tiny chunks, so lookups cross chunk boundaries the way the real ones do.
-  const { index, chunks } = lexiconChunks(builder.finish(), 400, "test");
+  const keyed = builder.finish();
+  const { index, chunks } = lexiconChunks(keyed, 400, "test");
+  const english = englishChunks(englishIndex(keyed), 400);
   const fetched = [];
   const lexicon = new Lexicon({
-    index: async () => ({ build: "test", ...index }),
+    index: async () => ({ build: "test", ...index, englishChunks: english.firstKeys }),
     chunk: async (build, file) => {
       fetched.push(file);
-      return chunks[Number(file.slice(0, 4))];
+      return file.startsWith("en-") ? english.chunks[Number(file.slice(3, 7))] : chunks[Number(file.slice(0, 4))];
     },
   });
   return { lexicon, index, chunks, fetched };
@@ -261,4 +263,15 @@ test("verb rows fill the present tense, participle, and auxiliary", async () => 
   const row = rowWithSuggestion("verb", { ...emptyVerbBatchRow("v"), infinitive: "andare" }, andare, null);
   assert.deepEqual([row.id, row.english, row.io, row.loro, row.auxiliary, row.participle], ["v", "to go", "vado", "vanno", "essere", "andato"]);
   assert.ok(!rowAcceptsSuggestion("verb", { ...emptyVerbBatchRow("v"), infinitive: "andare", io: "vo" }, null));
+});
+
+test("English words find their Italian headwords, a gloss that's just the word first", async () => {
+  const { lexicon } = sampleLexicon();
+  const hand = await lexicon.searchEnglish("hand");
+  assert.equal(hand[0].headword.word, "mano");
+  const understand = await lexicon.searchEnglish("to understand");
+  assert.equal(understand[0].headword.word, "capire");
+  const white = await lexicon.searchEnglish("White");
+  assert.deepEqual(new Set(white.slice(0, 3).map((reading) => `${reading.headword.pos}:${reading.headword.word}`)), new Set(["adj:bianco", "noun:bianco"]));
+  assert.deepEqual(await lexicon.searchEnglish("the"), []);
 });

@@ -1,0 +1,17 @@
+{
+  "name": "italian-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node build.mjs --tests && node --test .test-dist/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.4",
+    "@types/node": "^24.19.0",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.9.3"
+  }
+}

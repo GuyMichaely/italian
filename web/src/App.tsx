@@ -27,6 +27,7 @@ import type { SaveState } from "./components/SaveIndicator";
 import { AddWordsSheet, WordDrawer, localDateStamp } from "./components/CardEditors";
 import {
   extensionCandidatesToCards,
+  extensionEntriesToCards,
   extensionImportResultType,
   parseExtensionImportRequest,
   type ExtensionImportResult,
@@ -190,21 +191,27 @@ export default function Home() {
         });
         return;
       }
-      if (!request) return;
+      // Until the words are loaded there's nothing to check duplicates against; the bridge retries.
+      if (!request || loadingCards) return;
 
       let work = extensionImportRequests.current.get(request.requestId);
       if (!work) {
         work = (async (): Promise<ExtensionImportResult> => {
           try {
-            const importedCards = extensionCandidatesToCards(request.candidates, nounMorphology, adjectiveMorphology);
-            await addBatch(importedCards);
+            const imported = request.entries
+              ? extensionEntriesToCards(request.entries, cards, nounMorphology, adjectiveMorphology)
+              : { cards: extensionCandidatesToCards(request.candidates ?? [], nounMorphology, adjectiveMorphology), added: undefined, skipped: undefined };
+            // Words arrive while the learner may be studying, so stay where they are.
+            if (imported.cards.length) await addBatch(imported.cards, { navigateToWords: false });
             return {
               source: "italian-web",
               type: extensionImportResultType,
               requestId: request.requestId,
               ok: true,
-              importedCount: importedCards.length,
+              importedCount: imported.cards.length,
               storage: storageEndpoint ? "sync" : "browser",
+              added: imported.added,
+              skipped: imported.skipped,
             };
           } catch (error) {
             return {
@@ -448,7 +455,7 @@ export default function Home() {
     return saved;
   }
 
-  async function addBatch(newCards: Flashcard[]) {
+  async function addBatch(newCards: Flashcard[], { navigateToWords = true }: { navigateToWords?: boolean } = {}) {
     const existingKeys = new Set(cards.map(cardDuplicateKey));
     const newKeys = new Set<string>();
     for (const newCard of newCards) {
@@ -464,7 +471,7 @@ export default function Home() {
     setCards((items) => [...temporaryCards, ...items]);
     setSyncWarning("");
     setSaveState("saving");
-    navigate("words");
+    if (navigateToWords) navigate("words");
     try {
       const savedCards = await storage.createCards(newCards);
       setCards((items) => [...savedCards, ...items.filter((item) => !temporaryIds.has(item.id))]);

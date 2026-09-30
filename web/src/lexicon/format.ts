@@ -73,12 +73,20 @@ export type StoredRecord = StoredHeadword | StoredForm;
 /** One chunk file: consecutive keys in sorted order. */
 export type LexiconChunk = Record<string, StoredRecord[]>;
 
+/**
+ * An English-to-Italian chunk: each English word maps to the headwords whose glosses use it,
+ * best first, as "pos:word" ("noun:libro").
+ */
+export type EnglishChunk = Record<string, string[]>;
+
 /** public/lexicon/index.json: each chunk's first key, so a key's chunk is found by binary search. */
 export type LexiconIndex = {
   build: string;
   source: string;
   chunks: string[];
   descriptions: string[];
+  /** First keys of the English chunks, en-NNNN.json. */
+  englishChunks: string[];
 };
 
 export function isLexiconForm(record: LexiconRecord): record is LexiconForm {
@@ -109,6 +117,23 @@ export function chunkIndexForKey(chunks: string[], key: string) {
 
 export function chunkFileName(index: number) {
   return `${String(index).padStart(4, "0")}.json`;
+}
+
+export function englishChunkFileName(index: number) {
+  return `en-${String(index).padStart(4, "0")}.json`;
+}
+
+/** Words too common in glosses to search by. */
+export const englishStopWords = new Set([
+  "a", "an", "the", "to", "of", "in", "on", "at", "for", "with", "by", "from", "as", "or", "and", "into", "onto",
+  "be", "is", "one", "one's", "oneself", "someone", "someone's", "something", "somebody", "etc", "e.g", "i.e",
+]);
+
+/** The English words a gloss or query is searched by: “to wash (oneself)” → ["wash"]. */
+export function englishSearchWords(text: string) {
+  return Array.from(new Set(
+    text.replace(/\([^)]*\)/g, " ").split(/[^\p{L}\p{N}'’-]+/u).map((word) => lexiconKey(word).replace(/^['-]+|['-]+$/g, "")).filter((word) => word && !englishStopWords.has(word)),
+  ));
 }
 
 export function encodeRecords(key: string, records: LexiconRecord[], descriptionId: (text: string) => number): StoredRecord[] {

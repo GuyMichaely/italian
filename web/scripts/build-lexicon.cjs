@@ -6,8 +6,8 @@ const readline = require("node:readline");
 const zlib = require("node:zlib");
 const crypto = require("node:crypto");
 
-const { LexiconBuilder, lexiconChunks } = require(path.join(__dirname, "..", ".test-dist", "lexicon", "extract.js"));
-const { chunkFileName } = require(path.join(__dirname, "..", ".test-dist", "lexicon", "format.js"));
+const { LexiconBuilder, englishChunks, englishIndex, lexiconChunks } = require(path.join(__dirname, "..", ".test-dist", "lexicon", "extract.js"));
+const { chunkFileName, englishChunkFileName } = require(path.join(__dirname, "..", ".test-dist", "lexicon", "format.js"));
 
 /** Chunks of about 30 KB (roughly 6 KB compressed): one small fetch per lookup. */
 const targetChunkBytes = 30_000;
@@ -32,9 +32,12 @@ async function main() {
   const built = new Date().toISOString().slice(0, 10);
   const { index, chunks } = lexiconChunks(keyed, targetChunkBytes, `English Wiktionary via kaikki.org, extracted ${built}`);
 
+  const english = englishChunks(englishIndex(keyed), targetChunkBytes);
+
   const bodies = chunks.map((chunk) => JSON.stringify(chunk));
+  const englishBodies = english.chunks.map((chunk) => JSON.stringify(chunk));
   const hash = crypto.createHash("sha256");
-  for (const body of bodies) hash.update(body);
+  for (const body of [...bodies, ...englishBodies]) hash.update(body);
   const build = hash.digest("hex").slice(0, 12);
 
   // Chunks live in a folder named for their contents, so a cached index never pairs with newer chunks.
@@ -42,7 +45,8 @@ async function main() {
   fs.rmSync(root, { recursive: true, force: true });
   fs.mkdirSync(path.join(root, build), { recursive: true });
   bodies.forEach((body, number) => fs.writeFileSync(path.join(root, build, chunkFileName(number)), body));
-  fs.writeFileSync(path.join(root, "index.json"), JSON.stringify({ build, ...index }));
+  englishBodies.forEach((body, number) => fs.writeFileSync(path.join(root, build, englishChunkFileName(number)), body));
+  fs.writeFileSync(path.join(root, "index.json"), JSON.stringify({ build, ...index, englishChunks: english.firstKeys }));
   fs.writeFileSync(
     path.join(root, "ATTRIBUTION.txt"),
     "These files are derived from English Wiktionary (https://en.wiktionary.org/), via the kaikki.org extract\n"
@@ -52,7 +56,9 @@ async function main() {
 
   const bytes = bodies.reduce((sum, body) => sum + Buffer.byteLength(body), 0);
   const records = keyed.reduce((sum, [, list]) => sum + list.length, 0);
+  const englishBytes = englishBodies.reduce((sum, body) => sum + Buffer.byteLength(body), 0);
   console.log(`${lines} entries → ${keyed.length} keys, ${records} records, ${chunks.length} chunks, ${(bytes / 1e6).toFixed(1)} MB`);
+  console.log(`English index: ${english.firstKeys.length} chunks, ${(englishBytes / 1e6).toFixed(1)} MB`);
 }
 
 main().catch((error) => {

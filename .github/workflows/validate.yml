@@ -62,15 +62,13 @@ jobs:
           node --check scripts/migrate-gender-plurality.mjs
           node --check scripts/migrate-adjective-declensions.mjs
 
-      - name: Check extension syntax
+      - name: Check, test, and build the extension
         working-directory: extension
         run: |
-          node --check background.js
-          node --check content/parola.js
-          node --check focus-preservation.js
-          node --check popup.js
-          node --check review.js
-          node -e 'const manifest = JSON.parse(require("fs").readFileSync("manifest.json", "utf8")); if (!manifest.version) throw new Error("manifest version is required")'
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
 
   browser-e2e:
     needs: validate

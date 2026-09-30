@@ -1,26 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Parola Capture",
-  "version": "0.2.5",
-  "version_name": "0.2.5",
-  "description": "Stage Italian words and contexts for review and import into Parola.",
-  "update_url": "https://github.com/GuyMichaely/parola/releases/latest/download/updates.xml",
-  "permissions": ["storage", "activeTab", "contextMenus"],
-  "host_permissions": [
-    "https://guymichaely.com/parola/*"
-  ],
+  "name": "Italian",
+  "version": "1.0.0",
+  "description": "Add Italian words you meet on the web to your Italian flashcards, filled in from Wiktionary.",
+  "update_url": "https://github.com/GuyMichaely/italian/releases/latest/download/updates.xml",
+  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "alarms"],
+  "host_permissions": ["https://guymichaely.com/italian/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Stage words in Parola",
+    "default_title": "Italian",
     "default_popup": "popup.html"
   },
   "content_scripts": [
     {
-      "matches": ["https://guymichaely.com/parola/*"],
-      "js": ["content/parola.js"],
+      "matches": ["https://guymichaely.com/italian/*"],
+      "js": ["bridge.js"],
       "run_at": "document_idle"
     }
   ]

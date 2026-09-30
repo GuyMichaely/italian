@@ -3,7 +3,7 @@
 Italian is a flashcard suite for learning Italian with three independently understandable parts:
 
 - `web/` — static React/Vite frontend.
-- `extension/` — Chrome extension for staging words and contexts before review/import.
+- `extension/` — Chrome extension: select a word on any page, right-click, and it's added to Italian, filled in from the dictionary.
 - `api/` — optional Node synchronization API.
 
 ## Production
@@ -12,7 +12,7 @@ The public repository is the canonical source for both the web app and extension
 
 - Web app: `https://guymichaely.com/italian/`
 - Extension update feed: `https://github.com/GuyMichaely/italian/releases/latest/download/updates.xml`
-- Signed extension CRX: `https://github.com/GuyMichaely/italian/releases/latest/download/parola.crx`
+- Signed extension CRX: `https://github.com/GuyMichaely/italian/releases/latest/download/italian.crx`
 
 `.github/workflows/release-extension.yml` independently validates, signs, and publishes the extension through GitHub Releases. An installed `0.2.4` client successfully updated to `0.2.5` through that feed, so GitHub Pages no longer packages or publishes an extension compatibility feed.
 

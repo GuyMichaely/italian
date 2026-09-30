@@ -1,6 +1,9 @@
 import {
   compareKeys,
   encodeRecords,
+  englishSearchWords,
+  isLexiconForm,
+  type EnglishChunk,
   type LexiconChunk,
   type LexiconIndex,
   lexiconKey,
@@ -333,7 +336,55 @@ export class LexiconBuilder {
  * Cuts sorted records into chunks of about `targetBytes` of JSON each, and the index listing
  * each chunk's first key. Form descriptions are numbered in the index (see StoredForm).
  */
-export function lexiconChunks(keyed: [string, LexiconRecord[]][], targetBytes: number, source: string): { index: Omit<LexiconIndex, "build">; chunks: LexiconChunk[] } {
+/**
+ * The English index: each English word in a headword's first three glosses points back at the
+ * headword. Headwords rank by how well the word describes them: a gloss that's just the word
+ * (“book”, “to book”) first, then earlier glosses before later ones, then shorter glosses, then
+ * words with more senses, then shorter words.
+ */
+export function englishIndex(keyed: [string, LexiconRecord[]][], perWord = 40): [string, string[]][] {
+  const byWord = new Map<string, { ref: string; score: number }[]>();
+  for (const [, records] of keyed) {
+    for (const record of records) {
+      if (isLexiconForm(record)) continue;
+      const ref = `${record.pos}:${record.word}`;
+      record.glosses.slice(0, 3).forEach((gloss, position) => {
+        const words = englishSearchWords(gloss);
+        for (const word of words) {
+          // Ties go to words with more senses, then shorter ones: rough signs of a common word.
+          const score = (words.length === 1 ? 0 : 10_000) + position * 1000 + Math.min(words.length, 9) * 100
+            + (5 - Math.min(record.glosses.length, 5)) * 10 + Math.min(record.word.length, 9);
+          if (!byWord.has(word)) byWord.set(word, []);
+          const refs = byWord.get(word)!;
+          const existing = refs.find((item) => item.ref === ref);
+          if (existing) existing.score = Math.min(existing.score, score);
+          else refs.push({ ref, score });
+        }
+      });
+    }
+  }
+  return Array.from(byWord.entries())
+    .map(([word, refs]): [string, string[]] => [word, refs.sort((left, right) => left.score - right.score).slice(0, perWord).map((item) => item.ref)])
+    .sort(([left], [right]) => compareKeys(left, right));
+}
+
+/** Cuts the English index into chunks like the Italian ones. */
+export function englishChunks(index: [string, string[]][], targetBytes: number): { firstKeys: string[]; chunks: EnglishChunk[] } {
+  const chunks: { first: string; entries: EnglishChunk; bytes: number }[] = [];
+  for (const [word, refs] of index) {
+    const bytes = JSON.stringify(word).length + JSON.stringify(refs).length + 2;
+    let current = chunks.at(-1);
+    if (!current || current.bytes + bytes > targetBytes) {
+      current = { first: word, entries: {}, bytes: 2 };
+      chunks.push(current);
+    }
+    current.entries[word] = refs;
+    current.bytes += bytes;
+  }
+  return { firstKeys: chunks.map((chunk) => chunk.first), chunks: chunks.map((chunk) => chunk.entries) };
+}
+
+export function lexiconChunks(keyed: [string, LexiconRecord[]][], targetBytes: number, source: string): { index: Omit<LexiconIndex, "build" | "englishChunks">; chunks: LexiconChunk[] } {
   const descriptions: string[] = [];
   const descriptionIds = new Map<string, number>();
   const descriptionId = (text: string) => {

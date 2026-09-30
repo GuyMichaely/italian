@@ -23,7 +23,8 @@ src/
 ├── App.tsx                         application state, inventory mutations, study session, external import
 ├── app/useHashRoute.ts             hash routes: #/study, #/words, #/grammar, #/settings
 ├── cardTypes.ts                   shared card-type labels and ordering
-├── extensionImport.ts             external import envelope and canonical-card validation
+├── extensionProtocol.ts           messages between the extension's bridge and the app (shared with extension/)
+├── extensionImport.ts             extension imports: dictionary entries or canonical cards → cards, skipping duplicates
 ├── cards/
 │   ├── types.ts                   discriminated Flashcard union and typed detail schemas
 │   ├── editorModel.ts             batch-entry rows, drafts, and card construction
@@ -130,7 +131,7 @@ The noun suite covers rule genders and plural prediction, the editable article t
 
 These synchronization tests verify decision logic without mutating a deployed inventory. A live browser-to-API smoke test remains the environment-level check for endpoint configuration, CORS/networking, and deployed persistence.
 
-`.github/workflows/validate.yml` runs `npm ci`, `npm test`, the production web build, API syntax, migration-script syntax, and repository extension static checks on relevant pull requests and pushes to `main`.
+`.github/workflows/validate.yml` runs `npm ci`, `npm test`, the production web build, API syntax, migration-script syntax, and the extension's typecheck, tests, and build on relevant pull requests and pushes to `main`.
 
 ## API
 
