@@ -5,13 +5,29 @@ import { typeLabels } from "../cardTypes";
 import {
   adverbCard,
   adverbRowFromCard,
+  emptyAdjectiveBatchRow,
+  emptyAdverbBatchRow,
+  emptyNounBatchRow,
+  emptyVerbBatchRow,
+  newRowId,
   parseTags,
   verbCard,
   verbRowFromCard,
   type AdjectiveBatchRow,
   type AdverbBatchRow,
+  type NounBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
+import {
+  adjectiveRowUsed,
+  adverbRowUsed,
+  nounRowUsed,
+  updateAdjectiveBatchRow,
+  updateNounBatchRow,
+  verbRowUsed,
+  withSpareRows,
+  withoutRow,
+} from "../cards/batchRows";
 import { nounDraftForEditing, nounDraftWithRule, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
 import { adjectiveDraftForEditing, resolveAdjectiveDraft } from "../cards/adjectiveDraft";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
@@ -26,6 +42,36 @@ type GridRow =
   | ({ type: "adverb" } & Omit<AdverbBatchRow, "id"> & Metadata);
 
 export type GridTab = CardType | "all";
+
+/** Rows typed at the bottom of a part-of-speech tab, which become new words on save. */
+type NewRows = {
+  noun: (NounBatchRow & Metadata)[];
+  verb: (VerbBatchRow & Metadata)[];
+  adjective: (AdjectiveBatchRow & Metadata)[];
+  adverb: (AdverbBatchRow & Metadata)[];
+};
+
+const blankMetadata: Metadata = { setName: "", tags: "" };
+
+const newRowKinds: { [T in CardType]: { empty: (id: string) => NewRows[T][number]; used: (row: NewRows[T][number]) => boolean } } = {
+  noun: { empty: (id) => ({ ...emptyNounBatchRow(id), ...blankMetadata }), used: nounRowUsed },
+  verb: { empty: (id) => ({ ...emptyVerbBatchRow(id), ...blankMetadata }), used: verbRowUsed },
+  adjective: { empty: (id) => ({ ...emptyAdjectiveBatchRow(id), ...blankMetadata }), used: adjectiveRowUsed },
+  adverb: { empty: (id) => ({ ...emptyAdverbBatchRow(id), ...blankMetadata }), used: adverbRowUsed },
+};
+
+function emptyNewRows(): NewRows {
+  return { noun: [newRowKinds.noun.empty(newRowId())], verb: [newRowKinds.verb.empty(newRowId())], adjective: [newRowKinds.adjective.empty(newRowId())], adverb: [newRowKinds.adverb.empty(newRowId())] };
+}
+
+function usedNewRows(rows: NewRows) {
+  return [
+    ...rows.noun.filter(nounRowUsed).map((row) => ({ type: "noun" as const, ...row })),
+    ...rows.verb.filter(verbRowUsed).map((row) => ({ type: "verb" as const, ...row })),
+    ...rows.adjective.filter(adjectiveRowUsed).map((row) => ({ type: "adjective" as const, ...row })),
+    ...rows.adverb.filter(adverbRowUsed).map((row) => ({ type: "adverb" as const, ...row })),
+  ];
+}
 
 function rowFromCard(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): GridRow {
   const metadata = { setName: card.setName ?? "", tags: card.tags.join(", ") };
@@ -82,6 +128,7 @@ export function WordsGrid({
   onToggleSelected,
   onSelectAll,
   onSave,
+  onAdd,
   onOpen,
   onRemove,
 }: {
@@ -95,12 +142,15 @@ export function WordsGrid({
   onToggleSelected: (id: number) => void;
   onSelectAll: (ids: number[], selected: boolean) => void;
   onSave: (updated: Flashcard[]) => Promise<boolean>;
+  onAdd: (created: Flashcard[]) => Promise<void>;
   onOpen: (card: Flashcard) => void;
   onRemove: (id: number) => void;
 }) {
   const baseline = useMemo(() => new Map(allCards.map((card) => [card.id, rowFromCard(card, morphology, adjectiveMorphology)])), [adjectiveMorphology, allCards, morphology]);
   const [drafts, setDrafts] = useState<Record<number, GridRow>>({});
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
+  const [newRows, setNewRows] = useState<NewRows>(emptyNewRows);
+  const [newRowErrors, setNewRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const previousBaseline = useRef(baseline);
@@ -132,8 +182,10 @@ export function WordsGrid({
     const original = baseline.get(id);
     return original && rowKey(original) !== rowKey(drafts[id]!);
   }), [baseline, drafts]);
+  const pendingNew = usedNewRows(newRows);
+  const changeCount = dirtyIds.length + pendingNew.length;
   const visibleIdSet = new Set(visibleCards.map((card) => card.id));
-  const hiddenDirty = dirtyIds.filter((id) => !visibleIdSet.has(id)).length;
+  const hiddenChanges = dirtyIds.filter((id) => !visibleIdSet.has(id)).length + pendingNew.filter((row) => row.type !== tab).length;
   const allVisibleSelected = visibleCards.length > 0 && visibleCards.every((card) => selectedIds.includes(card.id));
 
   function rowFor(card: Flashcard) {
@@ -149,9 +201,30 @@ export function WordsGrid({
     });
   }
 
+  function changeNewRows<T extends CardType>(type: T, change: (rows: NewRows[T]) => NewRows[T][number][]) {
+    const kind = newRowKinds[type];
+    setNewRows((current) => ({ ...current, [type]: withSpareRows(change(current[type]), kind.used, kind.empty, 1) }));
+  }
+
+  function updateNewRow<T extends CardType>(type: T, id: string, change: (row: NewRows[T][number]) => NewRows[T][number]) {
+    changeNewRows(type, (rows) => rows.map((row) => row.id === id ? change(row) : row));
+    setNewRowErrors((current) => {
+      if (!current[id]) return current;
+      const { [id]: _removed, ...rest } = current;
+      return rest;
+    });
+  }
+
+  function removeNewRow(type: CardType, id: string) {
+    const kind = newRowKinds[type];
+    setNewRows((current) => ({ ...current, [type]: withoutRow(current[type] as { id: string }[], id, kind.used as (row: { id: string }) => boolean, kind.empty, 1) }));
+  }
+
   function discard() {
     setDrafts({});
     setRowErrors({});
+    setNewRows(emptyNewRows());
+    setNewRowErrors({});
     setError("");
   }
 
@@ -166,18 +239,42 @@ export function WordsGrid({
         errors[id] = caught instanceof Error ? caught.message : "This row is invalid.";
       }
     }
+    const created: Flashcard[] = [];
+    const newErrors: Record<string, string> = {};
+    pendingNew.forEach((row, index) => {
+      try {
+        created.push(cardFromRow(row, Date.now() + index, morphology, adjectiveMorphology));
+      } catch (caught) {
+        newErrors[row.id] = caught instanceof Error ? caught.message : "This row is invalid.";
+      }
+    });
     setRowErrors(errors);
-    const errorCount = Object.keys(errors).length;
+    setNewRowErrors(newErrors);
+    const errorCount = Object.keys(errors).length + Object.keys(newErrors).length;
     if (errorCount) {
       setError(`${errorCount} ${errorCount === 1 ? "row needs" : "rows need"} fixing before saving.`);
       return;
     }
     setError("");
     setSaving(true);
-    const saved = await onSave(updated);
+    if (updated.length) {
+      const saved = await onSave(updated);
+      if (!saved) {
+        setSaving(false);
+        setError("The changes could not be saved. Your edits are still here.");
+        return;
+      }
+      setDrafts({});
+    }
+    if (created.length) {
+      try {
+        await onAdd(created);
+        setNewRows(emptyNewRows());
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "The new words could not be added. They are still here.");
+      }
+    }
     setSaving(false);
-    if (saved) setDrafts({});
-    else setError("The changes could not be saved. Your edits are still here.");
   }
 
   function metadataCells(card: Flashcard, row: GridRow) {
@@ -204,15 +301,55 @@ export function WordsGrid({
     return <AdverbRowCells row={{ ...row, id: String(card.id) }} index={index} onChange={onField} />;
   }
 
+  function newRowCells(type: CardType, id: string, index: number) {
+    if (type === "noun") {
+      const row = newRows.noun.find((item) => item.id === id)!;
+      return <NounBatchRowCells row={row} index={index} morphology={morphology} onChange={(field, value) => updateNewRow("noun", id, (current) => updateNounBatchRow(current, field, value, morphology))} />;
+    }
+    if (type === "verb") {
+      const row = newRows.verb.find((item) => item.id === id)!;
+      return <VerbRowCells row={row} index={index} onChange={(field, value) => updateNewRow("verb", id, (current) => ({ ...current, [field]: value }))} />;
+    }
+    if (type === "adjective") {
+      const row = newRows.adjective.find((item) => item.id === id)!;
+      return <AdjectiveRowCells row={row} index={index} morphology={adjectiveMorphology} onChange={(field, value) => updateNewRow("adjective", id, (current) => updateAdjectiveBatchRow(current, field, value, adjectiveMorphology))} />;
+    }
+    const row = newRows.adverb.find((item) => item.id === id)!;
+    return <AdverbRowCells row={row} index={index} onChange={(field, value) => updateNewRow("adverb", id, (current) => ({ ...current, [field]: value }))} />;
+  }
+
+  function newRowsBody(type: CardType) {
+    const kind = newRowKinds[type];
+    const rows: (NewRows[CardType][number])[] = newRows[type];
+    return rows.map((row, offset) => {
+      const index = visibleCards.length + offset;
+      const used = (kind.used as (item: typeof row) => boolean)(row);
+      const rowError = newRowErrors[row.id];
+      const setMetadata = (patch: Partial<Metadata>) => updateNewRow(type, row.id, (current) => ({ ...current, ...patch }));
+      return <Fragment key={row.id}>
+        <tr className={`new-row${used ? " dirty" : ""}${rowError ? " has-error" : ""}`}>
+          <td className="select-cell"><span className="new-row-mark" title="New word" aria-hidden="true">+</span></td>
+          {newRowCells(type, row.id, index)}
+          <td data-label="Set"><input aria-label={`Row ${index + 1} set`} list="known-card-sets" value={row.setName} onChange={(event) => setMetadata({ setName: event.target.value })} placeholder="—" /></td>
+          <td data-label="Tags"><input aria-label={`Row ${index + 1} tags`} value={row.tags} onChange={(event) => setMetadata({ tags: event.target.value })} /></td>
+          <td className="row-action-cell">{used && <div className="inventory-row-actions">
+            <button type="button" className="row-remove" tabIndex={-1} onClick={() => removeNewRow(type, row.id)} aria-label={`Remove new row ${index + 1}`} title="Remove">×</button>
+          </div>}</td>
+        </tr>
+        {rowError && <tr className="row-error-line"><td colSpan={columnCount}>{row.english.trim() || "New word"}: {rowError}</td></tr>}
+      </Fragment>;
+    });
+  }
+
   const headers = tab === "all" ? ["Italian", "English"] : [...typeHeaders[tab], "Set"];
   const columnCount = headers.length + 3;
 
   return <form className="words-grid" onSubmit={save}>
     <datalist id="known-card-sets">{knownSets.map((name) => <option key={name} value={name} />)}</datalist>
-    {visibleCards.length > 0 && <div className="batch-table-wrap grid-table-wrap">
+    {(visibleCards.length > 0 || tab !== "all") && <div className="batch-table-wrap grid-table-wrap">
       <table className={`batch-table grid-table grid-${tab}`}>
         <thead><tr>
-          <th className="select-cell"><input type="checkbox" aria-label="Select all shown words" checked={allVisibleSelected} onChange={() => onSelectAll(visibleCards.map((card) => card.id), !allVisibleSelected)} /></th>
+          <th className="select-cell">{visibleCards.length > 0 && <input type="checkbox" aria-label="Select all shown words" checked={allVisibleSelected} onChange={() => onSelectAll(visibleCards.map((card) => card.id), !allVisibleSelected)} />}</th>
           {headers.map((header) => <th key={header}>{header}</th>)}
           <th>Tags</th>
           <th><span className="sr-only">Actions</span></th>
@@ -238,15 +375,16 @@ export function WordsGrid({
               {rowError && <tr className="row-error-line"><td colSpan={columnCount}>{card.english}: {rowError}</td></tr>}
             </Fragment>;
           })}
+          {tab !== "all" && newRowsBody(tab)}
         </tbody>
       </table>
     </div>}
-    {(dirtyIds.length > 0 || error) && <div className="grid-save-bar" role="region" aria-label="Unsaved changes">
+    {(changeCount > 0 || error) && <div className="grid-save-bar" role="region" aria-label="Unsaved changes">
       {error
         ? <p className="form-error" role="alert">{error}</p>
-        : <p><strong>{dirtyIds.length}</strong> unsaved {dirtyIds.length === 1 ? "change" : "changes"}{hiddenDirty ? ` (${hiddenDirty} hidden by filters)` : ""}</p>}
+        : <p><strong>{changeCount}</strong> unsaved {changeCount === 1 ? "change" : "changes"}{hiddenChanges ? ` (${hiddenChanges} hidden by filters)` : ""}</p>}
       <button type="button" className="text-button" onClick={discard} disabled={saving}>Discard</button>
-      <button type="submit" className="primary-button" disabled={saving || !dirtyIds.length}>{saving ? "Saving…" : "Save changes"}</button>
+      <button type="submit" className="primary-button" disabled={saving || !changeCount}>{saving ? "Saving…" : "Save changes"}</button>
     </div>}
   </form>;
 }

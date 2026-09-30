@@ -27,6 +27,7 @@ src/
 ├── cards/
 │   ├── types.ts                   discriminated Flashcard union and typed detail schemas
 │   ├── editorModel.ts             batch-entry rows, drafts, and card construction
+│   ├── batchRows.ts               spare-row, suggestion, and "is this row used" helpers shared by Add words and the grid
 │   ├── nounDraft.ts               the one noun-entry model: surface forms → rule, base, articles
 │   ├── nounMorphology.ts          declension rules, article table, generation, plural prediction
 │   ├── adjectiveDraft.ts          the adjective-entry model: four forms → rule and base
@@ -50,7 +51,7 @@ src/
     ├── Sheet.tsx                   modal sheet / side drawer / phone bottom sheet
     ├── AddWordsSheet.tsx           batch word creation
     ├── WordDrawer.tsx              single-word editing
-    ├── WordsGrid.tsx               editable word grid with sparse drafts that survive filtering
+    ├── WordsGrid.tsx               editable word grid with sparse drafts that survive filtering, and new-word rows per part of speech
     ├── CardEditorFields.tsx        shared editor fields and batch row cells
     ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview

@@ -363,6 +363,8 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .grid-table tbody tr.selected td { background: #1a1f35; }
 .grid-table tbody tr.dirty td.select-cell { box-shadow: inset 3px 0 0 var(--accent); }
 .grid-table tbody tr.has-error td.select-cell { box-shadow: inset 3px 0 0 var(--wrong); }
+.grid-table tbody tr.new-row td { background: var(--surface-2); }
+.new-row-mark { display: block; color: var(--muted); font-size: 16px; line-height: 1; text-align: center; }
 .row-error-line td { padding: 0 12px 10px 52px !important; border-top: 0 !important; color: var(--wrong); font-size: 13px; }
 .grid-all td:nth-child(3) { width: 34%; }
 .grid-all td:nth-child(4) { width: 30%; }

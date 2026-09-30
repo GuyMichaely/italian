@@ -9,7 +9,6 @@ import {
   emptyAdverbBatchRow,
   emptyNounBatchRow,
   emptyVerbBatchRow,
-  newRowId,
   parseTags,
   readBatchDraft,
   readCardAdderType,
@@ -22,8 +21,19 @@ import {
   writeBatchDraft,
   writeCardAdderType,
 } from "../cards/editorModel";
-import { nounCardFromDraft, nounDraftWithRule, suggestedPlural, type NounDraft } from "../cards/nounDraft";
-import { adjectiveCardFromDraft, suggestedAdjectiveForms, type AdjectiveDraft } from "../cards/adjectiveDraft";
+import { nounCardFromDraft, type NounDraft } from "../cards/nounDraft";
+import { adjectiveCardFromDraft, type AdjectiveDraft } from "../cards/adjectiveDraft";
+import {
+  adjectiveRowUsed,
+  adverbRowUsed,
+  nounRowUsed,
+  updateAdjectiveBatchRow,
+  updateNounBatchRow,
+  verbRowFields,
+  verbRowUsed,
+  withSpareRows,
+  withoutRow,
+} from "../cards/batchRows";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import {
   AdjectiveRowCells,
@@ -35,51 +45,6 @@ import {
 } from "./CardEditorFields";
 import { Icon } from "./Icons";
 import { Sheet } from "./Sheet";
-
-/** Keeps at least two rows and an empty last row, so there's always a row to type the next word into. */
-function withSpareRows<Row>(rows: Row[], used: (row: Row) => boolean, emptyRow: (id: string) => Row): Row[] {
-  const next = [...rows];
-  if (!next.length || used(next.at(-1)!)) next.push(emptyRow(newRowId()));
-  while (next.length < 2) next.push(emptyRow(newRowId()));
-  return next;
-}
-
-function withoutRow<Row extends { id: string }>(rows: Row[], id: string, used: (row: Row) => boolean, emptyRow: (id: string) => Row): Row[] {
-  return withSpareRows(rows.filter((row) => row.id !== id), used, emptyRow);
-}
-
-/** Refreshes the plural suggestion unless the learner typed a plural. */
-function withSuggestedPlural(row: NounBatchRow, morphology: NounMorphology): NounBatchRow {
-  if (!row.pluralSuggested && row.plural.trim()) return row;
-  const plural = suggestedPlural(row, morphology);
-  return { ...row, plural, pluralSuggested: Boolean(plural) };
-}
-
-function updateNounBatchRow<K extends keyof NounDraft>(row: NounBatchRow, field: K, value: NounDraft[K], morphology: NounMorphology): NounBatchRow {
-  if (field === "rule") {
-    // A suggested plural isn't the learner's, so it neither blocks a rule without a plural nor survives the change.
-    const typed = row.pluralSuggested ? { ...row, plural: "", pluralSuggested: false } : row;
-    return withSuggestedPlural(nounDraftWithRule(typed, value as string, morphology), morphology);
-  }
-  const next = { ...row, [field]: value } as NounBatchRow;
-  if (field === "plural") return { ...next, pluralSuggested: false };
-  if (field === "singular" || field === "gender") return withSuggestedPlural(next, morphology);
-  return next;
-}
-
-const verbRowFields = ["english", "infinitive", "io", "tu", "luiLei", "noi", "voi", "loro", "participle"] as const;
-
-function verbRowUsed(row: VerbBatchRow) {
-  return verbRowFields.some((field) => row[field].trim());
-}
-
-function adverbRowUsed(row: AdverbBatchRow) {
-  return Boolean(row.english.trim() || row.form.trim());
-}
-
-function nounRowUsed(row: NounBatchRow) {
-  return Boolean(row.english.trim() || row.singular.trim() || (!row.pluralSuggested && row.plural.trim()));
-}
 
 export function BatchNouns({
   knownSets,
@@ -256,23 +221,6 @@ export function BatchVerbs({
       <BatchFooter error={localError || error} saving={saving} label="Add verbs" onCancel={onCancel} />
     </form>
   );
-}
-
-function updateAdjectiveBatchRow<K extends keyof AdjectiveDraft>(row: AdjectiveBatchRow, field: K, value: AdjectiveDraft[K], morphology: AdjectiveMorphology): AdjectiveBatchRow {
-  const next = { ...row, [field]: value } as AdjectiveBatchRow;
-  if (field === "feminineSingular" || field === "masculinePlural" || field === "femininePlural") return { ...next, suggested: false };
-  const othersEmpty = !row.feminineSingular.trim() && !row.masculinePlural.trim() && !row.femininePlural.trim();
-  if (field === "masculineSingular" && (row.suggested || othersEmpty)) {
-    const suggestion = suggestedAdjectiveForms(next.masculineSingular, morphology);
-    return suggestion
-      ? { ...next, feminineSingular: suggestion.feminineSingular, masculinePlural: suggestion.masculinePlural, femininePlural: suggestion.femininePlural, suggested: true }
-      : { ...next, feminineSingular: "", masculinePlural: "", femininePlural: "", suggested: false };
-  }
-  return next;
-}
-
-function adjectiveRowUsed(row: AdjectiveBatchRow) {
-  return Boolean(row.english.trim() || row.masculineSingular.trim() || (!row.suggested && [row.feminineSingular, row.masculinePlural, row.femininePlural].some((form) => form.trim())));
 }
 
 export function BatchAdjectives({

@@ -675,6 +675,7 @@ export default function Home() {
         onRemoveTag={(tag) => void removeTagFromExistence(tag)}
         onRenameTag={(from, to) => void renameTag(from, to)}
         onSaveGrid={(updatedCards) => persistManyCards(updatedCards, "Those edits could not be saved. The previous words were restored.")}
+        onAddGrid={addBatch}
         onBulkTag={bulkTag}
         onBulkSet={bulkSet}
         onBulkDelete={bulkDelete}

@@ -113,6 +113,7 @@ export function WordsView({
   onRemoveTag,
   onRenameTag,
   onSaveGrid,
+  onAddGrid,
   onBulkTag,
   onBulkSet,
   onBulkDelete,
@@ -139,6 +140,7 @@ export function WordsView({
   onRemoveTag: (tag: string) => void;
   onRenameTag: (from: string, to: string) => void;
   onSaveGrid: (updated: Flashcard[]) => Promise<boolean>;
+  onAddGrid: (created: Flashcard[]) => Promise<void>;
   onBulkTag: (ids: number[], tag: string) => Promise<boolean>;
   onBulkSet: (ids: number[], setName: string | null) => Promise<boolean>;
   onBulkDelete: (ids: number[]) => Promise<boolean>;
@@ -204,8 +206,8 @@ export function WordsView({
         {warning && <p className="sync-warning" role="status">{warning}</p>}
 
         {loading ? <div className="empty-state" role="status"><p>Loading your words…</p></div>
-          : !cards.length ? <div className="empty-state"><h2>No words yet</h2><p>Start with a handful of nouns or verbs from your current lesson.</p><button type="button" className="primary-button" onClick={onAddWords}><Icon name="plus" size={16} /> Add words</button></div>
-            : !filteredCards.length ? <div className="empty-state"><h2>No matches</h2><p>Try a different search or clear the filters.</p></div>
+          : !cards.length && typeFilter === "all" ? <div className="empty-state"><h2>No words yet</h2><p>Start with a handful of nouns or verbs from your current lesson.</p><button type="button" className="primary-button" onClick={onAddWords}><Icon name="plus" size={16} /> Add words</button></div>
+            : !filteredCards.length && (typeFilter === "all" || query.trim() || activeFilterCount) ? <div className="empty-state"><h2>No matches</h2><p>Try a different search or clear the filters.</p></div>
               : <>
                 {selectedVisible.length > 0 && <BulkBar
                   count={selectedVisible.length}
@@ -216,7 +218,7 @@ export function WordsView({
                   onClear={() => setSelectedIds([])}
                 />}
               </>}
-        {!loading && cards.length > 0 && <WordsGrid
+        {!loading && (cards.length > 0 || typeFilter !== "all") && <WordsGrid
           allCards={cards}
           visibleCards={filteredCards}
           tab={typeFilter}
@@ -227,6 +229,7 @@ export function WordsView({
           onToggleSelected={toggleSelected}
           onSelectAll={selectAll}
           onSave={onSaveGrid}
+          onAdd={onAddGrid}
           onOpen={onOpen}
           onRemove={onRemove}
         />}
