@@ -12,7 +12,7 @@ import {
   type AdverbBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
-import { nounDraftForEditing, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
+import { nounDraftForEditing, nounDraftWithRule, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
 import { adjectiveDraftForEditing, resolveAdjectiveDraft } from "../cards/adjectiveDraft";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { AdjectiveRowCells, AdverbRowCells, NounBatchRowCells, VerbRowCells } from "./CardEditorFields";
@@ -193,7 +193,12 @@ export function WordsGrid({
 
   function typeCells(card: Flashcard, row: GridRow, index: number) {
     const onField = (field: string, value: unknown) => update(card.id, { [field]: value });
-    if (row.type === "noun") return <NounBatchRowCells row={{ ...row, id: String(card.id), pluralSuggested: false }} index={index} morphology={morphology} onChange={onField} />;
+    if (row.type === "noun") {
+      const onNounField = (field: string, value: unknown) => field === "rule"
+        ? update(card.id, nounDraftWithRule(row, value as string, morphology))
+        : onField(field, value);
+      return <NounBatchRowCells row={{ ...row, id: String(card.id), pluralSuggested: false }} index={index} morphology={morphology} onChange={onNounField} />;
+    }
     if (row.type === "verb") return <VerbRowCells row={{ ...row, id: String(card.id) }} index={index} onChange={onField} />;
     if (row.type === "adjective") return <AdjectiveRowCells row={{ ...row, id: String(card.id) }} index={index} morphology={adjectiveMorphology} onChange={onField} />;
     return <AdverbRowCells row={{ ...row, id: String(card.id) }} index={index} onChange={onField} />;

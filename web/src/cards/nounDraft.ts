@@ -13,6 +13,7 @@ import {
   ruleSupportsFormNumber,
   type NounArticleProfile,
   type NounDeclension,
+  type NounFormNumber,
   type NounGender,
   type NounMorphology,
   type ResolvedNounForms,
@@ -174,11 +175,55 @@ export function spellingGroup(word: string, morphology: NounMorphology) {
   return word.trim() ? articleGroupForWord(word, morphology) ?? "no match" : null;
 }
 
-/** Suggests the plural the rules predict for this singular and gender; empty when they don't agree on one. */
-export function suggestedPlural(singular: string, gender: NounGender, morphology: NounMorphology) {
-  if (!singular.trim()) return "";
-  const plurals = predictedPlurals(singular, gender, morphology);
-  return plurals.length === 1 ? plurals[0]! : "";
+/**
+ * Suggests the plural for a typed singular: the chosen rule's plural, or under Auto the plural the
+ * rules predict; empty when the rules don't agree on one or the rule has no plural.
+ */
+export function suggestedPlural(draft: Pick<NounDraft, "singular" | "gender" | "rule">, morphology: NounMorphology) {
+  const singular = draft.singular.normalize("NFC").trim();
+  if (!singular || draft.rule === irregularRuleValue) return "";
+  if (!draft.rule) {
+    const plurals = predictedPlurals(singular, draft.gender, morphology);
+    return plurals.length === 1 ? plurals[0]! : "";
+  }
+  const rule = morphology.declensionRules.find((item) => item.name === draft.rule);
+  if (!rule || !ruleAllowsGender(rule, draft.gender) || !ruleSupportsFormNumber(rule, "singular") || !ruleSupportsFormNumber(rule, "plural")) return "";
+  const base = recognizeNounForm(rule, singular, "singular");
+  return base === null ? "" : generateNounForm(rule, base, "plural") ?? "";
+}
+
+/** Which forms a rule-select value leaves room for: a rule without a plural (or singular) form has nothing to type there. */
+export function draftFormNumbers(rule: string, morphology: NounMorphology): Record<NounFormNumber, boolean> {
+  const chosen = morphology.declensionRules.find((item) => item.name === rule);
+  return {
+    singular: !chosen || ruleSupportsFormNumber(chosen, "singular"),
+    plural: !chosen || ruleSupportsFormNumber(chosen, "plural"),
+  };
+}
+
+/**
+ * Picks a rule and fits the draft to it. A form typed where the rule has none moves to the other
+ * form when that one is empty (“forbici” typed as a singular, then a plural-only rule), and is
+ * otherwise dropped; articles needing the missing form narrow to the ones the other form takes,
+ * and widen back to all three when a rule with both forms replaces it.
+ */
+export function nounDraftWithRule<Draft extends NounDraft>(draft: Draft, rule: string, morphology: NounMorphology): Draft {
+  const numbers = draftFormNumbers(rule, morphology);
+  const previous = draftFormNumbers(draft.rule, morphology);
+  let { singular, plural, articles } = draft;
+  if (!numbers.plural) {
+    if (!singular.trim()) singular = plural;
+    plural = "";
+    if (articles === "all" || articles === "definite-plural") articles = "definite-singular";
+  }
+  if (!numbers.singular) {
+    if (!plural.trim()) plural = singular;
+    singular = "";
+    if (articles === "all" || articles === "definite-singular") articles = "definite-plural";
+  }
+  const narrowed = previous.plural ? "definite-plural" : "definite-singular";
+  if (numbers.singular && numbers.plural && !(previous.singular && previous.plural) && articles === narrowed) articles = "all";
+  return { ...draft, rule, singular, plural, articles };
 }
 
 export function joinArticle(article: string, noun: string) {

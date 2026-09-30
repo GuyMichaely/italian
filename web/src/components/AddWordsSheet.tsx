@@ -22,7 +22,7 @@ import {
   writeBatchDraft,
   writeCardAdderType,
 } from "../cards/editorModel";
-import { nounCardFromDraft, suggestedPlural, type NounDraft } from "../cards/nounDraft";
+import { nounCardFromDraft, nounDraftWithRule, suggestedPlural, type NounDraft } from "../cards/nounDraft";
 import { adjectiveCardFromDraft, suggestedAdjectiveForms, type AdjectiveDraft } from "../cards/adjectiveDraft";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import {
@@ -36,13 +36,22 @@ import {
 import { Icon } from "./Icons";
 import { Sheet } from "./Sheet";
 
+/** Refreshes the plural suggestion unless the learner typed a plural. */
+function withSuggestedPlural(row: NounBatchRow, morphology: NounMorphology): NounBatchRow {
+  if (!row.pluralSuggested && row.plural.trim()) return row;
+  const plural = suggestedPlural(row, morphology);
+  return { ...row, plural, pluralSuggested: Boolean(plural) };
+}
+
 function updateNounBatchRow<K extends keyof NounDraft>(row: NounBatchRow, field: K, value: NounDraft[K], morphology: NounMorphology): NounBatchRow {
+  if (field === "rule") {
+    // A suggested plural isn't the learner's, so it neither blocks a rule without a plural nor survives the change.
+    const typed = row.pluralSuggested ? { ...row, plural: "", pluralSuggested: false } : row;
+    return withSuggestedPlural(nounDraftWithRule(typed, value as string, morphology), morphology);
+  }
   const next = { ...row, [field]: value } as NounBatchRow;
   if (field === "plural") return { ...next, pluralSuggested: false };
-  if ((field === "singular" || field === "gender") && (row.pluralSuggested || !row.plural.trim())) {
-    const plural = suggestedPlural(next.singular, next.gender, morphology);
-    return { ...next, plural, pluralSuggested: Boolean(plural) };
-  }
+  if (field === "singular" || field === "gender") return withSuggestedPlural(next, morphology);
   return next;
 }
 

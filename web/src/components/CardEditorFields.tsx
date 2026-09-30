@@ -4,7 +4,7 @@ import {
   type NounBatchRow,
   type VerbBatchRow,
 } from "../cards/editorModel";
-import { articleProfileOptions, irregularRuleValue, nounFormPhrases, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
+import { articleProfileOptions, draftFormNumbers, irregularRuleValue, nounFormPhrases, resolveNounDraft, type NounDraft } from "../cards/nounDraft";
 import { resolveAdjectiveDraft, type AdjectiveDraft } from "../cards/adjectiveDraft";
 import { adjectiveFormAbbreviations, adjectiveFormLabels, adjectiveForms, determiningAdjectiveForms, followsLessSpecificRule, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { irregularDeclensionName, type NounMorphology } from "../cards/nounMorphology";
@@ -94,10 +94,11 @@ export function NounBatchRowCells({
   onRemove?: () => void;
   autoFocus?: boolean;
 }) {
+  const numbers = draftFormNumbers(row.rule, morphology);
   return <>
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(e) => onChange("english", e.target.value)} placeholder="the book" autoFocus={autoFocus} /></td>
-    <td data-label="Singular"><input aria-label={`Row ${index + 1} singular`} value={row.singular} onChange={(e) => onChange("singular", e.target.value)} placeholder="libro" autoCapitalize="none" spellCheck={false} /></td>
-    <td data-label="Plural"><input aria-label={`Row ${index + 1} plural`} className={row.pluralSuggested ? "suggested" : ""} value={row.plural} onChange={(e) => onChange("plural", e.target.value)} placeholder="libri" autoCapitalize="none" spellCheck={false} /></td>
+    <td data-label="Singular"><input aria-label={`Row ${index + 1} singular`} value={row.singular} disabled={!numbers.singular} onChange={(e) => onChange("singular", e.target.value)} placeholder={numbers.singular ? "libro" : "none"} autoCapitalize="none" spellCheck={false} /></td>
+    <td data-label="Plural"><input aria-label={`Row ${index + 1} plural`} className={row.pluralSuggested ? "suggested" : ""} value={row.plural} disabled={!numbers.plural} onChange={(e) => onChange("plural", e.target.value)} placeholder={numbers.plural ? "libri" : "none"} autoCapitalize="none" spellCheck={false} /></td>
     <td data-label="Gender"><select aria-label={`Row ${index + 1} gender`} value={batchGenderOptions.find((option) => option.gender === row.gender && option.differs === row.genderDiffersWithPlurality)!.value} onChange={(e) => {
       const option = batchGenderOptions.find((item) => item.value === e.target.value)!;
       onChange("genderDiffersWithPlurality", option.differs);

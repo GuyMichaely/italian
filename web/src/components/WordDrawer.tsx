@@ -11,15 +11,15 @@ import {
 } from "../cards/editorModel";
 import { adjectiveCardFromDraft, adjectiveDraftForEditing, resolveAdjectiveDraft, suggestedAdjectiveForms, type AdjectiveDraft } from "../cards/adjectiveDraft";
 import { adjectiveFormLabels, adjectiveForms, adjectiveFormsEqual, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
-import { articleProfileOptions, emptyNounDraft, irregularRuleValue, nounCardFromDraft, nounDraftForEditing, resolveNounDraft, spellingGroup, type NounDraft } from "../cards/nounDraft";
+import { articleProfileOptions, draftFormNumbers, emptyNounDraft, irregularRuleValue, nounCardFromDraft, nounDraftForEditing, nounDraftWithRule, resolveNounDraft, spellingGroup, type NounDraft } from "../cards/nounDraft";
 import { adjectiveFullFormsReasonLabels, adjectiveFullFormsReasons, fullDeclensionReasonLabels, fullDeclensionReasons, type StudyPreferences } from "../study/preferences";
 import { AdjectiveDerivedPreview, AdjectiveRuleSelect, NounDerivedPreview, NounRuleSelect, SetField, TagsField } from "./CardEditorFields";
 import { Sheet } from "./Sheet";
 
-function TextField({ label, value, onChange, autoFocus = false, placeholder, italian = false }: { label: string; value: string; onChange: (value: string) => void; autoFocus?: boolean; placeholder?: string; italian?: boolean }) {
+function TextField({ label, value, onChange, autoFocus = false, placeholder, italian = false, disabled = false }: { label: string; value: string; onChange: (value: string) => void; autoFocus?: boolean; placeholder?: string; italian?: boolean; disabled?: boolean }) {
   return <label className="field">
     <span>{label}</span>
-    <input value={value} onChange={(event) => onChange(event.target.value)} autoFocus={autoFocus} placeholder={placeholder} {...(italian ? { autoCapitalize: "none", spellCheck: false, lang: "it" } : {})} />
+    <input value={value} onChange={(event) => onChange(event.target.value)} autoFocus={autoFocus} placeholder={placeholder} disabled={disabled} {...(italian ? { autoCapitalize: "none", spellCheck: false, lang: "it" } : {})} />
   </label>;
 }
 
@@ -88,6 +88,7 @@ export function WordDrawer({
     onClose();
   }
 
+  const nounNumbers = draftFormNumbers(noun.rule, morphology);
   // Whether the edited noun has both forms, and what already makes word mode ask for both.
   const resolvedNoun = card.type === "noun" ? resolveNounDraft(noun, morphology) : null;
   const hasBothForms = Boolean(resolvedNoun?.ok && resolvedNoun.forms.singular && resolvedNoun.forms.plural);
@@ -109,8 +110,8 @@ export function WordDrawer({
         {card.type === "noun" && <>
           <TextField label="English" value={noun.english} onChange={(english) => setNoun((draft) => ({ ...draft, english }))} autoFocus />
           <div className="field-row">
-            <TextField label="Singular" italian value={noun.singular} onChange={(singular) => setNoun((draft) => ({ ...draft, singular }))} />
-            <TextField label="Plural" italian value={noun.plural} onChange={(plural) => setNoun((draft) => ({ ...draft, plural }))} />
+            <TextField label="Singular" italian value={noun.singular} disabled={!nounNumbers.singular} placeholder={nounNumbers.singular ? undefined : "none"} onChange={(singular) => setNoun((draft) => ({ ...draft, singular }))} />
+            <TextField label="Plural" italian value={noun.plural} disabled={!nounNumbers.plural} placeholder={nounNumbers.plural ? undefined : "none"} onChange={(plural) => setNoun((draft) => ({ ...draft, plural }))} />
           </div>
           <div className="field-row">
             <div className="field">
@@ -132,7 +133,7 @@ export function WordDrawer({
           </label>
           <label className="field">
             <span>Declension rule{noun.rule === irregularRuleValue ? " · forms are stored exactly as typed" : ""}</span>
-            <NounRuleSelect label="Declension rule" value={noun.rule} morphology={morphology} onChange={(rule) => setNoun((draft) => ({ ...draft, rule }))} />
+            <NounRuleSelect label="Declension rule" value={noun.rule} morphology={morphology} onChange={(rule) => setNoun((draft) => nounDraftWithRule(draft, rule, morphology))} />
           </label>
           <details className="exceptions-box" open={Boolean(noun.singularGroup || noun.pluralGroup)}>
             <summary>Article exceptions{noun.singularGroup || noun.pluralGroup ? " · on" : ""}</summary>

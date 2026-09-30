@@ -32,6 +32,7 @@ const { articlePromptForms, promptGender } = require(path.join(testDist, "study"
 const { analyzeAnswerSyntax } = require(path.join(testDist, "components", "AnswerParsePreview.js"));
 const { consistentInventoryState, parseInventoryState } = require(path.join(testDist, "storage", "inventoryState.js"));
 const { defaultAdjectiveMorphology } = require(path.join(testDist, "cards", "adjectiveMorphology.js"));
+const { emptyNounDraft, nounDraftWithRule, resolveNounDraft, suggestedPlural } = require(path.join(testDist, "cards", "nounDraft.js"));
 
 const rules = {
   singularBase: "Singular form is the base",
@@ -531,4 +532,24 @@ test("study preferences validate keywords and prune deleted references", () => {
   assert.deepEqual(consistent.studyPreferences.nounFullDeclensionRules, [rules.oI]);
   assert.deepEqual(consistent.studyPreferences.adjectiveFullDeclensionRules, []);
   assert.doesNotThrow(() => parseInventoryState(consistent, "Inventory"));
+});
+
+test("choosing a rule without a form clears that form, moving it when the other is empty", () => {
+  const draft = (patch) => ({ ...emptyNounDraft(), english: "x", ...patch });
+  const latte = nounDraftWithRule(draft({ singular: "latte", plural: "latti" }), rules.singularBase, defaultNounMorphology);
+  assert.deepEqual([latte.singular, latte.plural, latte.articles], ["latte", "", "definite-singular"]);
+  assert.equal(resolveNounDraft(latte, defaultNounMorphology).ok, true);
+  assert.equal(nounDraftWithRule(latte, "", defaultNounMorphology).articles, "all");
+  const forbici = nounDraftWithRule(draft({ singular: "forbici", gender: "feminine" }), rules.pluralBase, defaultNounMorphology);
+  assert.deepEqual([forbici.singular, forbici.plural, forbici.articles], ["", "forbici", "definite-plural"]);
+  assert.equal(resolveNounDraft(forbici, defaultNounMorphology).ok, true);
+  const both = nounDraftWithRule(draft({ singular: "libro", plural: "libri" }), rules.oI, defaultNounMorphology);
+  assert.deepEqual([both.singular, both.plural], ["libro", "libri"]);
+});
+
+test("the plural suggestion follows the chosen rule", () => {
+  const draft = (patch) => ({ ...emptyNounDraft(), ...patch });
+  assert.equal(suggestedPlural(draft({ singular: "libro" }), defaultNounMorphology), "libri");
+  assert.equal(suggestedPlural(draft({ singular: "latte", rule: rules.singularBase }), defaultNounMorphology), "");
+  assert.equal(suggestedPlural(draft({ singular: "re", rule: rules.identity }), defaultNounMorphology), "re");
 });
