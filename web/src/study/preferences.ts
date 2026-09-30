@@ -3,6 +3,8 @@ import {
   pluralIsPredictable,
   resolvedNounForms,
   type NounMorphology,
+  type NounFormNumber,
+  type NounGender,
 } from "../cards/nounMorphology";
 import { adjectiveFormsArePredictable, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
 
@@ -63,6 +65,39 @@ function assertExactKeys(value: Record<string, unknown>, label: string, expected
   }
 }
 
+export type AnswerMarker = { genders: NounGender[]; tantum: NounFormNumber | null };
+
+/**
+ * Every marker token the keywords make: a gender (or both genders, one per typed form, as in “mf”),
+ * a singular-/plural-only keyword, or a gender and a singular-/plural-only keyword typed together
+ * in either order (“fs”, “sf”). Throws when one token would read two ways.
+ */
+export function answerMarkers(keywords: AnswerKeywords) {
+  const genders: [string, NounGender[]][] = [
+    [keywords.masculine, ["masculine"]],
+    [keywords.feminine, ["feminine"]],
+    [keywords.masculine + keywords.feminine, ["masculine", "feminine"]],
+    [keywords.feminine + keywords.masculine, ["feminine", "masculine"]],
+  ];
+  const tantums: [string, NounFormNumber][] = [[keywords.singularOnly, "singular"], [keywords.pluralOnly, "plural"]];
+  const entries: [string, AnswerMarker][] = [
+    ...genders.map(([token, value]): [string, AnswerMarker] => [token, { genders: value, tantum: null }]),
+    ...tantums.map(([token, value]): [string, AnswerMarker] => [token, { genders: [], tantum: value }]),
+    ...genders.flatMap(([gender, value]) => tantums.flatMap(([tantum, number]): [string, AnswerMarker][] => [
+      [gender + tantum, { genders: value, tantum: number }],
+      [tantum + gender, { genders: value, tantum: number }],
+    ])),
+  ];
+  const markers = new Map<string, AnswerMarker>();
+  for (const [token, marker] of entries) {
+    const key = token.normalize("NFC").toLocaleLowerCase("it-IT");
+    const existing = markers.get(key);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(marker)) throw new Error(`These answer keywords make “${key}” mean two different things; choose keywords that don’t combine into one another.`);
+    markers.set(key, marker);
+  }
+  return markers;
+}
+
 /** Keywords are single lowercase tokens, all different, so they can be told apart from articles and nouns. */
 export function normalizeAnswerKeywords(value: unknown): AnswerKeywords {
   const raw = objectValue(value, "Answer keywords");
@@ -73,10 +108,7 @@ export function normalizeAnswerKeywords(value: unknown): AnswerKeywords {
     return [key, keyword];
   })) as AnswerKeywords;
   if (new Set(Object.values(keywords)).size !== Object.keys(keywords).length) throw new Error("Each answer keyword must be different.");
-  const compounds = [keywords.masculine + keywords.feminine, keywords.feminine + keywords.masculine];
-  if (compounds[0] === compounds[1] || compounds.some((compound) => Object.values(keywords).includes(compound))) {
-    throw new Error(`The gender keywords together (“${compounds[0]}”, “${compounds[1]}”) must differ from every answer keyword.`);
-  }
+  answerMarkers(keywords);
   return keywords;
 }
 

@@ -390,9 +390,18 @@ function normalizeAnswerKeywords(value) {
     return [key, keyword];
   }));
   if (new Set(Object.values(keywords)).size !== 4) throw new Error("Each answer keyword must be different.");
-  const compounds = [keywords.masculine + keywords.feminine, keywords.feminine + keywords.masculine];
-  if (compounds[0] === compounds[1] || compounds.some((compound) => Object.values(keywords).includes(compound))) {
-    throw new Error(`The gender keywords together (“${compounds[0]}”, “${compounds[1]}”) must differ from every answer keyword.`);
+  // Gender (one, or both as in "mf") and singular-/plural-only keywords may be typed together ("fs", "sf").
+  const genders = [[keywords.masculine, "m"], [keywords.feminine, "f"], [keywords.masculine + keywords.feminine, "mf"], [keywords.feminine + keywords.masculine, "fm"]];
+  const tantums = [[keywords.singularOnly, "s"], [keywords.pluralOnly, "p"]];
+  const markers = new Map();
+  const entries = [
+    ...genders.map(([token, meaning]) => [token, meaning]),
+    ...tantums.map(([token, meaning]) => [token, meaning]),
+    ...genders.flatMap(([gender, g]) => tantums.flatMap(([tantum, t]) => [[gender + tantum, g + t], [tantum + gender, g + t]])),
+  ];
+  for (const [token, meaning] of entries) {
+    if (markers.has(token) && markers.get(token) !== meaning) throw new Error(`These answer keywords make “${token}” mean two different things; choose keywords that don’t combine into one another.`);
+    markers.set(token, meaning);
   }
   return keywords;
 }

@@ -296,6 +296,10 @@ test("articleless nouns need a gender marker and take no article", () => {
   const venezia = nounCard({ english: "Venice", rule: rules.singularBase, base: "Venezia", gender: "feminine", articleProfile: nounArticleProfiles.none });
   assert.equal(word(venezia, "f s Venezia").correct, true);
   assert.equal(word(venezia, "s f Venezia").correct, true);
+  assert.equal(word(venezia, "fs Venezia").correct, true);
+  assert.equal(word(venezia, "sf Venezia").correct, true);
+  assert.equal(word(venezia, "ms Venezia").correct, false);
+  assert.equal(word(venezia, "fs s Venezia").correct, false);
   assert.equal(word(venezia, "s Venezia").correct, false);
   assert.equal(word(venezia, "f s la Venezia").correct, false);
 });
@@ -398,7 +402,7 @@ test("with every article the gender change needs no marker, but a typed one must
 test("gender keywords together must not collide with another keyword", () => {
   assert.throws(
     () => normalizeStudyPreferences({ ...defaultStudyPreferences, answerKeywords: { masculine: "m", feminine: "f", singularOnly: "mf", pluralOnly: "p" } }),
-    /gender keywords together/,
+    /mean two different things/,
   );
 });
 

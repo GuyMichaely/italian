@@ -9,7 +9,7 @@ import {
   type NounMorphology,
   type ResolvedNounForms,
 } from "../cards/nounMorphology";
-import { fullDeclensionReasonLabels, fullDeclensionReasons, type AnswerKeywords, type StudyPreferences } from "./preferences";
+import { answerMarkers, fullDeclensionReasonLabels, fullDeclensionReasons, type AnswerKeywords, type StudyPreferences } from "./preferences";
 
 /** One piece of a typed answer as the live preview labels it, without knowing the card. */
 export type AnswerPiece = { label: string; value: string };
@@ -120,31 +120,23 @@ export function parseNounAnswer(rawValue: string, morphology: NounMorphology, ke
   const fail = (status: "incomplete" | "invalid", message: string) => ({ ...result, status, message });
   if (!rawValue.trim()) return { ...result, status: "empty" };
 
-  const masculine = normalizeText(keywords.masculine);
-  const feminine = normalizeText(keywords.feminine);
-  const markers: Record<string, { kind: "gender"; value: NounGender[] } | { kind: "tantum"; value: NounFormNumber }> = {
-    [masculine]: { kind: "gender", value: ["masculine"] },
-    [feminine]: { kind: "gender", value: ["feminine"] },
-    [masculine + feminine]: { kind: "gender", value: ["masculine", "feminine"] },
-    [feminine + masculine]: { kind: "gender", value: ["feminine", "masculine"] },
-    [normalizeText(keywords.singularOnly)]: { kind: "tantum", value: "singular" },
-    [normalizeText(keywords.pluralOnly)]: { kind: "tantum", value: "plural" },
-  };
+  const markers = answerMarkers(keywords);
   const words: string[] = [];
   for (const token of answerTokens(rawValue, morphology)) {
-    const marker = markers[normalizeText(token)];
+    const marker = markers.get(normalizeText(token));
     if (!marker) {
       words.push(token);
       continue;
     }
-    if (marker.kind === "gender") {
+    if (marker.genders.length) {
       if (result.genders.length) return fail("invalid", "Type one gender marker at most.");
-      result.genders = marker.value;
-      result.pieces.push({ label: marker.value.length === 1 ? "Gender" : "Genders", value: marker.value.join(", then ") });
-    } else {
+      result.genders = marker.genders;
+      result.pieces.push({ label: marker.genders.length === 1 ? "Gender" : "Genders", value: marker.genders.join(", then ") });
+    }
+    if (marker.tantum) {
       if (result.tantum) return fail("invalid", "Type one singular-only or plural-only marker at most.");
-      result.tantum = marker.value;
-      result.pieces.push({ label: "Only", value: marker.value });
+      result.tantum = marker.tantum;
+      result.pieces.push({ label: "Only", value: marker.tantum });
     }
   }
 
