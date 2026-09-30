@@ -115,7 +115,7 @@ export function BatchNouns({
         <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
         <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
       </div>
-      <p className="batch-help">Type the singular and Parola suggests the plural, the declension rule, and every article. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
+      <p className="batch-help">Type the singular and Parole suggests the plural, the declension rule, and every article. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table noun-batch-table">
           <thead><tr><th>English</th><th>Singular</th><th>Plural</th><th>Gender</th><th>Articles</th><th>Rule</th><th>Forms</th><th><span className="sr-only">Actions</span></th></tr></thead>
@@ -307,7 +307,7 @@ export function BatchAdjectives({
       <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
       <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
       </div>
-      <p className="batch-help">Type the masculine singular and Parola suggests the other forms and the rule when the rules agree on them. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
+      <p className="batch-help">Type the masculine singular and Parole suggests the other forms and the rule when the rules agree on them. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table adjective-batch-table">
           <thead><tr><th>English</th><th>Masculine singular</th><th>Feminine singular</th><th>Masculine plural</th><th>Feminine plural</th><th>Rule</th><th>Forms</th><th><span className="sr-only">Actions</span></th></tr></thead>

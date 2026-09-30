@@ -212,7 +212,7 @@ export default function Home() {
               type: extensionImportResultType,
               requestId: request.requestId,
               ok: false,
-              error: error instanceof Error ? error.message : "Parola could not import the staged candidates.",
+              error: error instanceof Error ? error.message : "Parole could not import the staged candidates.",
             };
           }
         })();

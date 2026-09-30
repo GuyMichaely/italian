@@ -14,7 +14,7 @@ export function AppShell({ route, syncing, syncLabel, saveState, onAdd, children
   return <div className="app-shell">
     <header className="topbar">
       <div className="topbar-inner">
-        <a className="wordmark" href="#/study" aria-label="Parola home"><span className="wordmark-mark" aria-hidden="true">P</span><span>Parola</span></a>
+        <a className="wordmark" href="#/study" aria-label="Parole home"><span className="wordmark-mark" aria-hidden="true">P</span><span>Parole</span></a>
         <nav className="top-nav" aria-label="Main">
           {navItems.map((item) => <a key={item.route} href={`#/${item.route}`} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined}><Icon name={item.icon} size={17} />{item.label}</a>)}
         </nav>

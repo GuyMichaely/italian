@@ -10,7 +10,7 @@ export function GrammarView({ cards, morphology, adjectiveMorphology, studyPrefe
     <header className="page-header">
       <div>
         <h1>Grammar</h1>
-        <p>How Parola builds noun and adjective forms, and noun articles, from each word.</p>
+        <p>How Parole builds noun and adjective forms, and noun articles, from each word.</p>
       </div>
     </header>
     <NounMorphologyPanel cards={cards} morphology={morphology} adjectiveMorphology={adjectiveMorphology} studyPreferences={studyPreferences} onSave={onSave} onOpenCard={onOpenCard} />

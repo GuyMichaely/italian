@@ -410,10 +410,10 @@ export function NounMorphologyPanel({
   const exceptions = exceptionalNouns(cards);
   const notable = notableAdjectives(cards, adjectiveMorphology);
   const sections = [
-    { id: "declensions", label: "Declensions", count: draft.declensionRules.length },
+    { id: "declensions", label: "Noun declensions", count: draft.declensionRules.length },
     { id: "articles", label: "Articles", count: draft.articleGroups.length },
     { id: "noun-exceptions", label: "Exceptions", count: exceptions.length },
-    { id: "adjectives", label: "Adjectives", count: adjectiveDraft.declensionRules.length },
+    { id: "adjectives", label: "Adjective declensions", count: adjectiveDraft.declensionRules.length },
   ];
 
   return <section className="noun-patterns-panel" aria-label="Grammar">
@@ -427,7 +427,7 @@ export function NounMorphologyPanel({
       </div>}
 
       <section className="grammar-section" id="declensions" aria-labelledby="declensions-heading">
-      <h2 id="declensions-heading">Declensions</h2>
+      <h2 id="declensions-heading">Noun declensions</h2>
       <p className="section-intro">A rule turns a stored base into singular and/or plural forms. Leaving a form unsupported makes the rule singular-only or plural-only. A rule limited to one gender is only used for nouns of that gender. Renaming a rule updates every noun that uses it.</p>
       <p className="section-intro">In word mode, one form is enough when the rules predict the other from it: the rule with the longest matching ending wins. A plural in -i fits -o → -i and -e → -i alike, so it doesn’t show the singular. When neither form predicts the other, word mode asks for both.</p>
       <div className="noun-patterns-table-wrap">
@@ -495,7 +495,7 @@ export function NounMorphologyPanel({
       </section>
 
       <section className="grammar-section" id="adjectives" aria-labelledby="adjectives-heading">
-      <h2 id="adjectives-heading">Adjectives</h2>
+      <h2 id="adjectives-heading">Adjective declensions</h2>
       <p className="section-intro">An adjective rule gives the ending each of the four forms adds to a stored base. Renaming a rule updates every adjective that uses it.</p>
       <p className="section-intro">In a typed answer, any one form is enough when the rules predict the other three from it: the rule with the longest matching ending for that form wins. <code>bella</code> works; <code>rossi</code> doesn’t, since several rules make a masculine plural in -i. When no form predicts the rest, the answer needs all four.</p>
       <div className="noun-patterns-table-wrap">
