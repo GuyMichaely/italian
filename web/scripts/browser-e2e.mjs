@@ -91,10 +91,10 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error));
 
   await page.addInitScript((snapshot) => {
-    const seedKey = "parole-next:e2e-stale-state-seeded";
+    const seedKey = "parole:e2e-stale-state-seeded";
     if (window.sessionStorage.getItem(seedKey)) return;
     window.localStorage.clear();
-    window.localStorage.setItem("parole-next:inventory", JSON.stringify(snapshot));
+    window.localStorage.setItem("parole:inventory", JSON.stringify(snapshot));
     window.sessionStorage.setItem(seedKey, "1");
   }, staleLocalSnapshot);
 
@@ -119,7 +119,7 @@ try {
   await page.getByRole("heading", { name: "mirror" }).waitFor({ state: "visible" });
   assert.equal((await page.locator(".study-card .pos-badge").textContent())?.trim(), "Noun");
 
-  const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("parole-next:inventory") || "null"));
+  const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("parole:inventory") || "null"));
   assert.ok(persisted, "Imported inventory should be persisted to localStorage.");
   assert.equal(persisted.cards.length, 1);
   assert.equal(persisted.cards[0].english, "mirror");

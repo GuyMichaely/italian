@@ -8,7 +8,7 @@
 //   fullDeclensionRules every two-form rule that the shorthand syntaxes' inference set left out
 //   (the rules that used to need the full declension), with no individually marked nouns.
 // Works on exported inventory JSON, on the sync API's stored snapshot, and on the raw value of the
-// browser's parole-next:inventory localStorage key ({ cards, nounMorphology, updatedAt }).
+// browser's parole:inventory localStorage key ({ cards, nounMorphology, updatedAt }).
 
 import { readFile, writeFile } from "node:fs/promises";
 

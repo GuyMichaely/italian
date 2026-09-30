@@ -4,7 +4,7 @@
 // plurality (l’uovo / le uova): every noun card's details gain genderDiffersWithPlurality: false.
 // Mark the nouns that do change gender afterwards in the word editor.
 // Works on exported inventory JSON, on the sync API's stored snapshot, and on the raw value of the
-// browser's parole-next:inventory localStorage key.
+// browser's parole:inventory localStorage key.
 
 import { readFile, writeFile } from "node:fs/promises";
 

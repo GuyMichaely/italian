@@ -8,7 +8,7 @@
 // - studyPreferences.fullDeclensionRules becomes nounFullDeclensionRules, next to an empty
 //   adjectiveFullDeclensionRules.
 // Works on exported inventory JSON, on the sync API's stored snapshot, and on the raw value of the
-// browser's parole-next:inventory localStorage key.
+// browser's parole:inventory localStorage key.
 
 import { readFile, writeFile } from "node:fs/promises";
 
