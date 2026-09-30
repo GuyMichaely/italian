@@ -20,6 +20,10 @@
     "src/cards/adjectiveMorphology.ts",
     "src/cards/adjectiveDraft.ts",
     "src/study/verification.ts",
-    "src/storage/cardCodec.ts"
+    "src/storage/cardCodec.ts",
+    "src/lexicon/format.ts",
+    "src/lexicon/extract.ts",
+    "src/lexicon/lookup.ts",
+    "src/lexicon/suggestions.ts"
   ]
 }

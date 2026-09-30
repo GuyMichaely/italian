@@ -32,6 +32,11 @@ src/
 │   ├── nounMorphology.ts          declension rules, article table, generation, plural prediction
 │   ├── adjectiveDraft.ts          the adjective-entry model: four forms → rule and base
 │   └── adjectiveMorphology.ts     adjective rules, generation, prediction
+├── lexicon/                       Wiktionary dictionary lookups (docs/LEXICON.md)
+│   ├── format.ts                  record types, keys, chunk index search, compact storage
+│   ├── extract.ts                 kaikki entries → records, respelling, chunking (used by npm run lexicon)
+│   ├── lookup.ts                  cached chunk fetches, readings ranked best first
+│   └── suggestions.ts             readings → noun/verb/adjective/adverb fields, using the learner's rules
 ├── storage/                       inventory persistence, sync, import/export (cards, morphology, study preferences)
 ├── study/
 │   ├── setup.ts                   study setup (mode, scope, prompts), persistence
