@@ -25,18 +25,26 @@ type ParseResult = {
   pieces: AnswerPiece[];
 };
 
-/** Splits on whitespace; "double quotes" keep a multi-word form together. */
-function tokenize(value: string) {
-  return (value.normalize("NFC").match(/"[^"]*"|\S+/g) ?? []).map((part) => part.startsWith('"') && part.endsWith('"') && part.length > 1 ? part.slice(1, -1) : part);
+/** The whitespace-separated tokens of a typed answer; "double quotes" keep a multi-word form together. */
+export const answerTokenPattern = /"[^"]*"|\S+/g;
+
+/** A word of the answer and the index of the typed token it came from. */
+type AnswerWord = { text: string; token: number };
+
+function tokenize(value: string): AnswerWord[] {
+  return (value.normalize("NFC").match(answerTokenPattern) ?? []).map((part, token) => ({
+    text: part.startsWith('"') && part.endsWith('"') && part.length > 1 ? part.slice(1, -1) : part,
+    token,
+  }));
 }
 
 /** Splits “l'amica” into “l'” + “amica” for every elided article in the article table. */
-function expandElidedArticleTokens(parts: string[], morphology: NounMorphology) {
+function expandElidedArticleTokens(parts: AnswerWord[], morphology: NounMorphology) {
   const elided = elidedArticles(morphology).sort((left, right) => right.length - left.length);
   return parts.flatMap((part) => {
-    const normalized = normalizeText(part);
+    const normalized = normalizeText(part.text);
     const article = elided.find((candidate) => normalized.startsWith(candidate) && normalized.length > candidate.length);
-    return article ? [part.slice(0, article.length), part.slice(article.length)] : [part];
+    return article ? [{ ...part, text: part.text.slice(0, article.length) }, { ...part, text: part.text.slice(article.length) }] : [part];
   });
 }
 
@@ -103,13 +111,16 @@ export function takesArticles(card: Flashcard, morphology: NounMorphology) {
  */
 export type NounAnswerMode = "word" | "article" | "wordWithArticles";
 
-/** An article with the form after it, an article alone, or a form alone. */
-export type NounAnswerEntry = { article: string | null; noun: string | null };
+/** An article with the form after it, an article alone, or a form alone, with the typed tokens they came from. */
+export type NounAnswerEntry = { article: string | null; noun: string | null; articleToken: number | null; nounToken: number | null };
 
 export type ParsedNounAnswer = ParseResult & {
   /** One gender (the singular's), two from a compound marker like “mf” (one per typed form, in order), or none. */
   genders: NounGender[];
   tantum: NounFormNumber | null;
+  /** The typed tokens holding the gender and singular-/plural-only markers. */
+  genderToken: number | null;
+  tantumToken: number | null;
   entries: NounAnswerEntry[];
 };
 
@@ -118,44 +129,46 @@ export type ParsedNounAnswer = ParseResult & {
  * anywhere, then articles and forms in any order, each form going with the article before it.
  */
 export function parseNounAnswer(rawValue: string, morphology: NounMorphology, keywords: AnswerKeywords, mode: NounAnswerMode): ParsedNounAnswer {
-  const result: ParsedNounAnswer = { status: "complete", message: "", pieces: [], genders: [], tantum: null, entries: [] };
+  const result: ParsedNounAnswer = { status: "complete", message: "", pieces: [], genders: [], tantum: null, genderToken: null, tantumToken: null, entries: [] };
   const fail = (status: "incomplete" | "invalid", message: string) => ({ ...result, status, message });
   if (!rawValue.trim()) return { ...result, status: "empty" };
 
   const markers = answerMarkers(keywords);
-  const words: string[] = [];
-  for (const token of answerTokens(rawValue, morphology)) {
-    const marker = markers.get(normalizeText(token));
+  const words: AnswerWord[] = [];
+  for (const word of answerTokens(rawValue, morphology)) {
+    const marker = markers.get(normalizeText(word.text));
     if (!marker) {
-      words.push(token);
+      words.push(word);
       continue;
     }
     if (marker.genders.length) {
       if (result.genders.length) return fail("invalid", "Type one gender marker at most.");
       result.genders = marker.genders;
+      result.genderToken = word.token;
       result.pieces.push({ label: marker.genders.length === 1 ? "Gender" : "Genders", value: marker.genders.join(", then ") });
     }
     if (marker.tantum) {
       if (result.tantum) return fail("invalid", "Type one singular-only or plural-only marker at most.");
       result.tantum = marker.tantum;
+      result.tantumToken = word.token;
       result.pieces.push({ label: "Only", value: marker.tantum });
     }
   }
 
   for (let index = 0; index < words.length; index += 1) {
     const word = words[index]!;
-    if (!isArticle(word, morphology)) {
-      if (mode === "article") return fail("invalid", `“${word}” isn’t an article; a form goes after its article.`);
-      result.entries.push({ article: null, noun: word });
-      result.pieces.push({ label: "Noun", value: word });
+    if (!isArticle(word.text, morphology)) {
+      if (mode === "article") return fail("invalid", `“${word.text}” isn’t an article; a form goes after its article.`);
+      result.entries.push({ article: null, noun: word.text, articleToken: null, nounToken: word.token });
+      result.pieces.push({ label: "Noun", value: word.text });
       continue;
     }
     const next = words[index + 1];
-    const noun = next !== undefined && !isArticle(next, morphology) ? next : null;
-    result.entries.push({ article: word, noun });
-    result.pieces.push({ label: "Article", value: word });
+    const noun = next !== undefined && !isArticle(next.text, morphology) ? next : null;
+    result.entries.push({ article: word.text, noun: noun?.text ?? null, articleToken: word.token, nounToken: noun?.token ?? null });
+    result.pieces.push({ label: "Article", value: word.text });
     if (noun !== null) {
-      result.pieces.push({ label: "Noun", value: noun });
+      result.pieces.push({ label: "Noun", value: noun.text });
       index += 1;
     }
   }
@@ -171,7 +184,12 @@ export function parseNounAnswer(rawValue: string, morphology: NounMorphology, ke
   return result;
 }
 
-export type AnswerCheck = { correct: boolean; problems: string[] };
+export type AnswerCheck = {
+  correct: boolean;
+  problems: string[];
+  /** Indices of the typed tokens (split by answerTokenPattern) that are wrong; empty when no one token is to blame. */
+  wrongTokens: number[];
+};
 
 export type NounCheckContext = {
   mode: NounAnswerMode;
@@ -198,13 +216,15 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
   const { mode, morphology, preferences } = context;
   const keywords = preferences.answerKeywords;
   const parsed = parseNounAnswer(rawValue, morphology, keywords, mode);
-  if (parsed.status !== "complete") return { correct: false, problems: [parsed.message || "Type an answer."] };
+  if (parsed.status !== "complete") return { correct: false, problems: [parsed.message || "Type an answer."], wrongTokens: [] };
 
   const forms = resolvedNounForms(card, morphology);
   const slots = articleSlots(card, morphology);
   const existing = (["singular", "plural"] as const).filter((number) => forms[number]);
   const formNumbers = (noun: string) => existing.filter((number) => sameText(forms[number], noun));
   const problems: string[] = [];
+  const wrongTokens = new Set<number>();
+  const blame = (...tokens: (number | null)[]) => tokens.forEach((token) => { if (token !== null) wrongTokens.add(token); });
   const filled = new Set<ArticleSlotKey>();
   /** Numbers whose form was typed correctly, in the order they first appear. */
   const given: NounFormNumber[] = [];
@@ -212,11 +232,12 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
   /** The genders each typed article allows, and the number it was read for (null when unknown). */
   const shownGenders: { number: NounFormNumber | null; genders: Set<NounGender> }[] = [];
 
-  for (const { article, noun } of parsed.entries) {
+  for (const { article, noun, articleToken, nounToken } of parsed.entries) {
     if (!article) {
       const numbers = formNumbers(noun!);
       if (!numbers.length) {
         problems.push(`“${noun}” isn’t a form of this word.`);
+        blame(nounToken);
         continue;
       }
       // A noun whose forms are spelled alike (la città, le città) fills whichever number is still missing.
@@ -230,6 +251,7 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
       const slot = (noun ? open.find((candidate) => sameText(candidate.noun, noun)) : undefined) ?? open[0];
       if (!slot) {
         problems.push(`You typed “${article}” twice.`);
+        blame(articleToken);
         continue;
       }
       filled.add(slot.key);
@@ -240,8 +262,10 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
       } else if (formNumbers(noun).length) {
         formNumbers(noun).forEach(give);
         problems.push(`“${noun}” doesn’t go with “${article}”.`);
+        blame(articleToken, nounToken);
       } else {
         problems.push(`“${noun}” isn’t a form of this word.`);
+        blame(nounToken);
       }
       continue;
     }
@@ -251,12 +275,17 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
     shownGenders.push({ number, genders: articleGenders(article, number, morphology) });
     if (!numbers.length) {
       problems.push(`“${article}” isn’t one of this word’s articles.`);
-      if (noun) problems.push(`“${noun}” isn’t a form of this word.`);
+      blame(articleToken);
+      if (noun) {
+        problems.push(`“${noun}” isn’t a form of this word.`);
+        blame(nounToken);
+      }
     } else {
       numbers.forEach(give);
       problems.push(slots.some((slot) => numbers.includes(slotNumber(slot)))
         ? `“${article}” isn’t the article for “${noun}”.`
         : `“${noun}” doesn’t take an article.`);
+      blame(articleToken);
     }
   }
 
@@ -281,14 +310,20 @@ export function checkNounAnswer(card: NounCard, rawValue: string, context: NounC
   if (existing.length === 1) {
     const only = existing[0]!;
     const keyword = only === "singular" ? keywords.singularOnly : keywords.pluralOnly;
-    if (parsed.tantum && parsed.tantum !== only) problems.push(`This word only has a ${only}; mark it with “${keyword}”.`);
+    if (parsed.tantum && parsed.tantum !== only) {
+      problems.push(`This word only has a ${only}; mark it with “${keyword}”.`);
+      blame(parsed.tantumToken);
+    }
     else if (!parsed.tantum && mode === "word") problems.push(`Add “${keyword}”: this word only has a ${only}.`);
   } else if (parsed.tantum) {
     problems.push(`This word has both a singular and a plural, so it takes no “${parsed.tantum === "singular" ? keywords.singularOnly : keywords.pluralOnly}”.`);
+    blame(parsed.tantumToken);
   }
 
-  problems.push(...genderProblems(card, forms, parsed.genders, given, shownGenders, context));
-  return { correct: !problems.length, problems };
+  const gender = genderProblems(card, forms, parsed.genders, given, shownGenders, context);
+  problems.push(...gender.problems);
+  if (gender.markerWrong) blame(parsed.genderToken);
+  return { correct: !problems.length, problems, wrongTokens: [...wrongTokens].sort((left, right) => left - right) };
 }
 
 /**
@@ -311,27 +346,36 @@ function genderProblems(
   const differs = card.details.genderDiffersWithPlurality;
   const compounds = `“${keywords.masculine}${keywords.feminine}” or “${keywords.feminine}${keywords.masculine}”`;
   const problems: string[] = [];
+  /** Whether the typed gender marker itself is wrong, rather than missing. */
+  let markerWrong = false;
   /** Numbers whose gender a marker states. */
   const marked = new Set<NounFormNumber>();
 
   if (markers.length === 1) {
-    if (markers[0] !== forms.gender) problems.push(differs ? `The singular is ${forms.gender}; a single gender marker gives the singular’s gender.` : `This word is ${forms.gender}.`);
+    if (markers[0] !== forms.gender) {
+      problems.push(differs ? `The singular is ${forms.gender}; a single gender marker gives the singular’s gender.` : `This word is ${forms.gender}.`);
+      markerWrong = true;
+    }
     marked.add(forms.numberMode === "plural" ? "plural" : "singular");
   } else if (markers.length === 2) {
     const typed = markers.map((gender) => keywords[gender]).join("");
     if (!differs) {
       problems.push(`This word’s gender doesn’t differ with plurality, so “${typed}” doesn’t fit; use “${keywords[forms.gender]}”.`);
+      markerWrong = true;
     } else if (given.length !== 2) {
       problems.push(`“${typed}” gives two genders, one for each form; type both the singular and the plural.`);
     } else {
       given.forEach((number, index) => {
-        if (markers[index] !== genderOf(number)) problems.push(`“${forms[number]}” is ${genderOf(number)}, not ${markers[index]}.`);
+        if (markers[index] !== genderOf(number)) {
+          problems.push(`“${forms[number]}” is ${genderOf(number)}, not ${markers[index]}.`);
+          markerWrong = true;
+        }
         marked.add(number);
       });
     }
   }
 
-  if (context.mode !== "word") return problems;
+  if (context.mode !== "word") return { problems, markerWrong };
   const shows = (number: NounFormNumber | null) => {
     const sets = shownGenders.filter((entry) => number === null || entry.number === null || entry.number === number).map((entry) => entry.genders);
     if (!sets.length) return false;
@@ -342,7 +386,7 @@ function genderProblems(
     if (!markers.length && !context.genderGiven && !shows(null)) {
       problems.push(`Add “${keywords.masculine}” or “${keywords.feminine}”: ${shownGenders.length ? "the article doesn’t show the gender" : "without an article nothing shows the gender"}.`);
     }
-    return problems;
+    return { problems, markerWrong };
   }
   if (given.includes("singular") && !marked.has("singular") && !context.genderGiven && !shows("singular")) {
     problems.push(`Show the singular’s gender: add “${keywords.masculine}”, “${keywords.feminine}”, ${compounds}, or use an article that shows it.`);
@@ -350,5 +394,5 @@ function genderProblems(
   if (given.includes("plural") && !marked.has("plural") && !shows("plural")) {
     problems.push(`Show the plural’s gender: type its article, or add ${compounds}.`);
   }
-  return problems;
+  return { problems, markerWrong };
 }

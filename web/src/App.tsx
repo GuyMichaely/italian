@@ -45,6 +45,7 @@ import {
   type StudySetup,
 } from "./study/setup";
 import { cloneStudyPreferences, defaultStudyPreferences, prunedStudyPreferences, type StudyPreferences } from "./study/preferences";
+import type { AnswerCheck } from "./study/nounAnswers";
 import { StudyView, type StudyScopeOption } from "./views/StudyView";
 import { appendMistakeReviewSet, availableReviewItems, type MistakeReviewSet } from "./study/reviews";
 import { WordsView, type WordsTypeFilter } from "./views/WordsView";
@@ -92,7 +93,7 @@ export default function Home() {
   const [revealed, setRevealed] = useState(false);
   const [verificationResult, setVerificationResult] = useState<"correct" | "wrong" | null>(null);
   const [submittedAnswer, setSubmittedAnswer] = useState("");
-  const [submittedProblems, setSubmittedProblems] = useState<string[]>([]);
+  const [submittedCheck, setSubmittedCheck] = useState<AnswerCheck | null>(null);
   const [studyPreferences, setStudyPreferences] = useState<StudyPreferences>(() => cloneStudyPreferences(defaultStudyPreferences));
   const [directionSeed, setDirectionSeed] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now() >>> 0);
@@ -259,13 +260,14 @@ export default function Home() {
     advanceStudy(nextMistakeKeys);
   }
 
-  function verifyItalian(correct: boolean, answer: string, problems: string[]) {
+  function verifyItalian(answer: string, check: AnswerCheck) {
     if (!studyItem || verificationResult) return;
+    const { correct } = check;
     const result = correct ? "right" : "wrong";
     setSession((value) => ({ ...value, [result]: value[result] + 1 }));
     if (!correct) setMistakeKeys((items) => items.includes(studyItem.key) ? items : [...items, studyItem.key]);
     setSubmittedAnswer(answer.trim());
-    setSubmittedProblems(problems);
+    setSubmittedCheck(check);
     setVerificationResult(correct ? "correct" : "wrong");
     setRevealed(true);
   }
@@ -285,7 +287,7 @@ export default function Home() {
     setRevealed(false);
     setVerificationResult(null);
     setSubmittedAnswer("");
-    setSubmittedProblems([]);
+    setSubmittedCheck(null);
   }
 
   function applySetup(next: StudySetup) {
@@ -303,7 +305,7 @@ export default function Home() {
     setRevealed(false);
     setVerificationResult(null);
     setSubmittedAnswer("");
-    setSubmittedProblems([]);
+    setSubmittedCheck(null);
   }
 
   function resetStudyProgress() {
@@ -318,7 +320,7 @@ export default function Home() {
     setRevealed(false);
     setVerificationResult(null);
     setSubmittedAnswer("");
-    setSubmittedProblems([]);
+    setSubmittedCheck(null);
     setSessionComplete(false);
     setMistakeKeys([]);
     setMistakeTagName("");
@@ -632,7 +634,7 @@ export default function Home() {
         onReveal={setRevealed}
         verificationResult={verificationResult}
         submittedAnswer={submittedAnswer}
-        submittedProblems={submittedProblems}
+        submittedCheck={submittedCheck}
         onVerify={verifyItalian}
         onAdvance={advanceCard}
         onRate={rate}

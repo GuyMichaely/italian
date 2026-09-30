@@ -3,7 +3,8 @@ import type { Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { typeLabels } from "../cardTypes";
-import { AnswerProblems, CardAnswer, ItalianVerificationForm, italianHeadword } from "../components/CardAnswer";
+import { AnswerProblems, CardAnswer, ItalianVerificationForm, TypedAnswer, italianHeadword } from "../components/CardAnswer";
+import type { AnswerCheck } from "../study/nounAnswers";
 import { Icon } from "../components/Icons";
 import type { StudyItem } from "../study/logic";
 import type { StudyPreferences } from "../study/preferences";
@@ -223,8 +224,8 @@ export type StudyViewProps = {
   onReveal: (revealed: boolean) => void;
   verificationResult: "correct" | "wrong" | null;
   submittedAnswer: string;
-  submittedProblems: string[];
-  onVerify: (correct: boolean, answer: string, problems: string[]) => void;
+  submittedCheck: AnswerCheck | null;
+  onVerify: (answer: string, check: AnswerCheck) => void;
   onAdvance: () => void;
   onRate: (result: "right" | "wrong" | "skipped") => void;
   session: SessionCounts;
@@ -318,8 +319,8 @@ export function StudyView(props: StudyViewProps) {
               <div className="result-compare">
                 <div className="you-typed">
                   <span className="field-label">You typed</span>
-                  <code lang="it">{props.submittedAnswer}</code>
-                  <AnswerProblems problems={props.submittedProblems} />
+                  <TypedAnswer answer={props.submittedAnswer} wrongTokens={props.submittedCheck?.wrongTokens ?? []} />
+                  <AnswerProblems problems={props.submittedCheck?.problems ?? []} />
                 </div>
                 <div className="expected"><span className="field-label">Answer</span><CardAnswer card={studyItem.card} morphology={morphology} adjectiveMorphology={adjectiveMorphology} /></div>
               </div>

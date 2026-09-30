@@ -244,6 +244,20 @@ test("an explicit gender that disagrees with the noun is wrong", () => {
   assert.equal(word(card, "m la casa").correct, false);
 });
 
+test("a wrong answer marks the typed tokens that are wrong", () => {
+  const cetriolo = nounCard({ english: "cucumber", rule: rules.oI, base: "cetriol" });
+  assert.deepEqual(word(cetriolo, "il cetriolo i cetrioly").wrongTokens, [3]);
+  assert.deepEqual(word(cetriolo, "lo cetriolo").wrongTokens, [0]);
+  assert.deepEqual(word(cetriolo, "il cetrioli").wrongTokens, [0, 1]);
+  assert.deepEqual(both(cetriolo, "il cetriolo i").wrongTokens, []);
+  const casa = nounCard({ english: "house", rule: rules.aE, base: "cas", gender: "feminine" });
+  assert.deepEqual(word(casa, "m la casa").wrongTokens, [0]);
+  assert.deepEqual(word(casa, "la casa ps").wrongTokens, [2]);
+  const amica = nounCard({ english: "friend", rule: rules.aE, base: "amic", gender: "feminine" });
+  // An elided article and its noun share one typed token.
+  assert.deepEqual(word(amica, "f l'amice").wrongTokens, [1]);
+});
+
 test("irregular nouns need both forms", () => {
   const dio = nounCard({ english: "god", irregular: { singular: "dio", plural: "dei" }, articleGroups: { singular: null, plural: "lo" } });
   assert.equal(word(dio, "il dio gli dei").correct, true);
@@ -341,10 +355,10 @@ test("word answers parse without the card and report incomplete input", () => {
   assert.equal(parse("m f il libro").status, "invalid");
   assert.equal(parse("libro libri libri").status, "invalid");
   assert.equal(parse("il lo la i").status, "invalid");
-  assert.deepEqual(parse("il i libro").entries, [{ article: "il", noun: null }, { article: "i", noun: "libro" }]);
+  assert.deepEqual(parse("il i libro").entries, [{ article: "il", noun: null, articleToken: 0, nounToken: null }, { article: "i", noun: "libro", articleToken: 1, nounToken: 2 }]);
   const parsed = parse("m l'albero");
   assert.equal(parsed.status, "complete");
-  assert.deepEqual(parsed.entries, [{ article: "l'", noun: "albero" }]);
+  assert.deepEqual(parsed.entries, [{ article: "l'", noun: "albero", articleToken: 1, nounToken: 1 }]);
   assert.equal(parse("il i un", "article").status, "complete");
   assert.equal(parse("libro il", "article").status, "invalid");
 

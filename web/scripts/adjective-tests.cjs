@@ -90,6 +90,13 @@ test("the masculine singular alone answers a predictable adjective", () => {
   assert.match(check(rosso, "rosso rossa").problems.join(" "), /one form, or all four/);
 });
 
+test("a wrong answer marks the forms that are wrong", () => {
+  const economico = ruled("cheap", "-co/-ca/-ci/-che", "economi");
+  assert.deepEqual(check(economico, "economico economicia economici ecnomiche").wrongTokens, [1, 3]);
+  assert.deepEqual(check(economico, "economicissimo").wrongTokens, [0]);
+  assert.deepEqual(check(economico, "economico").wrongTokens, []);
+});
+
 test("ambiguous, irregular, drilled, and marked adjectives need all four forms", () => {
   const bianco = ruled("white", "-co/-ca/-chi/-che", "bian");
   // Only “bianchi” fits a single rule; the -co rules share every other ending.

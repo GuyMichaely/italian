@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import type { AdjectiveCard, AdverbCard, Flashcard, NounCard, VerbCard } from "../cards/types";
 import { irregularDeclensionName, resolvedNounForms, type NounMorphology } from "../cards/nounMorphology";
 import { adjectiveFormAbbreviations, adjectiveForms, resolvedAdjectiveForms, type AdjectiveMorphology } from "../cards/adjectiveMorphology";
@@ -6,6 +6,7 @@ import { nounFormPhrases } from "../cards/nounDraft";
 import type { StudyPreferences } from "../study/preferences";
 import { AnswerParsePreview, analyzeAnswerSyntax } from "./AnswerParsePreview";
 import { checkTypedAnswer, type StudyItem } from "../study/logic";
+import { answerTokenPattern, type AnswerCheck } from "../study/nounAnswers";
 
 /** The single Italian headword shown for a card in prompts, lists, and answers. */
 export function italianHeadword(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
@@ -82,13 +83,28 @@ export function CardAnswer({ card, morphology, adjectiveMorphology }: { card: Fl
   return <AdjectiveAnswer card={card} morphology={adjectiveMorphology} />;
 }
 
+/** The submitted answer, with the tokens the check blamed marked. */
+export function TypedAnswer({ answer, wrongTokens }: { answer: string; wrongTokens: number[] }) {
+  if (!wrongTokens.length) return <code lang="it">{answer}</code>;
+  const pieces: ReactNode[] = [];
+  let end = 0;
+  let index = 0;
+  for (const match of answer.matchAll(answerTokenPattern)) {
+    pieces.push(answer.slice(end, match.index));
+    pieces.push(<span key={index} className={wrongTokens.includes(index) ? "typed-wrong" : "typed-other"}>{match[0]}</span>);
+    end = match.index + match[0].length;
+    index += 1;
+  }
+  return <code lang="it" className="typed-marked">{pieces}</code>;
+}
+
 /** What was wrong with a typed noun or adjective answer, listed under the answer after checking. */
 export function AnswerProblems({ problems }: { problems: string[] }) {
   if (!problems.length) return null;
   return <ul className="answer-problems">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>;
 }
 
-export function ItalianVerificationForm({ item, preferences, morphology, adjectiveMorphology, onResult }: { item: StudyItem; preferences: StudyPreferences; morphology: NounMorphology; adjectiveMorphology: AdjectiveMorphology; onResult: (correct: boolean, answer: string, problems: string[]) => void }) {
+export function ItalianVerificationForm({ item, preferences, morphology, adjectiveMorphology, onResult }: { item: StudyItem; preferences: StudyPreferences; morphology: NounMorphology; adjectiveMorphology: AdjectiveMorphology; onResult: (answer: string, check: AnswerCheck) => void }) {
   const { card } = item;
   const [answer, setAnswer] = useState("");
   const [syntaxRejected, setSyntaxRejected] = useState(false);
@@ -102,7 +118,7 @@ export function ItalianVerificationForm({ item, preferences, morphology, adjecti
     }
     setSyntaxRejected(false);
     const check = checkTypedAnswer(item, answer, morphology, adjectiveMorphology, preferences);
-    onResult(check.correct, answer, check.problems);
+    onResult(answer, check);
   }
 
   const placeholder = item.mode === "article" ? "il i un"
