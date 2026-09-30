@@ -1,6 +1,6 @@
-# Parole synchronization API
+# Italian synchronization API
 
-Parole can synchronize its inventory through any HTTP service that implements the snapshot contract below. The service may be hosted anywhere and may use any persistence mechanism.
+The app can synchronize its inventory through any HTTP service that implements the snapshot contract below. The service may be hosted anywhere and may use any persistence mechanism.
 
 If the user configures a base endpoint such as:
 
@@ -8,7 +8,7 @@ If the user configures a base endpoint such as:
 https://api.example.com
 ```
 
-Parole uses:
+The app uses:
 
 ```text
 https://api.example.com/state
@@ -87,7 +87,7 @@ Declension-rule names and article-group names are references and must be unique 
 
 `studyPreferences` holds the answer keywords (four distinct single tokens), the noun and adjective rule names being drilled, and the noun and adjective card ids that always need every form. Every name and id must exist; deleting a card through `DELETE /cards` removes its id.
 
-`updatedAt` must be a valid timestamp. Parole uses it for snapshot-level last-write-wins synchronization. It does not merge individual cards or morphology definitions.
+`updatedAt` must be a valid timestamp. The app uses it for snapshot-level last-write-wins synchronization. It does not merge individual cards or morphology definitions.
 
 ## Read state
 
@@ -130,14 +130,14 @@ The canonical schema is strict. Stored noun `italian`, retired noun `articleMode
 
 ## Errors
 
-Use a non-2xx HTTP status. If the JSON response contains an `error` string, Parole can surface that detail.
+Use a non-2xx HTTP status. If the JSON response contains an `error` string, the app can surface that detail.
 
 ## CORS
 
-Because Parole is a static browser application, a synchronization service on another origin must permit requests from the origin hosting Parole.
+Because the app is a static browser application, a synchronization service on another origin must permit requests from the origin hosting it.
 
 At minimum it needs to support `GET`, `PUT`, and `OPTIONS`, plus the `Content-Type: application/json` request header.
 
 ## Authentication
 
-Parole does not prescribe an authentication mechanism. Avoid embedding permanent secret API keys in the static frontend because anyone who can load the site can inspect them.
+The app does not prescribe an authentication mechanism. Avoid embedding permanent secret API keys in the static frontend because anyone who can load the site can inspect them.

@@ -40,7 +40,7 @@ const nounSyntaxNames: Record<NounAnswerMode, string> = {
 };
 
 const nounAnswerHints: Record<NounAnswerMode, string> = {
-  word: "Type the Italian. The fields Parole recognizes will appear here.",
+  word: "Type the Italian. The fields it recognizes will appear here.",
   article: "Type every article the noun takes, in any order: definite singular, definite plural, indefinite.",
   wordWithArticles: "Type the noun with every article it takes, in any order: definite singular, definite plural, indefinite.",
 };
@@ -52,7 +52,7 @@ export function analyzeAnswerSyntax(item: Pick<StudyItem, "card" | "mode">, rawV
   if (!trimmed) {
     return {
       pieces: [],
-      message: "Start typing an answer to see how Parole parses it.",
+      message: "Start typing an answer to see how it’s parsed.",
       status: "empty",
       checkable: false,
       missing: [],

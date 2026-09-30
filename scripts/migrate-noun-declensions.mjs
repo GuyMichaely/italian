@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// One-time conversion of a Parole inventory from the rule/base noun schema to the declension schema:
+// One-time conversion of an Italian inventory from the rule/base noun schema to the declension schema:
 // - noun details { rule, base, gender, articleProfile } become
 //   { declension: { kind: "rule", rule, base }, gender, articleProfile, articleGroups: { singular: null, plural: null } };
 // - noun morphology gains the default editable vowel/consonant letters and article groups;

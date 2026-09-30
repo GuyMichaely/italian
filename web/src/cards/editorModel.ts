@@ -10,7 +10,7 @@ import { emptyAdjectiveDraft, type AdjectiveDraft } from "./adjectiveDraft";
 
 export type NounBatchRow = NounDraft & {
   id: string;
-  /** True while the plural still holds Parole's suggestion rather than typed text. */
+  /** True while the plural still holds the suggested plural rather than typed text. */
   pluralSuggested: boolean;
 };
 
@@ -30,7 +30,7 @@ export type VerbBatchRow = {
 
 export type AdjectiveBatchRow = AdjectiveDraft & {
   id: string;
-  /** True while the other three forms still hold Parole's suggestion rather than typed text. */
+  /** True while the other three forms still hold the suggested forms rather than typed text. */
   suggested: boolean;
 };
 

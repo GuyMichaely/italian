@@ -140,11 +140,11 @@ test("extension imports reject unknown card types", () => {
 
 test("extension import request parsing accepts only the bridge envelope", () => {
   const request = parseExtensionImportRequest({
-    source: "parole-capture-extension",
-    type: "parole-extension-import",
+    source: "italian-capture-extension",
+    type: "italian-extension-import",
     requestId: "request-1",
     candidates: [canonicalCard({})],
   });
   assert.equal(request?.requestId, "request-1");
-  assert.equal(parseExtensionImportRequest({ source: "something-else", type: "parole-extension-import" }), null);
+  assert.equal(parseExtensionImportRequest({ source: "something-else", type: "italian-extension-import" }), null);
 });

@@ -182,7 +182,7 @@ export default function Home() {
         const requestId = typeof event.data?.requestId === "string" ? event.data.requestId.trim() : "";
         if (!requestId) return;
         reply({
-          source: "parole-web",
+          source: "italian-web",
           type: extensionImportResultType,
           requestId,
           ok: false,
@@ -199,7 +199,7 @@ export default function Home() {
             const importedCards = extensionCandidatesToCards(request.candidates, nounMorphology, adjectiveMorphology);
             await addBatch(importedCards);
             return {
-              source: "parole-web",
+              source: "italian-web",
               type: extensionImportResultType,
               requestId: request.requestId,
               ok: true,
@@ -208,11 +208,11 @@ export default function Home() {
             };
           } catch (error) {
             return {
-              source: "parole-web",
+              source: "italian-web",
               type: extensionImportResultType,
               requestId: request.requestId,
               ok: false,
-              error: error instanceof Error ? error.message : "Parole could not import the staged candidates.",
+              error: error instanceof Error ? error.message : "The staged candidates could not be imported.",
             };
           }
         })();

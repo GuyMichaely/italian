@@ -1,4 +1,4 @@
-name: Validate Parole
+name: Validate Italian
 
 on:
   push:
@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: parole-validation-${{ github.ref }}
+  group: italian-validation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -123,6 +123,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: parole-browser-e2e-failure
+          name: italian-browser-e2e-failure
           path: web/test-results/
           if-no-files-found: ignore

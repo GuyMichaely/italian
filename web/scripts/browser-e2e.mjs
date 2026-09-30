@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
-const baseUrl = process.env.PAROLE_E2E_URL || "http://127.0.0.1:4173/";
+const baseUrl = process.env.ITALIAN_E2E_URL || "http://127.0.0.1:4173/";
 
 const morphology = {
   declensionRules: [
@@ -91,10 +91,10 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error));
 
   await page.addInitScript((snapshot) => {
-    const seedKey = "parole:e2e-stale-state-seeded";
+    const seedKey = "italian:e2e-stale-state-seeded";
     if (window.sessionStorage.getItem(seedKey)) return;
     window.localStorage.clear();
-    window.localStorage.setItem("parole:inventory", JSON.stringify(snapshot));
+    window.localStorage.setItem("italian:inventory", JSON.stringify(snapshot));
     window.sessionStorage.setItem(seedKey, "1");
   }, staleLocalSnapshot);
 
@@ -119,7 +119,7 @@ try {
   await page.getByRole("heading", { name: "mirror" }).waitFor({ state: "visible" });
   assert.equal((await page.locator(".study-card .pos-badge").textContent())?.trim(), "Noun");
 
-  const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("parole:inventory") || "null"));
+  const persisted = await page.evaluate(() => JSON.parse(window.localStorage.getItem("italian:inventory") || "null"));
   assert.ok(persisted, "Imported inventory should be persisted to localStorage.");
   assert.equal(persisted.cards.length, 1);
   assert.equal(persisted.cards[0].english, "mirror");

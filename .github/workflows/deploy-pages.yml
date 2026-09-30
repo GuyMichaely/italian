@@ -1,4 +1,4 @@
-name: Deploy Parole Pages
+name: Deploy Italian Pages
 
 on:
   push:

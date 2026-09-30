@@ -71,7 +71,7 @@ export function StorageSettingsPanel({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `parole-inventory-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.download = `italian-inventory-${new Date().toISOString().slice(0, 10)}.json`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setTransferMessage(`Exported ${inventory.cards.length} ${inventory.cards.length === 1 ? "card" : "cards"} with noun morphology and study preferences.`);
@@ -107,7 +107,7 @@ export function StorageSettingsPanel({
       return;
     }
     const saved = await replaceInventory(storage, imported);
-    setTransferMessage(`Imported ${saved.cards.length} ${saved.cards.length === 1 ? "card" : "cards"} with noun morphology and study preferences. Reloading Parole…`);
+    setTransferMessage(`Imported ${saved.cards.length} ${saved.cards.length === 1 ? "card" : "cards"} with noun morphology and study preferences. Reloading…`);
     window.location.reload();
   }
 
@@ -165,7 +165,7 @@ export function StorageSettingsPanel({
     <form className="settings-section" onSubmit={submit} aria-labelledby="sync-heading">
       <div className="settings-section-heading">
         <h2 id="sync-heading">Sync</h2>
-        <p>Parole always keeps your words in this browser. Add your API server to keep the same copy on every device.</p>
+        <p>Your words are always kept in this browser. Add your API server to keep the same copy on every device.</p>
       </div>
       <div className={`sync-status-card ${syncConfigured ? "remote" : "local"}`}>
         <span className="status-dot" aria-hidden="true" />

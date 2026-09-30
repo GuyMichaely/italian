@@ -1,4 +1,4 @@
-name: Deploy Parole API
+name: Deploy Italian API
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: parole-api-production
+  group: italian-api-production
   cancel-in-progress: true
 
 env:
@@ -60,7 +60,7 @@ jobs:
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error "$AZURE_WEBAPP_URL/health"; then
               echo
-              echo "Parole API is healthy."
+              echo "Italian API is healthy."
               exit 0
             fi
             sleep 5

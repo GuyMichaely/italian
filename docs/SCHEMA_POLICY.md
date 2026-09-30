@@ -1,6 +1,6 @@
 # Schema policy
 
-Treat each release as if it were a fresh 1.0 design. Do not keep old fields, readers, aliases, fallback branches, or compatibility code just because an earlier Parole release used them.
+Treat each release as if it were a fresh 1.0 design. Do not keep old fields, readers, aliases, fallback branches, or compatibility code just because an earlier release used them.
 
 When the clean current model requires a breaking data change, preserve real user data with a one-time migration. The migration may be a script, transformed export, or explicit instructions supplied for that upgrade. It should not become part of the application's permanent runtime unless there is a separate current-version reason for it to exist.
 

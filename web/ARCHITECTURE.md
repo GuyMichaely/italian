@@ -1,9 +1,9 @@
 # Architecture
 
-Parole consists of a static React frontend and an optional remote sync API. Extension work is separate from the current Parole-only implementation.
+Italian consists of a static React frontend and an optional remote sync API. Extension work is separate from the web app.
 
 ```text
-Parole web (React + Vite)
+Italian web (React + Vite)
     |
     +--> local inventory snapshot
     |
@@ -14,7 +14,7 @@ Parole web (React + Vite)
 
 The frontend is a static Vite application. React manages the interactive UI; Vite and TypeScript are build-time tools. The production output is ordinary HTML, CSS, and JavaScript in `dist/`.
 
-The build uses relative asset URLs so the same output can be served from `/`, `/parole/`, or another static path.
+The build uses relative asset URLs so the same output can be served from `/`, `/italian/`, or another static path.
 
 The main source boundaries are:
 
@@ -105,9 +105,9 @@ Noun-to-declension assignment is not duplicated in this panel. Nouns are entered
 
 ## External card import contract
 
-The import bridge is intentionally thin. It accepts an envelope containing cards that already obey Parole's current canonical `Flashcard` schema.
+The import bridge is intentionally thin. It accepts an envelope containing cards that already obey the app's current canonical `Flashcard` schema.
 
-Parole normalizes those cards with the same `cardCodec` used at storage boundaries. Unknown card types are rejected. Nouns must contain exactly the current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details and must omit top-level `italian`. The earlier rule/base noun shape, retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, stored noun Italian, and stored article-detail representations are rejected rather than translated.
+The app normalizes those cards with the same `cardCodec` used at storage boundaries. Unknown card types are rejected. Nouns must contain exactly the current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details and must omit top-level `italian`. The earlier rule/base noun shape, retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, stored noun Italian, and stored article-detail representations are rejected rather than translated.
 
 Imported noun cards are checked against active `NounMorphology` before persistence. Their referenced rule must exist and every enabled article capability must have the required noun form. After validation, imported cards use the same `addBatch` and `CardStorage` path as ordinary card creation.
 

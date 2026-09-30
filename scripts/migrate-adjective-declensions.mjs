@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// One-time conversion of a Parole inventory to adjective declension rules:
+// One-time conversion of an Italian inventory to adjective declension rules:
 // - the inventory gains adjectiveMorphology with the default adjective rules;
 // - each adjective card drops its stored italian and four form fields for a declension: the most
 //   specific default rule that produces exactly its forms, or Irregular (with the forms as stored)
@@ -8,7 +8,7 @@
 // - studyPreferences.fullDeclensionRules becomes nounFullDeclensionRules, next to an empty
 //   adjectiveFullDeclensionRules.
 // Works on exported inventory JSON, on the sync API's stored snapshot, and on the raw value of the
-// browser's parole:inventory localStorage key.
+// browser's italian:inventory localStorage key.
 
 import { readFile, writeFile } from "node:fs/promises";
 

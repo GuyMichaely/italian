@@ -146,7 +146,7 @@ export function ItalianVerificationForm({ item, preferences, morphology, adjecti
         enterKeyHint="done"
       />
       <AnswerParsePreview item={item} value={answer} keywords={preferences.answerKeywords} morphology={morphology} />
-      {syntaxRejected && <p className="form-error" role="alert">Finish the answer first: Parole can only check a complete answer.</p>}
+      {syntaxRejected && <p className="form-error" role="alert">Finish the answer first: only a complete answer can be checked.</p>}
       <button className="primary-button check-answer-button" type="submit" disabled={!answer.trim()}>Check answer <kbd>Enter</kbd></button>
     </form>
   );

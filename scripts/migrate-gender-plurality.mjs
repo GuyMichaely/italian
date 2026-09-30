@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-// One-time conversion of a Parole inventory to nouns that record whether their gender differs with
+// One-time conversion of an Italian inventory to nouns that record whether their gender differs with
 // plurality (l’uovo / le uova): every noun card's details gain genderDiffersWithPlurality: false.
 // Mark the nouns that do change gender afterwards in the word editor.
 // Works on exported inventory JSON, on the sync API's stored snapshot, and on the raw value of the
-// browser's parole:inventory localStorage key.
+// browser's italian:inventory localStorage key.
 
 import { readFile, writeFile } from "node:fs/promises";
 
