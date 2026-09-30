@@ -76,7 +76,7 @@ A wrong answer lists what was wrong, for example “The feminine plural isn’t 
 
 ## Not modeled
 
-Before a noun, `bello` and `quello` take forms that depend on how the next word starts, like the definite article (bel ragazzo, bello specchio, bell’amico, bei ragazzi, begli specchi); `buono` follows the indefinite article (buon amico, buono studente, buon’amica); and `grande` and `santo` shorten (gran signore, San Marco, Sant’Antonio). Parola stores only the ordinary forms used after a noun.
+Before a noun, `bello` and `quello` take forms that depend on how the next word starts, like the definite article (bel ragazzo, bello specchio, bell’amico, bei ragazzi, begli specchi); `buono` follows the indefinite article (buon amico, buono studente, buon’amica); and `grande` and `santo` shorten (gran signore, San Marco, Sant’Antonio). Parole stores only the ordinary forms used after a noun.
 
 ## Migration
 

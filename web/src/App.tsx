@@ -182,7 +182,7 @@ export default function Home() {
         const requestId = typeof event.data?.requestId === "string" ? event.data.requestId.trim() : "";
         if (!requestId) return;
         reply({
-          source: "parola-web",
+          source: "parole-web",
           type: extensionImportResultType,
           requestId,
           ok: false,
@@ -199,7 +199,7 @@ export default function Home() {
             const importedCards = extensionCandidatesToCards(request.candidates, nounMorphology, adjectiveMorphology);
             await addBatch(importedCards);
             return {
-              source: "parola-web",
+              source: "parole-web",
               type: extensionImportResultType,
               requestId: request.requestId,
               ok: true,
@@ -208,7 +208,7 @@ export default function Home() {
             };
           } catch (error) {
             return {
-              source: "parola-web",
+              source: "parole-web",
               type: extensionImportResultType,
               requestId: request.requestId,
               ok: false,

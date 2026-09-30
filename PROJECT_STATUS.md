@@ -1,8 +1,8 @@
-# Parola project status
+# Parole project status
 
 _Last updated: 2026-09-28_
 
-This is the durable checkpoint for the current Parola architecture, project decisions, and next steps.
+This is the durable checkpoint for the current Parole architecture, project decisions, and next steps.
 
 ## Project policy
 
@@ -16,11 +16,11 @@ Do not design around backwards compatibility.
 
 Treat each release as if it were a fresh 1.0. Keep one canonical data model. When a useful schema change would otherwise lose real user data, provide a one-time migration script or instructions outside the application. Do not commit permanent compatibility readers or dual schemas merely to preserve old representations.
 
-## Current Parola architecture
+## Current Parole architecture
 
-Parola web is a static React/Vite application served at `https://guymichaely.com/parola/`. It is local-first and may optionally synchronize the same complete inventory snapshot with the Node API deployed separately to Azure.
+Parole web is a static React/Vite application served at `https://guymichaely.com/parole/`. It is local-first and may optionally synchronize the same complete inventory snapshot with the Node API deployed separately to Azure.
 
-Cards and noun morphology form one logical inventory. Browser persistence stores one `parola:inventory` JSON value containing cards, noun morphology, and an internal `updatedAt` timestamp. Remote synchronization uses the same complete snapshot and last-write-wins timestamp semantics.
+Cards and noun morphology form one logical inventory. Browser persistence stores one `parole:inventory` JSON value containing cards, noun morphology, and an internal `updatedAt` timestamp. Remote synchronization uses the same complete snapshot and last-write-wins timestamp semantics.
 
 `Flashcard` is a discriminated union keyed by `type`. Nouns, verbs, adjectives, and adverbs each have their own typed `details` shape. Storage/import code validates external JSON at runtime before it enters that typed model.
 
@@ -74,7 +74,7 @@ See `docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
 ## External card import contract
 
-Parola does not contain a compatibility adapter for retired card formats.
+Parole does not contain a compatibility adapter for retired card formats.
 
 The external import bridge accepts only cards that already obey the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
 
@@ -100,7 +100,7 @@ The former Pages extension compatibility feed/package path has been removed.
 
 The current noun and adjective schemas are intentionally canonical and do not read previous representations. `scripts/migrate-adjective-declensions.mjs` converts inventories from before adjective rules, and renames the drilled noun rules to `nounFullDeclensionRules`. `scripts/migrate-article-profiles.mjs` is a one-off utility for converting retired `articleMode` inventories outside application runtime and removes the retired stored noun `italian` value as part of that conversion.
 
-## Parola-only remaining work
+## Parole-only remaining work
 
 Remaining work is primarily validation and product iteration:
 

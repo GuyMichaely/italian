@@ -1,6 +1,6 @@
 # Noun morphology and noun study
 
-Parola keeps a noun's lexical definition separate from study preferences, which only change what word mode asks for.
+Parole keeps a noun's lexical definition separate from study preferences, which only change what word mode asks for.
 
 ## Noun cards
 

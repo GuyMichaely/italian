@@ -4,18 +4,18 @@ import type { AdjectiveMorphology } from "./cards/adjectiveMorphology";
 import { normalizeCard } from "./storage/cardCodec";
 import { assertCardsFitMorphology } from "./storage/inventoryState";
 
-export const extensionImportRequestType = "parola-extension-import";
-export const extensionImportResultType = "parola-extension-import-result";
+export const extensionImportRequestType = "parole-extension-import";
+export const extensionImportResultType = "parole-extension-import-result";
 
 export type ExtensionImportRequest = {
-  source: "parola-capture-extension";
+  source: "parole-capture-extension";
   type: typeof extensionImportRequestType;
   requestId: string;
   candidates: unknown[];
 };
 
 export type ExtensionImportResult = {
-  source: "parola-web";
+  source: "parole-web";
   type: typeof extensionImportResultType;
   requestId: string;
   ok: boolean;
@@ -31,12 +31,12 @@ function text(value: unknown) {
 export function parseExtensionImportRequest(value: unknown): ExtensionImportRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const request = value as Partial<ExtensionImportRequest>;
-  if (request.source !== "parola-capture-extension" || request.type !== extensionImportRequestType) return null;
+  if (request.source !== "parole-capture-extension" || request.type !== extensionImportRequestType) return null;
   const requestId = text(request.requestId);
   if (!requestId || !Array.isArray(request.candidates) || !request.candidates.length) {
     throw new Error("Extension import request is incomplete.");
   }
-  return { source: "parola-capture-extension", type: extensionImportRequestType, requestId, candidates: request.candidates };
+  return { source: "parole-capture-extension", type: extensionImportRequestType, requestId, candidates: request.candidates };
 }
 
 export function extensionCandidatesToCards(values: unknown[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard[] {

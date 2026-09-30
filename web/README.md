@@ -1,6 +1,6 @@
-# Parola web
+# Parole web
 
-Parola is a static Italian flashcard web app.
+Parole is a static Italian flashcard web app.
 
 ## Architecture
 
@@ -14,13 +14,13 @@ The app is intentionally small and hosting-provider agnostic:
 - Browser `localStorage` for optional persistent local inventory state.
 - Optional user-supplied HTTP API for synchronization between machines.
 
-A production build is just static files in `dist/`. The build uses relative asset URLs, so the same `dist/` can be served at `/`, `/parola/`, or another directory without rebuilding.
+A production build is just static files in `dist/`. The build uses relative asset URLs, so the same `dist/` can be served at `/`, `/parole/`, or another directory without rebuilding.
 
-The canonical production deployment is `https://guymichaely.com/parola/`.
+The canonical production deployment is `https://guymichaely.com/parole/`.
 
 ## Storage and sync
 
-Parola always has a local working inventory. With no API endpoint configured, it is local-only.
+Parole always has a local working inventory. With no API endpoint configured, it is local-only.
 
 Configure a sync API endpoint from **Storage & sync** to maintain a remote copy of the same timestamped inventory. Local and remote are not mutually exclusive storage modes.
 

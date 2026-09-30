@@ -4,8 +4,8 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
 const port = Number(process.env.PORT || 8080);
-const dataPath = process.env.PAROLA_DATA_PATH || "/home/data/inventory.json";
-const allowedOrigin = process.env.PAROLA_ALLOWED_ORIGIN || "https://guymichaely.com";
+const dataPath = process.env.PAROLE_DATA_PATH || "/home/data/inventory.json";
+const allowedOrigin = process.env.PAROLE_ALLOWED_ORIGIN || "https://guymichaely.com";
 const validTypes = new Set(["noun", "verb", "adjective", "adverb"]);
 const maxBodyBytes = 1024 * 1024;
 
@@ -687,5 +687,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Parola API listening on port ${port}; state: ${dataPath}`);
+  console.log(`Parole API listening on port ${port}; state: ${dataPath}`);
 });

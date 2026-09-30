@@ -1,4 +1,4 @@
-name: Deploy Parola Pages
+name: Deploy Parole Pages
 
 on:
   push:

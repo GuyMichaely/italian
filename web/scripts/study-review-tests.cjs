@@ -9,7 +9,7 @@ fs.writeFileSync(path.join(testDist, "package.json"), '{"type":"commonjs"}\n');
 const { appendMistakeReviewSet, availableReviewItems } = require(path.join(testDist, "study", "reviews.js"));
 
 const cards = Array.from({ length: 20 }, (_, index) => ({
-  id: index + 1, type: "adverb", english: `Word ${index + 1}`, italian: `Parola ${index + 1}`,
+  id: index + 1, type: "adverb", english: `Word ${index + 1}`, italian: `Parole ${index + 1}`,
   setName: null, tags: [], details: {},
 }));
 const items = cards.map((card) => ({ key: `${card.id}:english`, card, promptLanguage: "english" }));

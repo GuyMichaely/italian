@@ -5,9 +5,9 @@
  * shares an origin (and so localStorage) with the production app. The prototype therefore keeps
  * its data under its own prefix so the production app's inventory is never read or rewritten.
  * Load data into it by restoring a backup converted with scripts/migrate-noun-declensions.mjs.
- * Switch this back to "parola" when this branch replaces production.
+ * Switch this back to "parole" when this branch replaces production.
  */
-export const storagePrefix = "parola-next";
+export const storagePrefix = "parole-next";
 
 export function storageKey(name: string) {
   return `${storagePrefix}:${name}`;
