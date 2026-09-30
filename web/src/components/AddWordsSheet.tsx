@@ -36,6 +36,18 @@ import {
 import { Icon } from "./Icons";
 import { Sheet } from "./Sheet";
 
+/** Keeps at least two rows and an empty last row, so there's always a row to type the next word into. */
+function withSpareRows<Row>(rows: Row[], used: (row: Row) => boolean, emptyRow: (id: string) => Row): Row[] {
+  const next = [...rows];
+  if (!next.length || used(next.at(-1)!)) next.push(emptyRow(newRowId()));
+  while (next.length < 2) next.push(emptyRow(newRowId()));
+  return next;
+}
+
+function withoutRow<Row extends { id: string }>(rows: Row[], id: string, used: (row: Row) => boolean, emptyRow: (id: string) => Row): Row[] {
+  return withSpareRows(rows.filter((row) => row.id !== id), used, emptyRow);
+}
+
 /** Refreshes the plural suggestion unless the learner typed a plural. */
 function withSuggestedPlural(row: NounBatchRow, morphology: NounMorphology): NounBatchRow {
   if (!row.pluralSuggested && row.plural.trim()) return row;
@@ -53,6 +65,16 @@ function updateNounBatchRow<K extends keyof NounDraft>(row: NounBatchRow, field:
   if (field === "plural") return { ...next, pluralSuggested: false };
   if (field === "singular" || field === "gender") return withSuggestedPlural(next, morphology);
   return next;
+}
+
+const verbRowFields = ["english", "infinitive", "io", "tu", "luiLei", "noi", "voi", "loro", "participle"] as const;
+
+function verbRowUsed(row: VerbBatchRow) {
+  return verbRowFields.some((field) => row[field].trim());
+}
+
+function adverbRowUsed(row: AdverbBatchRow) {
+  return Boolean(row.english.trim() || row.form.trim());
 }
 
 function nounRowUsed(row: NounBatchRow) {
@@ -76,7 +98,7 @@ export function BatchNouns({
 }) {
   const [draft, setDraft] = useState<BatchDraft<NounBatchRow>>(() => {
     const stored = readBatchDraft("noun", () => Array.from({ length: 3 }, (_, index) => emptyNounBatchRow(String(index + 1))));
-    return { ...stored, rows: stored.rows.map((row) => ({ ...emptyNounBatchRow(row.id), ...row })) };
+    return { ...stored, rows: withSpareRows(stored.rows.map((row) => ({ ...emptyNounBatchRow(row.id), ...row })), nounRowUsed, emptyNounBatchRow) };
   });
   const [localError, setLocalError] = useState("");
   const rows = draft.rows;
@@ -88,14 +110,12 @@ export function BatchNouns({
   function updateRow<K extends keyof NounDraft>(id: string, field: K, value: NounDraft[K]) {
     setDraft((currentDraft) => {
       const updated = currentDraft.rows.map((row) => row.id === id ? updateNounBatchRow(row, field, value, morphology) : row);
-      const last = updated.at(-1);
-      const nextRows = last && nounRowUsed(last) ? [...updated, emptyNounBatchRow(newRowId())] : updated;
-      return { ...currentDraft, rows: nextRows };
+      return { ...currentDraft, rows: withSpareRows(updated, nounRowUsed, emptyNounBatchRow) };
     });
   }
 
   function removeRow(id: string) {
-    setDraft((currentDraft) => ({ ...currentDraft, rows: currentDraft.rows.length === 1 ? currentDraft.rows : currentDraft.rows.filter((row) => row.id !== id) }));
+    setDraft((currentDraft) => ({ ...currentDraft, rows: withoutRow(currentDraft.rows, id, nounRowUsed, emptyNounBatchRow) }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -163,7 +183,10 @@ export function BatchVerbs({
   onSave: (cards: Flashcard[]) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [draft, setDraft] = useState<BatchDraft<VerbBatchRow>>(() => readBatchDraft("verb", () => Array.from({ length: 3 }, (_, index) => emptyVerbBatchRow(String(index + 1)))));
+  const [draft, setDraft] = useState<BatchDraft<VerbBatchRow>>(() => {
+    const stored = readBatchDraft("verb", () => Array.from({ length: 3 }, (_, index) => emptyVerbBatchRow(String(index + 1))));
+    return { ...stored, rows: withSpareRows(stored.rows, verbRowUsed, emptyVerbBatchRow) };
+  });
   const [localError, setLocalError] = useState("");
   const rows = draft.rows;
 
@@ -174,26 +197,24 @@ export function BatchVerbs({
   function updateRow(id: string, field: keyof VerbBatchRow, value: string) {
     setDraft((currentDraft) => {
       const updated = currentDraft.rows.map((row) => row.id === id ? { ...row, [field]: value } as VerbBatchRow : row);
-      const last = updated.at(-1);
-      const hasText = last && [last.english, last.infinitive, last.io, last.tu, last.luiLei, last.noi, last.voi, last.loro, last.participle].some((item) => item.trim());
-      return { ...currentDraft, rows: hasText ? [...updated, emptyVerbBatchRow(newRowId())] : updated };
+      return { ...currentDraft, rows: withSpareRows(updated, verbRowUsed, emptyVerbBatchRow) };
     });
   }
 
   function removeRow(id: string) {
-    setDraft((currentDraft) => ({ ...currentDraft, rows: currentDraft.rows.length === 1 ? currentDraft.rows : currentDraft.rows.filter((row) => row.id !== id) }));
+    setDraft((currentDraft) => ({ ...currentDraft, rows: withoutRow(currentDraft.rows, id, verbRowUsed, emptyVerbBatchRow) }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const setName = draft.setName.trim() || null;
     const tags = parseTags(draft.tags);
-    const used = rows.filter((row) => [row.english, row.infinitive, row.io, row.tu, row.luiLei, row.noi, row.voi, row.loro, row.participle].some((item) => item.trim()));
+    const used = rows.filter(verbRowUsed);
     if (!used.length) {
       setLocalError("Enter at least one verb.");
       return;
     }
-    if (used.some((row) => [row.english, row.infinitive, row.io, row.tu, row.luiLei, row.noi, row.voi, row.loro, row.participle].some((item) => !item.trim()))) {
+    if (used.some((row) => verbRowFields.some((field) => !row[field].trim()))) {
       setLocalError("Every used verb row needs English, infinitive, all six present-tense forms, and the participle.");
       return;
     }
@@ -269,7 +290,10 @@ export function BatchAdjectives({
   onSave: (cards: Flashcard[]) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [draft, setDraft] = useState<BatchDraft<AdjectiveBatchRow>>(() => readBatchDraft("adjective", () => Array.from({ length: 3 }, (_, index) => emptyAdjectiveBatchRow(String(index + 1)))));
+  const [draft, setDraft] = useState<BatchDraft<AdjectiveBatchRow>>(() => {
+    const stored = readBatchDraft("adjective", () => Array.from({ length: 3 }, (_, index) => emptyAdjectiveBatchRow(String(index + 1))));
+    return { ...stored, rows: withSpareRows(stored.rows, adjectiveRowUsed, emptyAdjectiveBatchRow) };
+  });
   const [localError, setLocalError] = useState("");
   const rows = draft.rows;
 
@@ -280,14 +304,12 @@ export function BatchAdjectives({
   function updateRow<K extends keyof AdjectiveDraft>(id: string, field: K, value: AdjectiveDraft[K]) {
     setDraft((currentDraft) => {
       const updated = currentDraft.rows.map((row) => row.id === id ? updateAdjectiveBatchRow(row, field, value, morphology) : row);
-      const last = updated.at(-1);
-      const nextRows = last && adjectiveRowUsed(last) ? [...updated, emptyAdjectiveBatchRow(newRowId())] : updated;
-      return { ...currentDraft, rows: nextRows };
+      return { ...currentDraft, rows: withSpareRows(updated, adjectiveRowUsed, emptyAdjectiveBatchRow) };
     });
   }
 
   function removeRow(id: string) {
-    setDraft((currentDraft) => ({ ...currentDraft, rows: currentDraft.rows.length === 1 ? currentDraft.rows : currentDraft.rows.filter((row) => row.id !== id) }));
+    setDraft((currentDraft) => ({ ...currentDraft, rows: withoutRow(currentDraft.rows, id, adjectiveRowUsed, emptyAdjectiveBatchRow) }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -333,7 +355,10 @@ export function BatchAdjectives({
 }
 
 export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { knownSets: string[]; saving: boolean; error: string; onSave: (cards: Flashcard[]) => Promise<void>; onCancel: () => void }) {
-  const [draft, setDraft] = useState<BatchDraft<AdverbBatchRow>>(() => readBatchDraft("adverb", () => Array.from({ length: 3 }, (_, index) => emptyAdverbBatchRow(String(index + 1)))));
+  const [draft, setDraft] = useState<BatchDraft<AdverbBatchRow>>(() => {
+    const stored = readBatchDraft("adverb", () => Array.from({ length: 3 }, (_, index) => emptyAdverbBatchRow(String(index + 1))));
+    return { ...stored, rows: withSpareRows(stored.rows, adverbRowUsed, emptyAdverbBatchRow) };
+  });
   const [localError, setLocalError] = useState("");
   const rows = draft.rows;
 
@@ -342,18 +367,17 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
   function updateRow(id: string, field: keyof AdverbBatchRow, value: string) {
     setDraft((currentDraft) => {
       const updated = currentDraft.rows.map((row) => row.id === id ? { ...row, [field]: value } : row);
-      const last = updated.at(-1);
-      return { ...currentDraft, rows: last && (last.english.trim() || last.form.trim()) ? [...updated, emptyAdverbBatchRow(newRowId())] : updated };
+      return { ...currentDraft, rows: withSpareRows(updated, adverbRowUsed, emptyAdverbBatchRow) };
     });
   }
 
   function removeRow(id: string) {
-    setDraft((currentDraft) => ({ ...currentDraft, rows: currentDraft.rows.length === 1 ? currentDraft.rows : currentDraft.rows.filter((row) => row.id !== id) }));
+    setDraft((currentDraft) => ({ ...currentDraft, rows: withoutRow(currentDraft.rows, id, adverbRowUsed, emptyAdverbBatchRow) }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const used = rows.filter((row) => row.english.trim() || row.form.trim());
+    const used = rows.filter(adverbRowUsed);
     if (!used.length) { setLocalError("Enter at least one adverb."); return; }
     if (used.some((row) => !row.english.trim() || !row.form.trim())) { setLocalError("Every used adverb row needs English and an Italian form."); return; }
     setLocalError("");

@@ -413,7 +413,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 
 /* ---------- Sheets ---------- */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; background: rgba(4,5,7,.66); backdrop-filter: blur(3px); animation: fade-in .15s ease; }
-.sheet { display: flex; flex-direction: column; min-width: 0; background: var(--bg); border: 1px solid var(--line-strong); box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+.sheet { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--bg); border: 1px solid var(--line-strong); box-shadow: 0 24px 80px rgba(0,0,0,.5); }
 .sheet-wide { align-items: center; justify-content: center; padding: 24px; }
 .sheet-wide .sheet { width: min(1120px, 100%); max-height: min(880px, 100%); border-radius: 18px; animation: rise .2s ease; }
 .sheet-side { justify-content: flex-end; }
