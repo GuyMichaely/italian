@@ -11,6 +11,8 @@ const { LexiconBuilder, cleanGloss, lexiconChunks, stripStressMarks } = require(
 const { chunkFileName, chunkIndexForKey, lexiconKey } = require(path.join(testDist, "lexicon", "format.js"));
 const { Lexicon } = require(path.join(testDist, "lexicon", "lookup.js"));
 const { describeSuggestion, suggestionsForReadings } = require(path.join(testDist, "lexicon", "suggestions.js"));
+const { rowAcceptsSuggestion, rowWithSuggestion } = require(path.join(testDist, "lexicon", "rows.js"));
+const { emptyNounBatchRow, emptyVerbBatchRow } = require(path.join(testDist, "cards", "editorModel.js"));
 const { defaultNounMorphology } = require(path.join(testDist, "cards", "nounMorphology.js"));
 const { defaultAdjectiveMorphology } = require(path.join(testDist, "cards", "adjectiveMorphology.js"));
 const { irregularRuleValue, resolveNounDraft } = require(path.join(testDist, "cards", "nounDraft.js"));
@@ -96,7 +98,7 @@ test("an inflected form leads to its dictionary word", async () => {
   const [libro] = await suggestions("libri");
   assert.equal(libro.fields.singular, "libro");
   assert.equal(libro.reading.via.description, "plural");
-  assert.equal(describeSuggestion(libro), "libro / libri (m. noun) — plural of libro");
+  assert.equal(describeSuggestion(libro), "libro / libri, masculine noun. “libri” is the plural of libro.");
 });
 
 test("nouns no rule makes are Irregular and flagged", async () => {
@@ -111,6 +113,7 @@ test("a plural of the other gender sets gender-differs-with-plurality", async ()
   const [uovo] = await suggestions("uova");
   assert.deepEqual(nounForms(uovo), { singular: "uovo", plural: "uova", gender: "masculine", genderDiffersWithPlurality: true, articles: "all" });
   assert.ok(resolveNounDraft(uovo.fields, defaultNounMorphology).ok);
+  assert.equal(describeSuggestion(uovo), "uovo / uova, masculine noun with a feminine plural. “uova” is the plural of uovo.");
 });
 
 test("braccio offers both plurals, the usual one first", async () => {
@@ -225,4 +228,37 @@ test("adjective tables Wiktionary couldn't parse still give their forms", async 
 test("nouns ending in an accented vowel are invariable when Wiktionary lists no plural", async () => {
   const [pubblicita] = await suggestions("pubblicità");
   assert.deepEqual(nounForms(pubblicita), { singular: "pubblicità", plural: "pubblicità", gender: "feminine", genderDiffersWithPlurality: false, articles: "all" });
+});
+
+test("rows are filled in only where the learner hasn't typed the other fields", async () => {
+  const [libro] = await suggestions("libro");
+  const typed = { ...emptyNounBatchRow("1"), singular: "libro" };
+  assert.ok(rowAcceptsSuggestion("noun", typed, null));
+  const filled = rowWithSuggestion("noun", typed, libro, null);
+  assert.deepEqual([filled.id, filled.english, filled.plural, filled.pluralSuggested], ["1", "book", "libri", false]);
+
+  // English the learner typed stays.
+  assert.equal(rowWithSuggestion("noun", { ...typed, english: "a book" }, libro, null).english, "a book");
+  // A plural the learner typed blocks filling in; a suggested one doesn't.
+  assert.ok(!rowAcceptsSuggestion("noun", { ...typed, plural: "libra" }, null));
+  assert.ok(rowAcceptsSuggestion("noun", { ...typed, plural: "libri", pluralSuggested: true }, null));
+});
+
+test("a row filled in from the dictionary can be filled in again for a new word", async () => {
+  const [libro] = await suggestions("libro");
+  const [mano] = await suggestions("mano");
+  const filled = rowWithSuggestion("noun", { ...emptyNounBatchRow("1"), singular: "libro" }, libro, null);
+  const retyped = { ...filled, singular: "mano" };
+  assert.ok(rowAcceptsSuggestion("noun", retyped, libro));
+  const refilled = rowWithSuggestion("noun", retyped, mano, libro);
+  assert.deepEqual([refilled.english, refilled.plural, refilled.gender], ["hand", "mani", "feminine"]);
+  // Once the learner changes a filled-in field, it's theirs.
+  assert.ok(!rowAcceptsSuggestion("noun", { ...retyped, gender: "feminine" }, libro));
+});
+
+test("verb rows fill the present tense, participle, and auxiliary", async () => {
+  const [andare] = await suggestions("andare");
+  const row = rowWithSuggestion("verb", { ...emptyVerbBatchRow("v"), infinitive: "andare" }, andare, null);
+  assert.deepEqual([row.id, row.english, row.io, row.loro, row.auxiliary, row.participle], ["v", "to go", "vado", "vanno", "essere", "andato"]);
+  assert.ok(!rowAcceptsSuggestion("verb", { ...emptyVerbBatchRow("v"), infinitive: "andare", io: "vo" }, null));
 });

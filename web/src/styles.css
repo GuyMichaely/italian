@@ -17,6 +17,7 @@
   --right-soft: rgba(95, 207, 142, .12);
   --wrong: #ef7070;
   --wrong-soft: rgba(239, 112, 112, .12);
+  --caution: #e3b35c;
   --noun: #f08a78;
   --verb: #4fc4cf;
   --adjective: #e3b35c;
@@ -365,6 +366,19 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .grid-table tbody tr.has-error td.select-cell { box-shadow: inset 3px 0 0 var(--wrong); }
 .grid-table tbody tr.new-row td { background: var(--surface-2); }
 .new-row-mark { display: block; color: var(--muted); font-size: 16px; line-height: 1; text-align: center; }
+.dictionary-note-row td { padding: 0 10px 10px !important; border-top: 0 !important; }
+.grid-table .dictionary-note-row td { padding-left: 52px !important; background: var(--surface-2); }
+/* The note stays in view when the table scrolls sideways. */
+.batch-table-wrap { container-type: inline-size; }
+.dictionary-note { position: sticky; left: 10px; max-width: calc(100cqw - 20px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-right: 28px; color: var(--muted); font-size: 13px; }
+.dictionary-note.missing, .dictionary-note.failed { color: var(--faint); }
+.dictionary-note a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.dictionary-note a:hover { text-decoration: underline; }
+.dictionary-review { color: var(--caution); }
+.dictionary-choices { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.dictionary-note button.chip { min-height: 24px; padding: 2px 9px; font-size: 12.5px; white-space: normal; text-align: left; }
+.dictionary-dismiss { position: absolute; top: -3px; right: 0; padding: 2px 6px; border: 0; background: transparent; color: var(--faint); font-size: 16px; line-height: 1; }
+.dictionary-dismiss:hover { color: var(--text); }
 .row-error-line td { padding: 0 12px 10px 52px !important; border-top: 0 !important; color: var(--wrong); font-size: 13px; }
 .grid-all td:nth-child(3) { width: 34%; }
 .grid-all td:nth-child(4) { width: 30%; }
@@ -500,6 +514,8 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .settings-section { display: grid; gap: 16px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .settings-section-heading h2 { font-size: 22px; font-weight: 560; }
 .settings-section-heading p { margin-top: 4px; color: var(--muted); font-size: 14px; }
+.settings-credit { color: var(--faint); font-size: 12.5px; }
+.settings-credit a { color: var(--muted); }
 .sync-status-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); }
 .sync-status-card > div { flex: 1; }
 .sync-status-card p { color: var(--muted); font-size: 13px; }
@@ -595,6 +611,9 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
   .batch-form .batch-table td.row-action-cell { position: absolute; top: 6px; right: 6px; }
   .batch-form .batch-table td.row-action-cell::before { content: none; }
   .batch-form .batch-table input:not([type="checkbox"]), .batch-form .batch-table select { border-color: var(--line-strong); background-color: var(--surface-2); }
+  .batch-form .batch-table tr.dictionary-note-row { display: block; margin-top: -4px; padding: 0 4px; border: 0; background: transparent; }
+  .batch-form .batch-table tr.dictionary-note-row td::before { content: none; }
+  .batch-form .batch-table tr.dictionary-note-row td:first-child { padding-right: 0 !important; }
   .derived-cell { min-width: 0; }
 }
 

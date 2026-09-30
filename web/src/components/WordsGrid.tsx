@@ -33,6 +33,8 @@ import { adjectiveDraftForEditing, resolveAdjectiveDraft } from "../cards/adject
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { AdjectiveRowCells, AdverbRowCells, NounBatchRowCells, VerbRowCells } from "./CardEditorFields";
 import { italianHeadword } from "./CardAnswer";
+import { RowDictionaryNote } from "./DictionaryNoteRow";
+import { useDictionaryRows } from "../lexicon/useDictionary";
 
 type Metadata = { setName: string; tags: string };
 type GridRow =
@@ -215,6 +217,13 @@ export function WordsGrid({
     });
   }
 
+  const dictionaries = {
+    noun: useDictionaryRows("noun", { noun: morphology }, newRows.noun, (id, change) => updateNewRow("noun", id, (row) => change(row) as typeof row)),
+    verb: useDictionaryRows("verb", {}, newRows.verb, (id, change) => updateNewRow("verb", id, (row) => change(row) as typeof row)),
+    adjective: useDictionaryRows("adjective", { adjective: adjectiveMorphology }, newRows.adjective, (id, change) => updateNewRow("adjective", id, (row) => change(row) as typeof row)),
+    adverb: useDictionaryRows("adverb", {}, newRows.adverb, (id, change) => updateNewRow("adverb", id, (row) => change(row) as typeof row)),
+  };
+
   function removeNewRow(type: CardType, id: string) {
     const kind = newRowKinds[type];
     setNewRows((current) => ({ ...current, [type]: withoutRow(current[type] as { id: string }[], id, kind.used as (row: { id: string }) => boolean, kind.empty, 1) }));
@@ -304,18 +313,18 @@ export function WordsGrid({
   function newRowCells(type: CardType, id: string, index: number) {
     if (type === "noun") {
       const row = newRows.noun.find((item) => item.id === id)!;
-      return <NounBatchRowCells row={row} index={index} morphology={morphology} onChange={(field, value) => updateNewRow("noun", id, (current) => updateNounBatchRow(current, field, value, morphology))} />;
+      return <NounBatchRowCells row={row} index={index} morphology={morphology} onChange={(field, value) => updateNewRow("noun", id, (current) => updateNounBatchRow(current, field, value, morphology))} onLookUp={(word) => dictionaries.noun.lookUp(id, word)} />;
     }
     if (type === "verb") {
       const row = newRows.verb.find((item) => item.id === id)!;
-      return <VerbRowCells row={row} index={index} onChange={(field, value) => updateNewRow("verb", id, (current) => ({ ...current, [field]: value }))} />;
+      return <VerbRowCells row={row} index={index} onChange={(field, value) => updateNewRow("verb", id, (current) => ({ ...current, [field]: value }))} onLookUp={(word) => dictionaries.verb.lookUp(id, word)} />;
     }
     if (type === "adjective") {
       const row = newRows.adjective.find((item) => item.id === id)!;
-      return <AdjectiveRowCells row={row} index={index} morphology={adjectiveMorphology} onChange={(field, value) => updateNewRow("adjective", id, (current) => updateAdjectiveBatchRow(current, field, value, adjectiveMorphology))} />;
+      return <AdjectiveRowCells row={row} index={index} morphology={adjectiveMorphology} onChange={(field, value) => updateNewRow("adjective", id, (current) => updateAdjectiveBatchRow(current, field, value, adjectiveMorphology))} onLookUp={(word) => dictionaries.adjective.lookUp(id, word)} />;
     }
     const row = newRows.adverb.find((item) => item.id === id)!;
-    return <AdverbRowCells row={row} index={index} onChange={(field, value) => updateNewRow("adverb", id, (current) => ({ ...current, [field]: value }))} />;
+    return <AdverbRowCells row={row} index={index} onChange={(field, value) => updateNewRow("adverb", id, (current) => ({ ...current, [field]: value }))} onLookUp={(word) => dictionaries.adverb.lookUp(id, word)} />;
   }
 
   function newRowsBody(type: CardType) {
@@ -336,6 +345,7 @@ export function WordsGrid({
             <button type="button" className="row-remove" tabIndex={-1} onClick={() => removeNewRow(type, row.id)} aria-label={`Remove new row ${index + 1}`} title="Remove">×</button>
           </div>}</td>
         </tr>
+        <RowDictionaryNote dictionary={dictionaries[type]} rowId={row.id} english={row.english} columns={columnCount} />
         {rowError && <tr className="row-error-line"><td colSpan={columnCount}>{row.english.trim() || "New word"}: {rowError}</td></tr>}
       </Fragment>;
     });

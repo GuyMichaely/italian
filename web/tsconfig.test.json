@@ -24,6 +24,7 @@
     "src/lexicon/format.ts",
     "src/lexicon/extract.ts",
     "src/lexicon/lookup.ts",
-    "src/lexicon/suggestions.ts"
+    "src/lexicon/suggestions.ts",
+    "src/lexicon/rows.ts"
   ]
 }

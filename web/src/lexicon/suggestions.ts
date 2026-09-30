@@ -1,10 +1,10 @@
-import type { NounGender } from "../cards/types";
+import type { CardType, NounGender } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import type { AdverbBatchRow, VerbBatchRow } from "../cards/editorModel";
 import { emptyNounDraft, irregularRuleValue, resolveNounDraft, suggestedPlural, type NounDraft } from "../cards/nounDraft";
 import { resolveAdjectiveDraft, type AdjectiveDraft } from "../cards/adjectiveDraft";
-import type { LexiconAdjective, LexiconGender, LexiconNoun, LexiconVerb } from "./format";
+import type { LexiconAdjective, LexiconGender, LexiconNoun, LexiconPos, LexiconVerb } from "./format";
 import type { LexiconReading } from "./lookup";
 
 export type VerbFields = Omit<VerbBatchRow, "id">;
@@ -26,7 +26,15 @@ export type LexiconSuggestion = SuggestionBase & (
   | { type: "adverb"; fields: AdverbFields }
 );
 
-export type SuggestionMorphology = { noun: NounMorphology; adjective: AdjectiveMorphology };
+/** The learner's rules; only the ones for the parts of speech being suggested are needed. */
+export type SuggestionMorphology = { noun?: NounMorphology; adjective?: AdjectiveMorphology };
+
+export const cardTypeForPos = { noun: "noun", verb: "verb", adj: "adjective", adv: "adverb" } as const satisfies Record<LexiconPos, CardType>;
+
+function required<T>(value: T | undefined, what: string): T {
+  if (!value) throw new Error(`Suggesting ${what} needs their rules.`);
+  return value;
+}
 
 const genderNames: Record<LexiconGender, NounGender> = { m: "masculine", f: "feminine" };
 
@@ -110,11 +118,11 @@ export function suggestionsForReading(reading: LexiconReading, morphology: Sugge
   const headword = reading.headword;
   switch (headword.pos) {
     case "noun":
-      return nounSuggestions(reading, headword, morphology.noun);
+      return nounSuggestions(reading, headword, required(morphology.noun, "nouns"));
     case "verb":
       return verbSuggestions(reading, headword);
     case "adj":
-      return [adjectiveSuggestion(reading, headword, morphology.adjective)];
+      return [adjectiveSuggestion(reading, headword, required(morphology.adjective, "adjectives"))];
     case "adv":
       return [{ type: "adverb", reading, glosses: headword.glosses, fields: { english: headword.glosses[0] ?? "", form: headword.word }, review: null }];
   }
@@ -124,21 +132,33 @@ export function suggestionsForReadings(readings: LexiconReading[], morphology: S
   return readings.flatMap((reading) => suggestionsForReading(reading, morphology));
 }
 
-/** A one-line description for choosing between suggestions: “libro (m.), libri — plural of libro”. */
-export function describeSuggestion(suggestion: LexiconSuggestion) {
-  const via = suggestion.reading.via ? ` — ${suggestion.reading.via.description} of ${suggestion.reading.via.of}` : "";
+function suggestionLabel(suggestion: LexiconSuggestion) {
   switch (suggestion.type) {
     case "noun": {
       const noun = suggestion.fields;
-      const gender = noun.gender === "masculine" ? "m." : "f.";
-      const pluralGender = noun.genderDiffersWithPlurality ? (noun.gender === "masculine" ? " (f.)" : " (m.)") : "";
-      return `${[noun.singular, noun.plural && `${noun.plural}${pluralGender}`].filter(Boolean).join(" / ")} (${gender} noun)${via}`;
+      const forms = [noun.singular, noun.plural].filter(Boolean).join(" / ");
+      const gender = noun.gender === "masculine" ? "masculine" : "feminine";
+      const pluralGender = noun.gender === "masculine" ? "feminine" : "masculine";
+      const number = !noun.singular ? " plural-only" : !noun.plural ? " singular-only" : "";
+      return `${forms}, ${gender}${number} noun${noun.genderDiffersWithPlurality ? ` with a ${pluralGender} plural` : ""}`;
     }
     case "verb":
-      return `${suggestion.fields.infinitive} (verb, with ${suggestion.fields.auxiliary})${via}`;
+      return `${suggestion.fields.infinitive}, verb with ${suggestion.fields.auxiliary}`;
     case "adjective":
-      return `${suggestion.fields.masculineSingular} (adjective)${via}`;
+      return `${suggestion.fields.masculineSingular}, adjective`;
     case "adverb":
-      return `${suggestion.fields.form} (adverb)${via}`;
+      return `${suggestion.fields.form}, adverb`;
   }
+}
+
+/** What a suggestion is, and how the looked-up word relates to it: “uovo / uova, masculine noun with a feminine plural. “uova” is the plural of uovo.” */
+export function describeSuggestion(suggestion: LexiconSuggestion) {
+  const via = suggestion.reading.via;
+  return `${suggestionLabel(suggestion)}.${via ? ` “${via.word}” is the ${via.description} of ${via.of}.` : ""}`;
+}
+
+/** A short label for a button choosing between suggestions: “cantare, verb with avere (present participle)”. */
+export function shortSuggestionLabel(suggestion: LexiconSuggestion) {
+  const via = suggestion.reading.via;
+  return `${suggestionLabel(suggestion)}${via ? ` (${via.description})` : ""}`;
 }

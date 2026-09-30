@@ -86,6 +86,7 @@ export function NounBatchRowCells({
   onChange,
   onRemove,
   autoFocus = false,
+  onLookUp,
 }: {
   row: NounBatchRow;
   index: number;
@@ -93,11 +94,13 @@ export function NounBatchRowCells({
   onChange: <K extends keyof NounDraft>(field: K, value: NounDraft[K]) => void;
   onRemove?: () => void;
   autoFocus?: boolean;
+  /** Called with the singular when it loses focus, to look it up in the dictionary. */
+  onLookUp?: (word: string) => void;
 }) {
   const numbers = draftFormNumbers(row.rule, morphology);
   return <>
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(e) => onChange("english", e.target.value)} placeholder="the book" autoFocus={autoFocus} /></td>
-    <td data-label="Singular"><input aria-label={`Row ${index + 1} singular`} value={row.singular} disabled={!numbers.singular} onChange={(e) => onChange("singular", e.target.value)} placeholder={numbers.singular ? "libro" : "none"} autoCapitalize="none" spellCheck={false} /></td>
+    <td data-label="Singular"><input aria-label={`Row ${index + 1} singular`} value={row.singular} disabled={!numbers.singular} onChange={(e) => onChange("singular", e.target.value)} onBlur={(e) => onLookUp?.(e.target.value)} placeholder={numbers.singular ? "libro" : "none"} autoCapitalize="none" spellCheck={false} /></td>
     <td data-label="Plural"><input aria-label={`Row ${index + 1} plural`} className={row.pluralSuggested ? "suggested" : ""} value={row.plural} disabled={!numbers.plural} onChange={(e) => onChange("plural", e.target.value)} placeholder={numbers.plural ? "libri" : "none"} autoCapitalize="none" spellCheck={false} /></td>
     <td data-label="Gender"><select aria-label={`Row ${index + 1} gender`} value={batchGenderOptions.find((option) => option.gender === row.gender && option.differs === row.genderDiffersWithPlurality)!.value} onChange={(e) => {
       const option = batchGenderOptions.find((item) => item.value === e.target.value)!;
@@ -111,10 +114,10 @@ export function NounBatchRowCells({
   </>;
 }
 
-export function VerbRowCells({ row, index, onChange, onRemove, autoFocus = false }: { row: VerbBatchRow; index: number; onChange: (field: keyof VerbBatchRow, value: string) => void; onRemove?: () => void; autoFocus?: boolean }) {
+export function VerbRowCells({ row, index, onChange, onRemove, autoFocus = false, onLookUp }: { row: VerbBatchRow; index: number; onChange: (field: keyof VerbBatchRow, value: string) => void; onRemove?: () => void; autoFocus?: boolean; onLookUp?: (word: string) => void }) {
   return <>
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(e) => onChange("english", e.target.value)} placeholder="to understand" autoFocus={autoFocus} /></td>
-    <td data-label="Infinitive"><input aria-label={`Row ${index + 1} infinitive`} value={row.infinitive} onChange={(e) => onChange("infinitive", e.target.value)} placeholder="capire" /></td>
+    <td data-label="Infinitive"><input aria-label={`Row ${index + 1} infinitive`} value={row.infinitive} onChange={(e) => onChange("infinitive", e.target.value)} onBlur={(e) => onLookUp?.(e.target.value)} placeholder="capire" autoCapitalize="none" spellCheck={false} /></td>
     {(["io", "tu", "luiLei", "noi", "voi", "loro"] as const).map((field) => <td key={field} data-label={field === "luiLei" ? "lui / lei" : field}><input aria-label={`Row ${index + 1} ${field === "luiLei" ? "lui or lei" : field}`} value={row[field]} onChange={(e) => onChange(field, e.target.value)} /></td>)}
     <td data-label="Auxiliary"><select aria-label={`Row ${index + 1} auxiliary`} value={row.auxiliary} onChange={(e) => onChange("auxiliary", e.target.value)}><option value="avere">avere</option><option value="essere">essere</option></select></td>
     <td data-label="Participle"><input aria-label={`Row ${index + 1} past participle`} value={row.participle} onChange={(e) => onChange("participle", e.target.value)} placeholder="capito" /></td>
@@ -152,6 +155,7 @@ export function AdjectiveRowCells({
   onChange,
   onRemove,
   autoFocus = false,
+  onLookUp,
 }: {
   row: AdjectiveBatchRow;
   index: number;
@@ -159,20 +163,22 @@ export function AdjectiveRowCells({
   onChange: <K extends keyof AdjectiveDraft>(field: K, value: AdjectiveDraft[K]) => void;
   onRemove?: () => void;
   autoFocus?: boolean;
+  /** Called with the masculine singular when it loses focus, to look it up in the dictionary. */
+  onLookUp?: (word: string) => void;
 }) {
   return <>
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(e) => onChange("english", e.target.value)} placeholder="beautiful" autoFocus={autoFocus} /></td>
-    {adjectiveForms.map((form) => <td key={form} data-label={adjectiveFormAbbreviations[form]}><input aria-label={`Row ${index + 1} ${adjectiveFormLabels[form]}`} className={row.suggested && form !== "masculineSingular" ? "suggested" : ""} value={row[form]} onChange={(e) => onChange(form, e.target.value)} placeholder={adjectivePlaceholders[form]} autoCapitalize="none" spellCheck={false} /></td>)}
+    {adjectiveForms.map((form) => <td key={form} data-label={adjectiveFormAbbreviations[form]}><input aria-label={`Row ${index + 1} ${adjectiveFormLabels[form]}`} className={row.suggested && form !== "masculineSingular" ? "suggested" : ""} value={row[form]} onChange={(e) => onChange(form, e.target.value)} onBlur={form === "masculineSingular" ? (e) => onLookUp?.(e.target.value) : undefined} placeholder={adjectivePlaceholders[form]} autoCapitalize="none" spellCheck={false} /></td>)}
     <td data-label="Rule"><AdjectiveRuleSelect label={`Row ${index + 1} adjective rule`} value={row.rule} morphology={morphology} onChange={(value) => onChange("rule", value)} /></td>
     <td data-label="Forms" className="derived-cell"><AdjectiveDerivedPreview draft={row} morphology={morphology} /></td>
     {onRemove && <td className="row-action-cell"><button type="button" className="row-remove" tabIndex={-1} onClick={onRemove} aria-label={`Remove row ${index + 1}`}>×</button></td>}
   </>;
 }
 
-export function AdverbRowCells({ row, index, onChange, onRemove, autoFocus = false }: { row: AdverbBatchRow; index: number; onChange: (field: keyof AdverbBatchRow, value: string) => void; onRemove?: () => void; autoFocus?: boolean }) {
+export function AdverbRowCells({ row, index, onChange, onRemove, autoFocus = false, onLookUp }: { row: AdverbBatchRow; index: number; onChange: (field: keyof AdverbBatchRow, value: string) => void; onRemove?: () => void; autoFocus?: boolean; onLookUp?: (word: string) => void }) {
   return <>
     <td data-label="English"><input aria-label={`Row ${index + 1} English`} value={row.english} onChange={(event) => onChange("english", event.target.value)} placeholder="very; a lot" autoFocus={autoFocus} /></td>
-    <td data-label="Italian"><input aria-label={`Row ${index + 1} adverb`} value={row.form} onChange={(event) => onChange("form", event.target.value)} placeholder="molto" /></td>
+    <td data-label="Italian"><input aria-label={`Row ${index + 1} adverb`} value={row.form} onChange={(event) => onChange("form", event.target.value)} onBlur={(event) => onLookUp?.(event.target.value)} placeholder="molto" autoCapitalize="none" spellCheck={false} /></td>
     {onRemove && <td className="row-action-cell"><button type="button" className="row-remove" tabIndex={-1} onClick={onRemove} aria-label={`Remove row ${index + 1}`}>×</button></td>}
   </>;
 }

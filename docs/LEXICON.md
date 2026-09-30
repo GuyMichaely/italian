@@ -42,6 +42,15 @@ A **form** points at its headword: “vado” is the “first-person singular pr
 
 A suggestion carries a `review` note when the learner should check it: a different gender, either auxiliary, an Irregular fallback, or missing forms.
 
+## In the app
+
+When “Fill in words from the dictionary” is on, the app looks up a word when you leave its headword field. It's a per-device setting under Settings → Dictionary, and it's on by default. The headword field is the singular for nouns, the infinitive for verbs, the masculine singular for adjectives, and the adverb itself. This works in Add words and in the Words grid's new rows.
+
+- **What gets filled in.** The first suggestion for the tab's part of speech fills the row. Other fields are filled only while they're untouched: blank, suggested by the rules, or still holding what the dictionary filled in for the previous word. English is kept if you typed it. A form fills in its dictionary word, so libri becomes libro / libri.
+- **The note under the row.** It says what was filled in and whether to check it. It also offers the other meanings for the English field and the other readings to switch to. If the row wasn't filled because you'd typed other fields, it offers to fill it.
+
+`src/lexicon/rows.ts` decides whether a row can be filled and how. `src/lexicon/useDictionary.ts` holds the setting and the lookups, and `components/DictionaryNoteRow.tsx` draws the note.
+
 ## Building
 
 ```sh
@@ -63,4 +72,4 @@ The build replaces `web/public/lexicon/`. It takes about 90 seconds. `src/lexico
 
 ## License
 
-Wiktionary's text is licensed CC BY-SA 4.0, and so is the lexicon. The app credits Wiktionary where it offers lookups.
+Wiktionary's text is licensed CC BY-SA 4.0, and so is the lexicon. The app credits Wiktionary under Settings → Dictionary, and each note links to the word's Wiktionary page.

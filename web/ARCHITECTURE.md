@@ -36,7 +36,9 @@ src/
 │   ├── format.ts                  record types, keys, chunk index search, compact storage
 │   ├── extract.ts                 kaikki entries → records, respelling, chunking (used by npm run lexicon)
 │   ├── lookup.ts                  cached chunk fetches, readings ranked best first
-│   └── suggestions.ts             readings → noun/verb/adjective/adverb fields, using the learner's rules
+│   ├── suggestions.ts             readings → noun/verb/adjective/adverb fields, using the learner's rules
+│   ├── rows.ts                    filling an entry row from a suggestion without overwriting typed fields
+│   └── useDictionary.ts           the per-device autofill setting and row lookups for Add words and the grid
 ├── storage/                       inventory persistence, sync, import/export (cards, morphology, study preferences)
 ├── study/
 │   ├── setup.ts                   study setup (mode, scope, prompts), persistence
@@ -57,6 +59,7 @@ src/
     ├── AddWordsSheet.tsx           batch word creation
     ├── WordDrawer.tsx              single-word editing
     ├── WordsGrid.tsx               editable word grid with sparse drafts that survive filtering, and new-word rows per part of speech
+    ├── DictionaryNoteRow.tsx       the line under a row saying what the dictionary filled in, with other readings and meanings
     ├── CardEditorFields.tsx        shared editor fields and batch row cells
     ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview

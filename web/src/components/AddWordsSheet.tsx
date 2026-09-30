@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { Fragment, type FormEvent, useEffect, useState } from "react";
 import type { CardType, Flashcard } from "../cards/types";
 import type { NounMorphology } from "../cards/nounMorphology";
 import { cardTypes, typeLabels } from "../cardTypes";
@@ -43,6 +43,8 @@ import {
   TagsField,
   VerbRowCells,
 } from "./CardEditorFields";
+import { RowDictionaryNote } from "./DictionaryNoteRow";
+import { useDictionaryRows } from "../lexicon/useDictionary";
 import { Icon } from "./Icons";
 import { Sheet } from "./Sheet";
 
@@ -71,6 +73,11 @@ export function BatchNouns({
   useEffect(() => {
     writeBatchDraft("noun", draft);
   }, [draft]);
+
+  const dictionary = useDictionaryRows("noun", { noun: morphology }, rows, (id, change) => setDraft((currentDraft) => ({
+    ...currentDraft,
+    rows: withSpareRows(currentDraft.rows.map((row) => row.id === id ? change(row) : row), nounRowUsed, emptyNounBatchRow),
+  })));
 
   function updateRow<K extends keyof NounDraft>(id: string, field: K, value: NounDraft[K]) {
     setDraft((currentDraft) => {
@@ -109,14 +116,15 @@ export function BatchNouns({
         <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
         <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
       </div>
-      <p className="batch-help">Type the singular to get the plural, the declension rule, and every article suggested. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
+      <p className="batch-help">{dictionary.enabled ? "Type the singular and move on: the dictionary fills in the English, gender, and plural. " : "Type the singular to get the plural, the declension rule, and every article suggested. "}Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table noun-batch-table">
           <thead><tr><th>English</th><th>Singular</th><th>Plural</th><th>Gender</th><th>Articles</th><th>Rule</th><th>Forms</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
-            {rows.map((row, index) => <tr key={row.id}>
-              <NounBatchRowCells row={row} index={index} morphology={morphology} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
-            </tr>)}
+            {rows.map((row, index) => <Fragment key={row.id}>
+              <tr><NounBatchRowCells row={row} index={index} morphology={morphology} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} onLookUp={(word) => dictionary.lookUp(row.id, word)} /></tr>
+              <RowDictionaryNote dictionary={dictionary} rowId={row.id} english={row.english} columns={8} />
+            </Fragment>)}
           </tbody>
         </table>
       </div>
@@ -158,6 +166,11 @@ export function BatchVerbs({
   useEffect(() => {
     writeBatchDraft("verb", draft);
   }, [draft]);
+
+  const dictionary = useDictionaryRows("verb", {}, rows, (id, change) => setDraft((currentDraft) => ({
+    ...currentDraft,
+    rows: withSpareRows(currentDraft.rows.map((row) => row.id === id ? change(row) : row), verbRowUsed, emptyVerbBatchRow),
+  })));
 
   function updateRow(id: string, field: keyof VerbBatchRow, value: string) {
     setDraft((currentDraft) => {
@@ -207,14 +220,15 @@ export function BatchVerbs({
       <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
       <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
       </div>
-      <p className="batch-help">One verb per row. A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
+      <p className="batch-help">One verb per row.{dictionary.enabled ? " Type the infinitive and move on: the dictionary fills in the English, present tense, auxiliary, and participle." : ""} A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table verb-batch-table">
           <thead><tr><th>English</th><th>Infinitive</th><th>io</th><th>tu</th><th>lui / lei</th><th>noi</th><th>voi</th><th>loro</th><th>Aux.</th><th>Participle</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
-            {rows.map((row, index) => <tr key={row.id}>
-              <VerbRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
-            </tr>)}
+            {rows.map((row, index) => <Fragment key={row.id}>
+              <tr><VerbRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} onLookUp={(word) => dictionary.lookUp(row.id, word)} /></tr>
+              <RowDictionaryNote dictionary={dictionary} rowId={row.id} english={row.english} columns={11} />
+            </Fragment>)}
           </tbody>
         </table>
       </div>
@@ -248,6 +262,11 @@ export function BatchAdjectives({
   useEffect(() => {
     writeBatchDraft("adjective", draft);
   }, [draft]);
+
+  const dictionary = useDictionaryRows("adjective", { adjective: morphology }, rows, (id, change) => setDraft((currentDraft) => ({
+    ...currentDraft,
+    rows: withSpareRows(currentDraft.rows.map((row) => row.id === id ? change(row) : row), adjectiveRowUsed, emptyAdjectiveBatchRow),
+  })));
 
   function updateRow<K extends keyof AdjectiveDraft>(id: string, field: K, value: AdjectiveDraft[K]) {
     setDraft((currentDraft) => {
@@ -286,14 +305,15 @@ export function BatchAdjectives({
       <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
       <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
       </div>
-      <p className="batch-help">Type the masculine singular to get the other forms and the rule suggested when the rules agree on them. Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
+      <p className="batch-help">{dictionary.enabled ? "Type the masculine singular and move on: the dictionary fills in the English and the other forms. " : "Type the masculine singular to get the other forms and the rule suggested when the rules agree on them. "}Pick a rule only when Auto can’t decide. Drafts are kept on this device.</p>
       <div className="batch-table-wrap">
         <table className="batch-table adjective-batch-table">
           <thead><tr><th>English</th><th>Masculine singular</th><th>Feminine singular</th><th>Masculine plural</th><th>Feminine plural</th><th>Rule</th><th>Forms</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
-            {rows.map((row, index) => <tr key={row.id}>
-              <AdjectiveRowCells row={row} index={index} morphology={morphology} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} />
-            </tr>)}
+            {rows.map((row, index) => <Fragment key={row.id}>
+              <tr><AdjectiveRowCells row={row} index={index} morphology={morphology} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} onLookUp={(word) => dictionary.lookUp(row.id, word)} /></tr>
+              <RowDictionaryNote dictionary={dictionary} rowId={row.id} english={row.english} columns={8} />
+            </Fragment>)}
           </tbody>
         </table>
       </div>
@@ -311,6 +331,11 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
   const rows = draft.rows;
 
   useEffect(() => { writeBatchDraft("adverb", draft); }, [draft]);
+
+  const dictionary = useDictionaryRows("adverb", {}, rows, (id, change) => setDraft((currentDraft) => ({
+    ...currentDraft,
+    rows: withSpareRows(currentDraft.rows.map((row) => row.id === id ? change(row) : row), adverbRowUsed, emptyAdverbBatchRow),
+  })));
 
   function updateRow(id: string, field: keyof AdverbBatchRow, value: string) {
     setDraft((currentDraft) => {
@@ -339,9 +364,12 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
     <SetField knownSets={knownSets} value={draft.setName} onChange={(setName) => setDraft((currentDraft) => ({ ...currentDraft, setName }))} />
     <TagsField value={draft.tags} onChange={(tags) => setDraft((currentDraft) => ({ ...currentDraft, tags }))} />
     </div>
-    <p className="batch-help">One invariant adverb per row. A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
+    <p className="batch-help">One invariant adverb per row.{dictionary.enabled ? " Type the adverb and move on: the dictionary fills in the English." : ""} A fresh row appears automatically when you begin the last one. Progress saves automatically on this device.</p>
     <div className="batch-table-wrap"><table className="batch-table adverb-batch-table"><thead><tr><th>English</th><th>Italian adverb</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
-      {rows.map((row, index) => <tr key={row.id}><AdverbRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} /></tr>)}
+      {rows.map((row, index) => <Fragment key={row.id}>
+        <tr><AdverbRowCells row={row} index={index} autoFocus={index === 0} onChange={(field, value) => updateRow(row.id, field, value)} onRemove={() => removeRow(row.id)} onLookUp={(word) => dictionary.lookUp(row.id, word)} /></tr>
+        <RowDictionaryNote dictionary={dictionary} rowId={row.id} english={row.english} columns={3} />
+      </Fragment>)}
     </tbody></table></div>
     <BatchFooter error={localError || error} saving={saving} label="Add adverbs" onCancel={onCancel} />
   </form>;

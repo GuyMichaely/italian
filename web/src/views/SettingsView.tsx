@@ -5,6 +5,22 @@ import { AnswerKeywordSettings } from "../components/AnswerKeywordSettings";
 import { DeclensionDrillSettings } from "../components/DeclensionDrillSettings";
 import { StorageSettingsPanel } from "../components/StorageSettingsPanel";
 import type { StudyPreferences } from "../study/preferences";
+import { useDictionaryAutofill } from "../lexicon/useDictionary";
+
+function DictionarySettings() {
+  const [autofill, setAutofill] = useDictionaryAutofill();
+  return <section className="settings-section" aria-labelledby="dictionary-heading">
+    <div className="settings-section-heading">
+      <h2 id="dictionary-heading">Dictionary</h2>
+      <p>When you type an Italian word in Add words or a new row of the Words grid, the app can look it up and fill in its English, gender, and forms. Each lookup downloads a few kilobytes of the dictionary.</p>
+    </div>
+    <label className="check-option">
+      <input type="checkbox" checked={autofill} onChange={(event) => setAutofill(event.target.checked)} />
+      <span><strong>Fill in words from the dictionary</strong><small>Rows where you’ve typed the other fields are left alone. This setting is kept on this device.</small></span>
+    </label>
+    <p className="settings-credit">Dictionary data from <a href="https://en.wiktionary.org/" target="_blank" rel="noreferrer">Wiktionary</a>, available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>.</p>
+  </section>;
+}
 
 export function SettingsView({ storageProps, morphology, adjectiveMorphology, preferences, onPreferences }: {
   storageProps: ComponentProps<typeof StorageSettingsPanel>;
@@ -16,6 +32,7 @@ export function SettingsView({ storageProps, morphology, adjectiveMorphology, pr
   return <section className="settings-view">
     <header className="page-header"><div><h1>Settings</h1></div></header>
     <StorageSettingsPanel {...storageProps} />
+    <DictionarySettings />
     <section className="settings-section" aria-labelledby="keywords-heading">
       <div className="settings-section-heading">
         <h2 id="keywords-heading">Answer keywords</h2>
