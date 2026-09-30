@@ -266,7 +266,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .you-typed, .expected { display: grid; gap: 8px; padding: 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
 .you-typed code { font-size: 22px; overflow-wrap: anywhere; }
 .result-correct .you-typed code { color: var(--right); }
-.result-wrong .you-typed code { color: var(--wrong); text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: rgba(239,112,112,.5); }
+.result-wrong .you-typed code { color: var(--wrong); }
 .expected .answer-block { justify-items: start; text-align: left; }
 .expected .form-list { justify-content: flex-start; }
 .expected .italian-word { font-size: 30px; }
