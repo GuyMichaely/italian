@@ -48,6 +48,8 @@ if (args.includes("--tests")) {
     manifest.name = `${manifest.name} (dev)`;
     manifest.host_permissions = [devMatch, "http://127.0.0.1/*"];
     manifest.content_scripts[0].matches = [devMatch];
+    // An app tab without the bridge, as one opened before an update is (scripts/e2e.mjs).
+    manifest.content_scripts[0].exclude_globs = ["*no-bridge*"];
     delete manifest.update_url;
   }
   writeFileSync(path.join(outdir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

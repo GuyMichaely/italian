@@ -5,7 +5,7 @@ import type { ToastAction, ToastMessage, ToastState } from "./messages";
 
 declare global {
   interface Window {
-    italianToastInstalled?: boolean;
+    italianToastAlive?: () => boolean;
   }
 }
 
@@ -36,8 +36,10 @@ const styles = `
 `;
 
 (() => {
-  if (window.italianToastInstalled) return;
-  window.italianToastInstalled = true;
+  // A toast left from an older version of the extension can't reach it any more; replace it.
+  if (window.italianToastAlive?.()) return;
+  window.italianToastAlive = () => Boolean(chrome.runtime?.id);
+  document.getElementById("italian-extension-toast")?.remove();
 
   const host = document.createElement("div");
   host.id = "italian-extension-toast";

@@ -71,25 +71,46 @@ function deliver() {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** An app tab to deliver to: one that's open, or a new one in the background. */
-async function appTab(): Promise<{ tabId: number; opened: boolean }> {
-  const tabs = await chrome.tabs.query({ url: appMatch });
-  const open = tabs.find((tab) => tab.id !== undefined && !tab.discarded);
-  if (open?.id !== undefined) return { tabId: open.id, opened: false };
-  const created = await chrome.tabs.create({ url: appUrl, active: false });
-  return { tabId: created.id!, opened: true };
+/** Rejects if the promise takes longer than `ms`, so one tab that never answers can't hold up every later delivery. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("The app took too long to answer.")), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
 }
 
-async function sendToApp(tabId: number, entries: ExtensionWordEntry[]): Promise<ExtensionImportResult> {
-  const deadline = Date.now() + 30_000;
+/** An open app tab Chrome hasn't unloaded, if there is one. */
+async function openAppTab(): Promise<number | undefined> {
+  const tabs = await chrome.tabs.query({ url: appMatch });
+  return tabs.find((tab) => tab.id !== undefined && !tab.discarded && tab.status === "complete")?.id;
+}
+
+/**
+ * Hands words to the bridge in an app tab. A tab opened before the extension was installed or
+ * updated has no working bridge, so one is injected when the page is loaded but doesn't answer.
+ */
+async function sendToApp(tabId: number, entries: ExtensionWordEntry[], waitMs: number): Promise<ExtensionImportResult> {
+  const deadline = Date.now() + waitMs;
+  let injected = false;
   for (;;) {
     try {
-      const result = await chrome.tabs.sendMessage(tabId, { type: "italian-deliver", entries } satisfies DeliverMessage);
+      // The bridge itself gives up after 20 seconds of the app not answering.
+      const result = await withTimeout(chrome.tabs.sendMessage(tabId, { type: "italian-deliver", entries } satisfies DeliverMessage), 25_000);
       if (result) return result as ExtensionImportResult;
-    } catch {
-      // The page (or its bridge) hasn't loaded yet.
+    } catch (error) {
+      if (error instanceof Error && error.message === "The app took too long to answer.") throw error;
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (!tab) throw new Error("The Italian tab was closed.");
+      if (!injected && tab.status === "complete") {
+        injected = true;
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["bridge.js"] }).catch(() => undefined);
+        continue;
+      }
     }
-    if (Date.now() > deadline) throw new Error("Couldn't reach the Italian app. Open it and press Save now.");
+    if (Date.now() > deadline) throw new Error("Couldn't reach the Italian app.");
     await sleep(500);
   }
 }
@@ -97,18 +118,34 @@ async function sendToApp(tabId: number, entries: ExtensionWordEntry[]): Promise<
 async function deliverPending() {
   const pending = (await readQueue()).words.filter((word) => word.status === "pending");
   if (!pending.length) return;
-  const { tabId, opened } = await appTab();
-  try {
-    const result = await sendToApp(tabId, pending.map(toEntry));
-    await updateQueue((state) => withDeliveryResult(state, pending, result, Date.now()));
-  } catch (error) {
-    await updateQueue((state) => ({ ...state, lastError: error instanceof Error ? error.message : String(error) }));
-  } finally {
-    // Close a tab opened only to deliver, unless the learner switched to it.
-    if (opened) {
-      const tab = await chrome.tabs.get(tabId).catch(() => null);
-      if (tab && !tab.active) await chrome.tabs.remove(tabId).catch(() => undefined);
+  const entries = pending.map(toEntry);
+  const record = (result: ExtensionImportResult) => updateQueue((state) => withDeliveryResult(state, pending, result, Date.now()));
+
+  // First an open app tab. It may be frozen in the background or running an older copy of the
+  // app, so if it doesn't take the words, a fresh tab gets them instead.
+  const existing = await openAppTab();
+  if (existing !== undefined) {
+    try {
+      const result = await sendToApp(existing, entries, 5_000);
+      if (result.ok) {
+        await record(result);
+        return;
+      }
+    } catch {
+      // Fall through to a fresh tab.
     }
+  }
+
+  const created = await chrome.tabs.create({ url: appUrl, active: false });
+  const tabId = created.id!;
+  try {
+    await record(await sendToApp(tabId, entries, 30_000));
+  } catch (error) {
+    await updateQueue((state) => ({ ...state, lastError: `${error instanceof Error ? error.message : String(error)} Open Italian and press Save now.` }));
+  } finally {
+    // Close the tab opened only to deliver, unless the learner switched to it.
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (tab && !tab.active) await chrome.tabs.remove(tabId).catch(() => undefined);
   }
 }
 

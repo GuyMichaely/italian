@@ -44,12 +44,25 @@ function importThroughApp(entries: ExtensionWordEntry[]): Promise<ExtensionImpor
   });
 }
 
-chrome.runtime.onMessage.addListener((message: DeliverMessage, _sender, sendResponse) => {
-  if (message?.type !== "italian-deliver") return;
-  void importThroughApp(message.entries).then(sendResponse);
-  return true;
-});
+declare global {
+  interface Window {
+    italianBridgeAlive?: () => boolean;
+  }
+}
 
-void chrome.runtime.sendMessage({ type: "italian-bridge-ready" } satisfies BridgeReady).catch(() => {
-  // The background may be restarting; it delivers on its own schedule too.
-});
+// The background injects the bridge into app tabs opened before the extension was installed or
+// updated. A bridge left from an older version of the extension can no longer reach it, so only
+// a working one keeps a second from starting.
+if (!window.italianBridgeAlive?.()) {
+  window.italianBridgeAlive = () => Boolean(chrome.runtime?.id);
+
+  chrome.runtime.onMessage.addListener((message: DeliverMessage, _sender, sendResponse) => {
+    if (message?.type !== "italian-deliver") return;
+    void importThroughApp(message.entries).then(sendResponse);
+    return true;
+  });
+
+  void chrome.runtime.sendMessage({ type: "italian-bridge-ready" } satisfies BridgeReady).catch(() => {
+    // The background may be restarting; it delivers on its own schedule too.
+  });
+}
