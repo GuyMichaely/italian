@@ -1,9 +1,9 @@
 import type { LexiconReading } from "../../web/src/lexicon/lookup";
 import { describeSuggestion, shortSuggestionLabel, type LexiconSuggestion } from "../../web/src/lexicon/suggestions";
-import type { ExtensionImportResult, ExtensionWordEntry } from "../../web/src/extensionProtocol";
 import { suggestionsOf } from "./dictionary";
+import type { WordEntry, WriteResult } from "./words";
 
-/** A word waiting to be saved in the app: every reading of it, and which suggestion was picked. */
+/** A word waiting to be saved to the learner's words: every reading of it, and which suggestion was picked. */
 export type QueuedWord = {
   id: string;
   word: string;
@@ -14,7 +14,7 @@ export type QueuedWord = {
   context?: string;
   url?: string;
   addedAt: number;
-  /** "failed" words stay until removed, with why the app didn't take them. */
+  /** "failed" words stay until removed, with why they couldn't be added. */
   status: "pending" | "failed";
   reason?: string;
 };
@@ -72,18 +72,18 @@ export function wordDescription(word: QueuedWord) {
   return suggestion ? describeSuggestion(suggestion) : word.word;
 }
 
-export function toEntry(word: QueuedWord): ExtensionWordEntry {
+export function toEntry(word: QueuedWord): WordEntry {
   return { id: word.id, word: word.word, reading: word.readings[word.reading]!, choice: word.choice, english: word.english, context: word.context, url: word.url };
 }
 
 /**
- * The queue after the app answered a delivery: added words and duplicates leave it (and show
- * under Recent); words the app couldn't make into cards stay, marked failed, with the reason.
+ * The queue after a delivery: added words and duplicates leave it (and show under Recent); words
+ * that couldn't be made into cards stay, marked failed, with the reason.
  */
-export function withDeliveryResult(state: QueueState, delivered: QueuedWord[], result: ExtensionImportResult, now: number): QueueState {
-  if (!result.ok) return { ...state, lastError: result.error || "The app didn't take the words." };
-  const added = new Set(result.added ?? delivered.map((word) => word.id));
-  const skipped = new Map((result.skipped ?? []).map((item) => [item.id, item.reason]));
+export function withDeliveryResult(state: QueueState, delivered: QueuedWord[], result: WriteResult, now: number): QueueState {
+  if (!result.ok) return { ...state, lastError: result.error };
+  const added = new Set(result.added);
+  const skipped = new Map(result.skipped.map((item) => [item.id, item.reason]));
   const recent: RecentWord[] = [];
   const words: QueuedWord[] = [];
   for (const word of state.words) {
@@ -95,7 +95,7 @@ export function withDeliveryResult(state: QueueState, delivered: QueuedWord[], r
     } else if (skipped.has(word.id) && /already/i.test(skipped.get(word.id)!)) {
       recent.push({ id: word.id, label: wordLabel(word), outcome: "skipped", reason: skipped.get(word.id), at: now });
     } else {
-      words.push({ ...word, status: "failed", reason: skipped.get(word.id) ?? "The app didn't say what happened to it." });
+      words.push({ ...word, status: "failed", reason: skipped.get(word.id) ?? "It wasn't saved." });
     }
   }
   return { words, recent: [...recent, ...state.recent].slice(0, recentLimit), lastError: undefined };

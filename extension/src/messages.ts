@@ -1,5 +1,5 @@
 import type { LexiconReading } from "../../web/src/lexicon/lookup";
-import type { ExtensionWordEntry } from "../../web/src/extensionProtocol";
+import type { WriteResult } from "./words";
 
 /** What the toast on the page shows after a word is added from the context menu. */
 export type ToastState = {
@@ -31,8 +31,6 @@ export type PopupRequest =
   | { type: "queue-clear-recent" }
   | { type: "deliver-now" };
 
-/** From the background to the bridge on an app page. */
-export type DeliverMessage = { type: "italian-deliver"; entries: ExtensionWordEntry[] };
-
-/** From the bridge when an app page has loaded. */
-export type BridgeReady = { type: "italian-bridge-ready" };
+/** From the writer in the hidden frame (offscreen.html): asking for the words to save, then saying what happened. */
+export type WriterReady = { type: "italian-writer-ready" };
+export type WriterResult = { type: "italian-writer-result"; result: WriteResult };

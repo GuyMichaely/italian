@@ -45,6 +45,7 @@ import {
 } from "./CardEditorFields";
 import { RowDictionaryNote } from "./DictionaryNoteRow";
 import { useDictionaryRows } from "../lexicon/useDictionary";
+import { newCardId } from "../cards/ids";
 import { Icon } from "./Icons";
 import { Sheet } from "./Sheet";
 
@@ -101,7 +102,7 @@ export function BatchNouns({
     }
     let cards: Flashcard[];
     try {
-      cards = used.map((row, index) => nounCardFromDraft(row, { id: Date.now() + index, setName, tags }, morphology));
+      cards = used.map((row) => nounCardFromDraft(row, { id: newCardId(), setName, tags }, morphology));
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "The noun rows do not match the configured morphology.");
       return;
@@ -197,9 +198,9 @@ export function BatchVerbs({
       return;
     }
     setLocalError("");
-    await onSave(used.map((row, index) => verbCard({
+    await onSave(used.map((row) => verbCard({
       ...row,
-      id: Date.now() + index,
+      id: newCardId(),
       english: row.english.trim(),
       infinitive: row.infinitive.trim(),
       io: row.io.trim(),
@@ -290,7 +291,7 @@ export function BatchAdjectives({
     }
     let cards: Flashcard[];
     try {
-      cards = used.map((row, index) => adjectiveCardFromDraft(row, { id: Date.now() + index, setName, tags }, morphology));
+      cards = used.map((row) => adjectiveCardFromDraft(row, { id: newCardId(), setName, tags }, morphology));
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "The adjective rows do not match the adjective rules.");
       return;
@@ -356,7 +357,7 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
     setLocalError("");
     const setName = draft.setName.trim() || null;
     const tags = parseTags(draft.tags);
-    await onSave(used.map((row, index) => adverbCard({ id: Date.now() + index, english: row.english.trim(), form: row.form.trim(), setName, tags })));
+    await onSave(used.map((row) => adverbCard({ id: newCardId(), english: row.english.trim(), form: row.form.trim(), setName, tags })));
   }
 
   return <form onSubmit={submit} className="batch-form">

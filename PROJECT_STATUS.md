@@ -72,17 +72,19 @@ The former inference sets, answer-syntax rules, and `lo` full-declension exclusi
 
 See `docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
-## External card import contract
+## Stored card contract
 
 The app does not contain a compatibility adapter for retired card formats.
 
-The external import bridge accepts only cards that already obey the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
+Stored and imported inventories must use the current canonical `Flashcard` schema. Unknown card types are rejected. Nouns must contain current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details, must not contain top-level `italian`, and must agree with active noun morphology. Retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, and stored article-detail payloads are rejected rather than converted.
 
-After validation, imported cards use the same `addBatch` and `CardStorage` persistence path as ordinary card creation.
+## Changes made elsewhere
+
+The browser's stored inventory can change while the app is open, from another window or from the extension, which writes it directly. The app knows nothing about the extension: each save merges three ways (the inventory as the window last read it, the window's version, and what is stored now), card by card. Compatible changes are all kept; a card changed differently in two places, or changed in one and deleted in the other, stops the save and shows a banner offering Reload. New cards get random ids so cards added in two places can't collide.
 
 ## Automated validation
 
-`npm test` runs deterministic tests against the real noun answer checking and preview, study item building, study preferences, and the external import contract. Noun coverage includes rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word, article, and combined answer checking, markers, article profiles, prompt gender hints, and strict rejection of retired schemas.
+`npm test` runs deterministic tests against the real noun answer checking and preview, study item building, study preferences, the stored card contract, and merging saves. Noun coverage includes rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word, article, and combined answer checking, markers, article profiles, prompt gender hints, and strict rejection of retired schemas.
 
 Test files run serially because they share one temporary CommonJS output directory.
 

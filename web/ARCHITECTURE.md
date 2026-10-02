@@ -20,13 +20,12 @@ The main source boundaries are:
 
 ```text
 src/
-├── App.tsx                         application state, inventory mutations, study session, external import
+├── App.tsx                         application state, inventory saves, study session
 ├── app/useHashRoute.ts             hash routes: #/study, #/words, #/grammar, #/settings
 ├── cardTypes.ts                   shared card-type labels and ordering
-├── extensionProtocol.ts           messages between the extension's bridge and the app (shared with extension/)
-├── extensionImport.ts             extension imports: dictionary entries or canonical cards → cards, skipping duplicates
 ├── cards/
 │   ├── types.ts                   discriminated Flashcard union and typed detail schemas
+│   ├── ids.ts                     random ids for new cards
 │   ├── editorModel.ts             batch-entry rows, drafts, and card construction
 │   ├── batchRows.ts               spare-row, suggestion, and "is this row used" helpers shared by Add words and the grid
 │   ├── nounDraft.ts               the one noun-entry model: surface forms → rule, base, articles
@@ -40,7 +39,7 @@ src/
 │   ├── suggestions.ts             readings → noun/verb/adjective/adverb fields, using the learner's rules
 │   ├── rows.ts                    filling an entry row from a suggestion without overwriting typed fields
 │   └── useDictionary.ts           the per-device autofill setting and row lookups for Add words and the grid
-├── storage/                       inventory persistence, sync, import/export (cards, morphology, study preferences)
+├── storage/                       inventory persistence, merging saves, sync, import/export (cards, morphology, study preferences)
 ├── study/
 │   ├── setup.ts                   study setup (mode, scope, prompts), persistence
 │   ├── order.ts                   study-item ordering/shuffling
@@ -93,13 +92,20 @@ See `../docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
 ## Storage and sync
 
-Cards and noun morphology form one logical `InventoryState`. `App` loads them with one `readInventory()` call. Whole-inventory operations use `replaceInventory()` so card definitions and morphology are validated and saved together.
+Cards and noun morphology form one logical `InventoryState`. `App` loads them with one `readInventory()` call, and every change (adding, editing or deleting words, Grammar, study preferences) is saved as a whole inventory with `saveInventory()`, so card definitions and morphology are validated and saved together. `replaceInventory()` writes over what is stored; only importing a backup and switching storage use it.
 
 Local snapshots contain `cards`, `nounMorphology`, `studyPreferences`, and an internal `updatedAt`. Remote synchronized snapshots contain the same four values. `studyPreferences` holds the answer keywords, drilled declension rules, and nouns that always need both forms; references to deleted nouns or rules are pruned on every save.
 
 Inventory validation checks relationships between cards and morphology. Every noun must reference an existing rule, and enabled article capabilities must have the necessary noun forms. There is no stored noun surface form to cross-check because morphology is the source of truth.
 
-Bulk inventory edits and mass tag changes are committed as one inventory replacement instead of parallel card writes. Single-card creation, editing, and deletion continue to use narrower card operations that preserve active morphology in the same snapshot.
+The stored inventory can change while a window is open: another window of the app saves, or something else on the site writes it (the extension adds words this way). So `BrowserStorage` remembers the inventory as this window last read or wrote it, and `saveInventory()` merges three ways (`storage/merge.ts`): that base, this window's inventory, and what is stored now.
+
+- Cards are matched by id. A card added on either side is kept. A card changed or deleted on one side only takes that side's version; the same change on both sides is fine.
+- A card changed differently on both sides, or deleted on one and changed on the other, is a conflict. So are the noun rules, adjective rules, or study preferences changed differently on both sides (each merges as one piece).
+- The merged inventory is validated as usual: every card fits the rules and no word appears twice. A failure is a conflict too.
+- A merge without conflicts is saved and the window shows the merged inventory. On a conflict nothing is written, the window's change is undone, and a banner names the words and offers Reload. Add words drafts are kept on the device, so they survive the reload.
+
+New cards get random ids (`cards/ids.ts`) when they are made, so cards added in two places at once can't share an id. Older cards keep their small sequential ids.
 
 Both local and remote sides carry an inventory-level `updatedAt` timestamp. When they differ, the later timestamp wins. Local changes automatically push remotely when sync is configured. The user can choose whether a synchronized local copy persists between browser sessions and whether startup mismatches reconcile automatically or wait for an explicit Sync now action.
 
@@ -113,13 +119,9 @@ Changes to non-noun cards do not invalidate the morphology draft.
 
 Noun-to-declension assignment is not duplicated in this panel. Nouns are entered as surface forms (singular, plural, gender, article availability) through `cards/nounDraft.ts`, which infers or validates the declension rule and base.
 
-## External card import contract
+## Stored card contract
 
-The import bridge is intentionally thin. It accepts an envelope containing cards that already obey the app's current canonical `Flashcard` schema.
-
-The app normalizes those cards with the same `cardCodec` used at storage boundaries. Unknown card types are rejected. Nouns must contain exactly the current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details and must omit top-level `italian`. The earlier rule/base noun shape, retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, stored noun Italian, and stored article-detail representations are rejected rather than translated.
-
-Imported noun cards are checked against active `NounMorphology` before persistence. Their referenced rule must exist and every enabled article capability must have the required noun form. After validation, imported cards use the same `addBatch` and `CardStorage` path as ordinary card creation.
+Everything read from storage or an imported backup is normalized with `cardCodec`. Unknown card types are rejected. Nouns must contain exactly the current `declension`, `gender`, `genderDiffersWithPlurality`, structured `articleProfile`, and `articleGroups` details and must omit top-level `italian`. The earlier rule/base noun shape, retired `ruleId`, noun `numberMode`, `articleMode`, singular/plural, stored noun Italian, and stored article-detail representations are rejected rather than translated. Noun cards must also fit the active `NounMorphology`: their rule must exist and every enabled article capability must have the required noun form.
 
 This boundary is not a migration layer.
 
@@ -127,7 +129,7 @@ This boundary is not a migration layer.
 
 `npm test` compiles parser, preview, synchronization, and import-validation modules into temporary CommonJS test output and runs deterministic Node tests against the real source modules. Test files run serially so their shared temporary CommonJS package marker cannot race.
 
-The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (optional articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article and combined checking in any order, study item modes, prompt gender hints, and study-preference validation and pruning. The sync suite covers automatic newer-remote reconciliation, newer-local push, ask-first reconciliation, non-persistent local mode, and offline fallback. Import tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected.
+The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (optional articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article and combined checking in any order, study item modes, prompt gender hints, and study-preference validation and pruning. The sync suite covers automatic newer-remote reconciliation, newer-local push, ask-first reconciliation, non-persistent local mode, and offline fallback. Storage tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected, and cover the three-way merge and saving over changes made in another window.
 
 These synchronization tests verify decision logic without mutating a deployed inventory. A live browser-to-API smoke test remains the environment-level check for endpoint configuration, CORS/networking, and deployed persistence.
 

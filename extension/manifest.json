@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Italian",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Add Italian words you meet on the web to your Italian flashcards, filled in from Wiktionary.",
   "update_url": "https://github.com/GuyMichaely/italian/releases/latest/download/updates.xml",
-  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "alarms"],
+  "permissions": ["storage", "contextMenus", "scripting", "activeTab", "alarms", "offscreen"],
   "host_permissions": ["https://guymichaely.com/italian/*"],
   "background": {
     "service_worker": "background.js",
@@ -13,12 +13,5 @@
   "action": {
     "default_title": "Italian",
     "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": ["https://guymichaely.com/italian/*"],
-      "js": ["bridge.js"],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }

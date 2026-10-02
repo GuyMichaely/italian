@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createCardStorage,
   readStorageEndpoint,
@@ -13,6 +13,7 @@ import {
 } from "./storage";
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
+import { InventoryConflictError } from "./storage/merge";
 import {
   cloneNounMorphology,
   defaultNounMorphology,
@@ -26,13 +27,6 @@ import { AppShell } from "./components/AppShell";
 import type { SaveState } from "./components/SaveIndicator";
 import { AddWordsSheet, WordDrawer, localDateStamp } from "./components/CardEditors";
 import {
-  extensionCandidatesToCards,
-  extensionEntriesToCards,
-  extensionImportResultType,
-  parseExtensionImportRequest,
-  type ExtensionImportResult,
-} from "./extensionImport";
-import {
   buildStudyItems,
   shuffled,
   withEnglishPromptFirst,
@@ -45,7 +39,7 @@ import {
   writeStudySetup,
   type StudySetup,
 } from "./study/setup";
-import { cloneStudyPreferences, defaultStudyPreferences, prunedStudyPreferences, type StudyPreferences } from "./study/preferences";
+import { cloneStudyPreferences, defaultStudyPreferences, type StudyPreferences } from "./study/preferences";
 import type { AnswerCheck } from "./study/nounAnswers";
 import { StudyView, type StudyScopeOption } from "./views/StudyView";
 import { appendMistakeReviewSet, availableReviewItems, type MistakeReviewSet } from "./study/reviews";
@@ -110,7 +104,7 @@ export default function Home() {
   const [activeReviewSetId, setActiveReviewSetId] = useState<number | null>(null);
   const [mistakeTagName, setMistakeTagName] = useState("");
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
-  const extensionImportRequests = useRef(new Map<string, Promise<ExtensionImportResult>>());
+  const [conflict, setConflict] = useState("");
 
   const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
@@ -168,69 +162,6 @@ export default function Home() {
       .finally(() => { if (active) setLoadingCards(false); });
     return () => { active = false; };
   }, [storage]);
-
-  useEffect(() => {
-    function reply(result: ExtensionImportResult) {
-      window.postMessage(result, window.location.origin);
-    }
-
-    function handleExtensionImport(event: MessageEvent) {
-      if (event.source !== window || event.origin !== window.location.origin) return;
-      let request;
-      try {
-        request = parseExtensionImportRequest(event.data);
-      } catch (error) {
-        const requestId = typeof event.data?.requestId === "string" ? event.data.requestId.trim() : "";
-        if (!requestId) return;
-        reply({
-          source: "italian-web",
-          type: extensionImportResultType,
-          requestId,
-          ok: false,
-          error: error instanceof Error ? error.message : "Extension import request is invalid.",
-        });
-        return;
-      }
-      // Until the words are loaded there's nothing to check duplicates against; the bridge retries.
-      if (!request || loadingCards) return;
-
-      let work = extensionImportRequests.current.get(request.requestId);
-      if (!work) {
-        work = (async (): Promise<ExtensionImportResult> => {
-          try {
-            const imported = request.entries
-              ? extensionEntriesToCards(request.entries, cards, nounMorphology, adjectiveMorphology)
-              : { cards: extensionCandidatesToCards(request.candidates ?? [], nounMorphology, adjectiveMorphology), added: undefined, skipped: undefined };
-            // Words arrive while the learner may be studying, so stay where they are.
-            if (imported.cards.length) await addBatch(imported.cards, { navigateToWords: false });
-            return {
-              source: "italian-web",
-              type: extensionImportResultType,
-              requestId: request.requestId,
-              ok: true,
-              importedCount: imported.cards.length,
-              storage: storageEndpoint ? "sync" : "browser",
-              added: imported.added,
-              skipped: imported.skipped,
-            };
-          } catch (error) {
-            return {
-              source: "italian-web",
-              type: extensionImportResultType,
-              requestId: request.requestId,
-              ok: false,
-              error: error instanceof Error ? error.message : "The staged candidates could not be imported.",
-            };
-          }
-        })();
-        extensionImportRequests.current.set(request.requestId, work);
-      }
-      void work.then(reply);
-    }
-
-    window.addEventListener("message", handleExtensionImport);
-    return () => window.removeEventListener("message", handleExtensionImport);
-  });
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -364,30 +295,44 @@ export default function Home() {
     resetStudyRound();
   }
 
-  /** Commits a complete card list through one inventory replacement, restoring the previous state on failure. */
-  async function commitCards(nextCards: Flashcard[], failureMessage: string, nextPreferences = studyPreferences) {
-    const previousCards = cards;
-    const previousPreferences = studyPreferences;
-    setCards(nextCards);
-    setStudyPreferences(nextPreferences);
-    removeUnavailableInventoryTags(nextCards);
+  function showInventory(state: InventoryState) {
+    setCards(state.cards);
+    setNounMorphology(state.nounMorphology);
+    setAdjectiveMorphology(state.adjectiveMorphology);
+    setStudyPreferences(state.studyPreferences);
+    removeUnavailableInventoryTags(state.cards);
+  }
+
+  /**
+   * Shows `next` straight away and saves it, merged with anything changed in another window since
+   * this one last read or saved. If the save fails the previous inventory comes back; if it
+   * conflicts with the other changes, a banner offers to reload. Throws the save's error.
+   */
+  async function saveInventory(next: InventoryState, failureMessage: string) {
+    const previous: InventoryState = { cards, nounMorphology, adjectiveMorphology, studyPreferences };
+    showInventory(next);
     setSyncWarning("");
     setSaveState("saving");
     try {
-      const saved = await storage.replaceInventory({ cards: nextCards, nounMorphology, adjectiveMorphology, studyPreferences: nextPreferences });
-      setCards(saved.cards);
-      setNounMorphology(saved.nounMorphology);
-      setAdjectiveMorphology(saved.adjectiveMorphology);
-      setStudyPreferences(saved.studyPreferences);
-      removeUnavailableInventoryTags(saved.cards);
+      showInventory(await storage.saveInventory(next));
+      // What was saved includes the other window's changes, so nothing is left to reload for.
+      setConflict("");
       setSaveState("saved");
+    } catch (error) {
+      showInventory(previous);
+      setSaveState("failed");
+      if (error instanceof InventoryConflictError) setConflict(error.message);
+      else setSyncWarning(failureMessage);
+      throw error;
+    }
+  }
+
+  /** Saves a complete card list (and optionally new study preferences); false when it couldn't be saved. */
+  async function commitCards(nextCards: Flashcard[], failureMessage: string, nextPreferences = studyPreferences) {
+    try {
+      await saveInventory({ cards: nextCards, nounMorphology, adjectiveMorphology, studyPreferences: nextPreferences }, failureMessage);
       return true;
     } catch {
-      setCards(previousCards);
-      setStudyPreferences(previousPreferences);
-      removeUnavailableInventoryTags(previousCards);
-      setSaveState("failed");
-      setSyncWarning(failureMessage);
       return false;
     }
   }
@@ -455,7 +400,7 @@ export default function Home() {
     return saved;
   }
 
-  async function addBatch(newCards: Flashcard[], { navigateToWords = true }: { navigateToWords?: boolean } = {}) {
+  async function addBatch(newCards: Flashcard[]) {
     const existingKeys = new Set(cards.map(cardDuplicateKey));
     const newKeys = new Set<string>();
     for (const newCard of newCards) {
@@ -465,104 +410,33 @@ export default function Home() {
       }
       newKeys.add(key);
     }
-
-    const temporaryCards = newCards.map((card, index) => ({ ...card, id: -(Date.now() + index) }));
-    const temporaryIds = new Set(temporaryCards.map((card) => card.id));
-    setCards((items) => [...temporaryCards, ...items]);
-    setSyncWarning("");
-    setSaveState("saving");
-    if (navigateToWords) navigate("words");
-    try {
-      const savedCards = await storage.createCards(newCards);
-      setCards((items) => [...savedCards, ...items.filter((item) => !temporaryIds.has(item.id))]);
-      setSaveState("saved");
-    } catch (error) {
-      setCards((items) => items.filter((item) => !temporaryIds.has(item.id)));
-      setSaveState("failed");
-      setSyncWarning("That batch could not be saved and was removed. Please try again.");
-      throw error;
-    }
+    navigate("words");
+    await saveInventory(
+      { cards: [...newCards, ...cards], nounMorphology, adjectiveMorphology, studyPreferences },
+      "That batch could not be saved and was removed. Please try again.",
+    );
   }
 
   function removeCard(id: number) {
-    const removed = cards.find((item) => item.id === id);
-    if (!removed) return;
-    const remainingCards = cards.filter((item) => item.id !== id);
-    setCards(remainingCards);
-    setStudyPreferences((preferences) => prunedStudyPreferences(preferences, remainingCards, nounMorphology, adjectiveMorphology));
-    removeUnavailableInventoryTags(remainingCards);
+    if (!cards.some((item) => item.id === id)) return;
     setCurrent(0);
-    setSaveState("saving");
-    void (async () => {
-      try {
-        await storage.deleteCard(id);
-        setSyncWarning("");
-        setSaveState("saved");
-      } catch {
-        setCards((items) => items.some((item) => item.id === id) ? items : [removed, ...items]);
-        setSaveState("failed");
-        setSyncWarning("That word could not be removed. It has been restored.");
-      }
-    })();
+    void commitCards(cards.filter((item) => item.id !== id), "That word could not be removed. It has been restored.");
   }
 
   function updateCard(updated: Flashcard) {
-    const original = cards.find((item) => item.id === updated.id);
-    if (!original) return;
-    const updatedCards = cards.map((item) => item.id === updated.id ? updated : item);
-    setCards(updatedCards);
-    removeUnavailableInventoryTags(updatedCards);
-    setSyncWarning("");
-    setSaveState("saving");
-    void (async () => {
-      try {
-        const savedCard = await storage.updateCard(updated);
-        setCards((items) => items.map((item) => item.id === updated.id ? savedCard : item));
-        setSaveState("saved");
-      } catch {
-        setCards((items) => items.map((item) => item.id === updated.id ? original : item));
-        setSaveState("failed");
-        setSyncWarning("That edit could not be saved. The previous version has been restored.");
-      }
-    })();
+    if (!cards.some((item) => item.id === updated.id)) return;
+    void commitCards(cards.map((item) => item.id === updated.id ? updated : item), "That edit could not be saved. The previous version has been restored.");
   }
 
   async function replaceNounInventory(nextState: InventoryState) {
-    setSyncWarning("");
-    setSaveState("saving");
-    try {
-      const saved = await storage.replaceInventory(nextState);
-      setCards(saved.cards);
-      setNounMorphology(saved.nounMorphology);
-      setAdjectiveMorphology(saved.adjectiveMorphology);
-      setStudyPreferences(saved.studyPreferences);
-      removeUnavailableInventoryTags(saved.cards);
-      setCurrent(0);
-      setSessionComplete(false);
-      setSaveState("saved");
-    } catch (error) {
-      setSaveState("failed");
-      setSyncWarning("Grammar changes could not be saved. The current inventory was left unchanged.");
-      throw error;
-    }
+    await saveInventory(nextState, "Grammar changes could not be saved. The current inventory was left unchanged.");
+    setCurrent(0);
+    setSessionComplete(false);
   }
 
   /** Saves study preferences through the inventory, so they sync wherever the inventory does. */
   async function saveStudyPreferences(next: StudyPreferences) {
-    const previous = studyPreferences;
-    setStudyPreferences(next);
-    setSyncWarning("");
-    setSaveState("saving");
-    try {
-      const saved = await storage.replaceInventory({ cards, nounMorphology, adjectiveMorphology, studyPreferences: next });
-      setStudyPreferences(saved.studyPreferences);
-      setSaveState("saved");
-    } catch (error) {
-      setStudyPreferences(previous);
-      setSaveState("failed");
-      setSyncWarning("Study preferences could not be saved. The previous ones were restored.");
-      throw error;
-    }
+    await saveInventory({ cards, nounMorphology, adjectiveMorphology, studyPreferences: next }, "Study preferences could not be saved. The previous ones were restored.");
   }
 
   /** Saves a word from the drawer; a changed "always ask for every form" choice is saved with it. */
@@ -621,6 +495,10 @@ export default function Home() {
 
   return <>
     <AppShell route={route} syncing={Boolean(storageEndpoint)} syncLabel={storage.label} saveState={saveState} onAdd={() => setAdding(true)}>
+      {conflict && <div className="sync-warning" role="alert">
+        <p>{conflict}</p>
+        <button type="button" className="neutral-button" onClick={() => window.location.reload()}>Reload</button>
+      </div>}
       {route === "study" && <StudyView
         loading={loadingCards}
         cards={cards}

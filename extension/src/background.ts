@@ -1,6 +1,5 @@
-import type { ExtensionImportResult, ExtensionWordEntry } from "../../web/src/extensionProtocol";
 import { shortSuggestionLabel } from "../../web/src/lexicon/suggestions";
-import { appMatch, appUrl } from "./config";
+import { appMatch, quietPageUrl } from "./config";
 import { lookUpSelection } from "./dictionary";
 import {
   chosenSuggestion,
@@ -14,13 +13,14 @@ import {
   type QueuedWord,
   type QueueState,
 } from "./queue";
-import type { DeliverMessage, PopupRequest, ToastAction, ToastMessage, ToastState } from "./messages";
+import type { PopupRequest, ToastAction, ToastMessage, ToastState, WriterResult } from "./messages";
+import type { WordEntry, WriteResult } from "./words";
 
 declare const DEV_BUILD: boolean;
 
 const menuId = "add-to-italian";
 const queueKey = "queue";
-/** Words wait this long after the last change before going to the app, so Undo and switching stay local. */
+/** Words wait this long after the last change before they're saved, so Undo and switching stay local. */
 const deliveryDelayMs = 8_000;
 
 // ---- Queue storage. The background is the only writer; changes run one at a time. ----
@@ -49,7 +49,12 @@ async function showCount(state: QueueState) {
   await chrome.action.setBadgeBackgroundColor({ color: state.words.some((word) => word.status === "failed") ? "#ef7070" : "#8b9dff" });
 }
 
-// ---- Delivery to the app. ----
+// ---- Saving words. ----
+//
+// Words are saved straight into the inventory in the site's local storage, by a script run in a
+// page of the site: an Italian tab that's open; else a small page of the site in a frame of a
+// hidden extension page (offscreen.html); else that page opened in a background tab. The app
+// doesn't take part. An open app window merges these words in when it next saves.
 
 let deliveryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -69,49 +74,77 @@ function deliver() {
   return delivering;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Adds the words to the inventory through a page of the site that has loaded. */
+async function writeThrough(tabId: number, entries: WordEntry[]): Promise<WriteResult> {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["writer.js"] });
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (words: WordEntry[]) => window.italianWriteWords!(words),
+    args: [entries],
+  });
+  if (!injection?.result) throw new Error("The page didn't run the script that saves words.");
+  return injection.result as WriteResult;
+}
 
-/** Rejects if the promise takes longer than `ms`, so one tab that never answers can't hold up every later delivery. */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("The app took too long to answer.")), ms);
-    promise.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (error) => { clearTimeout(timer); reject(error); },
-    );
+/** An open app tab that's loaded and that Chrome hasn't unloaded or frozen, if there is one. */
+async function openAppTab(): Promise<number | undefined> {
+  const tabs = await chrome.tabs.query({ url: appMatch, status: "complete", discarded: false });
+  return tabs.find((tab) => tab.id !== undefined && !(tab as { frozen?: boolean }).frozen)?.id;
+}
+
+const pageLoadLimitMs = 30_000;
+
+function loaded(tabId: number) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => finish(new Error("The site didn't load.")), pageLoadLimitMs);
+    function finish(error?: Error) {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      if (error) reject(error);
+      else resolve();
+    }
+    function listener(id: number, change: { status?: string }) {
+      if (id === tabId && change.status === "complete") finish();
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+    void chrome.tabs.get(tabId).then((tab) => { if (tab.status === "complete") finish(); }, () => finish(new Error("The tab was closed.")));
   });
 }
 
-/** An open app tab Chrome hasn't unloaded, if there is one. */
-async function openAppTab(): Promise<number | undefined> {
-  const tabs = await chrome.tabs.query({ url: appMatch });
-  return tabs.find((tab) => tab.id !== undefined && !tab.discarded && tab.status === "complete")?.id;
+/** Opens a small static page of the site in the background, saves through it, and closes it. */
+async function writeThroughQuietPage(entries: WordEntry[]): Promise<WriteResult> {
+  const tab = await chrome.tabs.create({ url: quietPageUrl, active: false });
+  try {
+    await loaded(tab.id!);
+    return await writeThrough(tab.id!, entries);
+  } finally {
+    await chrome.tabs.remove(tab.id!).catch(() => undefined);
+  }
 }
 
-/**
- * Hands words to the bridge in an app tab. A tab opened before the extension was installed or
- * updated has no working bridge, so one is injected when the page is loaded but doesn't answer.
- */
-async function sendToApp(tabId: number, entries: ExtensionWordEntry[], waitMs: number): Promise<ExtensionImportResult> {
-  const deadline = Date.now() + waitMs;
-  let injected = false;
-  for (;;) {
-    try {
-      // The bridge itself gives up after 20 seconds of the app not answering.
-      const result = await withTimeout(chrome.tabs.sendMessage(tabId, { type: "italian-deliver", entries } satisfies DeliverMessage), 25_000);
-      if (result) return result as ExtensionImportResult;
-    } catch (error) {
-      if (error instanceof Error && error.message === "The app took too long to answer.") throw error;
-      const tab = await chrome.tabs.get(tabId).catch(() => null);
-      if (!tab) throw new Error("The Italian tab was closed.");
-      if (!injected && tab.status === "complete") {
-        injected = true;
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["bridge.js"] }).catch(() => undefined);
-        continue;
-      }
-    }
-    if (Date.now() > deadline) throw new Error("Couldn't reach the Italian app.");
-    await sleep(500);
+const writerScriptId = "italian-writer";
+let hiddenWrite: { entries: WordEntry[]; resolve: (result: WriteResult) => void } | null = null;
+
+/** Saves through the small page loaded in a frame of offscreen.html, where writer.js runs as a content script. */
+async function writeThroughHiddenPage(entries: WordEntry[]): Promise<WriteResult> {
+  const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [writerScriptId] });
+  if (!registered.length) {
+    await chrome.scripting.registerContentScripts([{ id: writerScriptId, matches: [quietPageUrl], js: ["writer.js"], allFrames: true, runAt: "document_end", persistAcrossSessions: false }]);
+  }
+  await chrome.offscreen.closeDocument().catch(() => undefined);
+  try {
+    return await new Promise<WriteResult>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("The site didn't load.")), pageLoadLimitMs);
+      hiddenWrite = { entries, resolve: (result) => { clearTimeout(timer); resolve(result); } };
+      chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: [chrome.offscreen.Reason.IFRAME_SCRIPTING],
+        justification: "Adds the words you pick to your Italian words, which the Italian site stores.",
+      }).catch((error) => { clearTimeout(timer); reject(error); });
+    });
+  } finally {
+    hiddenWrite = null;
+    await chrome.offscreen.closeDocument().catch(() => undefined);
   }
 }
 
@@ -119,34 +152,21 @@ async function deliverPending() {
   const pending = (await readQueue()).words.filter((word) => word.status === "pending");
   if (!pending.length) return;
   const entries = pending.map(toEntry);
-  const record = (result: ExtensionImportResult) => updateQueue((state) => withDeliveryResult(state, pending, result, Date.now()));
-
-  // First an open app tab. It may be frozen in the background or running an older copy of the
-  // app, so if it doesn't take the words, a fresh tab gets them instead.
-  const existing = await openAppTab();
-  if (existing !== undefined) {
-    try {
-      const result = await sendToApp(existing, entries, 5_000);
-      if (result.ok) {
-        await record(result);
-        return;
-      }
-    } catch {
-      // Fall through to a fresh tab.
-    }
-  }
-
-  const created = await chrome.tabs.create({ url: appUrl, active: false });
-  const tabId = created.id!;
+  let result: WriteResult;
   try {
-    await record(await sendToApp(tabId, entries, 30_000));
+    const appTab = await openAppTab();
+    const throughAppTab = appTab === undefined ? Promise.reject(new Error("No Italian tab is open.")) : writeThrough(appTab, entries);
+    // scripts/e2e.mjs turns the hidden page off to try the background tab.
+    const noHiddenPage = DEV_BUILD && (globalThis as { italianNoHiddenPage?: boolean }).italianNoHiddenPage;
+    result = await throughAppTab
+      .catch(() => noHiddenPage ? Promise.reject(new Error("Hidden page turned off.")) : writeThroughHiddenPage(entries))
+      .catch(() => writeThroughQuietPage(entries));
   } catch (error) {
-    await updateQueue((state) => ({ ...state, lastError: `${error instanceof Error ? error.message : String(error)} Open Italian and press Save now.` }));
-  } finally {
-    // Close the tab opened only to deliver, unless the learner switched to it.
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
-    if (tab && !tab.active) await chrome.tabs.remove(tabId).catch(() => undefined);
+    const reason = error instanceof Error ? error.message : String(error);
+    await updateQueue((state) => ({ ...state, lastError: `The words couldn't be saved: ${reason} Press Save now to try again.` }));
+    return;
   }
+  await updateQueue((state) => withDeliveryResult(state, pending, result, Date.now()));
 }
 
 // ---- The toast on the page. ----
@@ -298,10 +318,12 @@ async function handlePopup(request: PopupRequest): Promise<QueueState> {
 }
 
 chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
-  if (message?.type === "italian-bridge-ready") {
-    void readQueue().then((state) => {
-      if (state.words.some((word) => word.status === "pending")) scheduleDelivery(1_000);
-    });
+  if (message?.type === "italian-writer-ready") {
+    sendResponse(hiddenWrite?.entries ?? null);
+    return;
+  }
+  if (message?.type === "italian-writer-result") {
+    hiddenWrite?.resolve((message as WriterResult).result);
     return;
   }
   if (message?.type === "italian-toast-action") {

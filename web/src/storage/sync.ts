@@ -1,5 +1,3 @@
-import type { Flashcard } from "../cards/types";
-import { assertNoDuplicateCards, cloneCards } from "./cardCodec";
 import {
   clearLocalSnapshot,
   readLocalSnapshot,
@@ -194,18 +192,6 @@ export class SyncStorage implements CardStorage {
     return this.initialization;
   }
 
-  private async mutateCards(operation: (cards: Flashcard[]) => Flashcard[]) {
-    await this.initialize();
-    const current = this.snapshot ?? emptySnapshot();
-    const next = assertInventoryState(consistentInventoryState({ ...current, cards: operation(cloneCards(current.cards)) }));
-    this.snapshot = {
-      ...next,
-      updatedAt: nextTimestamp(current.updatedAt, this.latestRemoteUpdatedAt),
-    };
-    this.persistSnapshot();
-    await this.pushLocal();
-  }
-
   async syncNow() {
     await this.initialize();
     setSyncStatus({ status: "checking", message: "Checking sync…" });
@@ -224,27 +210,9 @@ export class SyncStorage implements CardStorage {
     return cloneInventoryState(this.snapshot ?? emptySnapshot());
   }
 
-  async createCards(cards: Flashcard[]) {
-    await this.initialize();
-    const existing = this.snapshot?.cards ?? [];
-    assertNoDuplicateCards(existing, cards);
-    let nextId = existing.reduce((max, card) => Math.max(max, card.id), 0) + 1;
-    const inserted = cloneCards(cards).map((card) => ({ ...card, id: nextId++ }));
-    await this.mutateCards((current) => [...inserted, ...current]);
-    return cloneCards(inserted);
-  }
-
-  async updateCard(card: Flashcard) {
-    await this.initialize();
-    if (!(this.snapshot?.cards ?? []).some((item) => item.id === card.id)) throw new Error("Card not found in local inventory.");
-    await this.mutateCards((cards) => cards.map((item) => item.id === card.id ? cloneCards([card])[0] : item));
-    return cloneCards([card])[0];
-  }
-
-  async deleteCard(id: number) {
-    await this.initialize();
-    if (!(this.snapshot?.cards ?? []).some((item) => item.id === id)) throw new Error("Card not found in local inventory.");
-    await this.mutateCards((cards) => cards.filter((card) => card.id !== id));
+  /** The sync server keeps its own last-writer-wins rules, so a save here replaces the inventory. */
+  saveInventory(state: InventoryState) {
+    return this.replaceInventory(state);
   }
 
   async replaceInventory(state: InventoryState) {

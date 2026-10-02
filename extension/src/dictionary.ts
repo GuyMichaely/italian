@@ -7,8 +7,9 @@ import { lexiconUrl } from "./config";
 export const lexicon = new Lexicon(fetchedLexiconSource(lexiconUrl));
 
 /**
- * Suggestions as the extension shows them. It uses the default rules; the app turns the chosen
- * one into a card with the learner's own rules, so only the choice of reading matters here.
+ * Suggestions as the extension shows them. It uses the default rules; the chosen one is made into
+ * a card with the learner's own rules when it's saved (see words.ts), so only the choice of
+ * reading matters here.
  */
 export function suggestionsOf(reading: LexiconReading): LexiconSuggestion[] {
   return suggestionsForReading(reading, { noun: defaultNounMorphology, adjective: defaultAdjectiveMorphology });

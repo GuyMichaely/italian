@@ -25,14 +25,11 @@ test("switching readings brings that reading's English", () => {
   assert.equal(wordLabel(word), "cantare, verb with avere (present participle)");
 });
 
-test("the app's answer removes saved words and duplicates, and keeps failures with the reason", () => {
+test("a delivery removes saved words and duplicates, and keeps failures with the reason", () => {
   const words = ["a", "b", "c", "d"].map((id) => newQueuedWord({ id, word: "cantante", readings: cantante, now: 1 }));
   const state = { ...emptyQueue, words };
   const delivered = words.slice(0, 3);
   const next = withDeliveryResult(state, delivered, {
-    source: "italian-web",
-    type: "italian-extension-import-result",
-    requestId: "r",
     ok: true,
     added: ["a"],
     skipped: [{ id: "b", reason: "It's already in your words." }, { id: "c", reason: "No English." }],
@@ -40,7 +37,7 @@ test("the app's answer removes saved words and duplicates, and keeps failures wi
   assert.deepEqual(next.words.map((word) => [word.id, word.status, word.reason]), [["c", "failed", "No English."], ["d", "pending", undefined]]);
   assert.deepEqual(next.recent.map((word) => [word.id, word.outcome]), [["a", "added"], ["b", "skipped"]]);
 
-  const refused = withDeliveryResult(state, delivered, { source: "italian-web", type: "italian-extension-import-result", requestId: "r", ok: false, error: "Nope." }, 5);
+  const refused = withDeliveryResult(state, delivered, { ok: false, error: "Nope." }, 5);
   assert.equal(refused.words.length, 4);
   assert.equal(refused.lastError, "Nope.");
 });

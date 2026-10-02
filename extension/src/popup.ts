@@ -116,7 +116,7 @@ function renderQueue(state: QueueState) {
       const item = element("div", "item");
       item.append(element("strong", undefined, wordLabel(word)));
       item.append(button("remove", "Remove", async () => renderQueue(await request({ type: "queue-remove", id: word.id }))));
-      if (word.status === "failed") item.append(element("small", "reason", word.reason ?? "The app didn't take it."));
+      if (word.status === "failed") item.append(element("small", "reason", word.reason ?? "It wasn't saved."));
       else item.append(element("small", undefined, word.english));
       queue.append(item);
     }

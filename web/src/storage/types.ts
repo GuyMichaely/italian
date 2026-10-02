@@ -12,10 +12,14 @@ export type InventoryState = {
 
 export interface CardStorage {
   readonly label: string;
+  /** Reads the inventory, and remembers it as what this window's next save is based on. */
   readInventory(): Promise<InventoryState>;
-  createCards(cards: Flashcard[]): Promise<Flashcard[]>;
-  updateCard(card: Flashcard): Promise<Flashcard>;
-  deleteCard(id: number): Promise<void>;
+  /**
+   * Saves this window's inventory, keeping changes made elsewhere since it was read, and returns
+   * what was saved. Throws InventoryConflictError when the two can't both be kept.
+   */
+  saveInventory(state: InventoryState): Promise<InventoryState>;
+  /** Writes the inventory as given, over whatever is stored (importing, switching storage). */
   replaceInventory(state: InventoryState): Promise<InventoryState>;
   syncNow?(): Promise<InventoryState>;
 }

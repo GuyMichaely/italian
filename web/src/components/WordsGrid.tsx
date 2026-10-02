@@ -33,6 +33,7 @@ import { adjectiveDraftForEditing, resolveAdjectiveDraft } from "../cards/adject
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { AdjectiveRowCells, AdverbRowCells, NounBatchRowCells, VerbRowCells } from "./CardEditorFields";
 import { italianHeadword } from "./CardAnswer";
+import { newCardId } from "../cards/ids";
 import { RowDictionaryNote } from "./DictionaryNoteRow";
 import { useDictionaryRows } from "../lexicon/useDictionary";
 
@@ -250,9 +251,9 @@ export function WordsGrid({
     }
     const created: Flashcard[] = [];
     const newErrors: Record<string, string> = {};
-    pendingNew.forEach((row, index) => {
+    pendingNew.forEach((row) => {
       try {
-        created.push(cardFromRow(row, Date.now() + index, morphology, adjectiveMorphology));
+        created.push(cardFromRow(row, newCardId(), morphology, adjectiveMorphology));
       } catch (caught) {
         newErrors[row.id] = caught instanceof Error ? caught.message : "This row is invalid.";
       }

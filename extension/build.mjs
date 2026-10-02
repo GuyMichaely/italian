@@ -1,4 +1,4 @@
-// Builds the extension into dist/. The app it talks to (and fetches the dictionary from) is
+// Builds the extension into dist/. The app it adds words to (and fetches the dictionary from) is
 // https://guymichaely.com/italian/ unless --app gives another, e.g. --app http://localhost:5391/
 // for trying it against the dev server. --tests bundles tests/ into .test-dist/ instead.
 import { build } from "esbuild";
@@ -32,12 +32,13 @@ if (args.includes("--tests")) {
   mkdirSync(outdir, { recursive: true });
   const common = { bundle: true, define, target: "chrome120", logLevel: "warning", legalComments: "none" };
   await build({ ...common, entryPoints: [path.join(root, "src/background.ts")], format: "esm", outfile: path.join(outdir, "background.js") });
-  // Content scripts and the popup run as classic scripts.
-  for (const name of ["bridge", "toast", "popup"]) {
+  // Injected scripts and the popup run as classic scripts.
+  for (const name of ["writer", "toast", "popup", "offscreen"]) {
     await build({ ...common, entryPoints: [path.join(root, `src/${name}.ts`)], format: "iife", outfile: path.join(outdir, `${name}.js`) });
   }
   cpSync(path.join(root, "src/popup.html"), path.join(outdir, "popup.html"));
   cpSync(path.join(root, "src/popup.css"), path.join(outdir, "popup.css"));
+  cpSync(path.join(root, "src/offscreen.html"), path.join(outdir, "offscreen.html"));
 
   const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
   const appMatch = `${appUrl}*`;
@@ -47,9 +48,6 @@ if (args.includes("--tests")) {
     const devMatch = appMatch.replace(/:\d+\//, "/");
     manifest.name = `${manifest.name} (dev)`;
     manifest.host_permissions = [devMatch, "http://127.0.0.1/*"];
-    manifest.content_scripts[0].matches = [devMatch];
-    // An app tab without the bridge, as one opened before an update is (scripts/e2e.mjs).
-    manifest.content_scripts[0].exclude_globs = ["*no-bridge*"];
     delete manifest.update_url;
   }
   writeFileSync(path.join(outdir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
