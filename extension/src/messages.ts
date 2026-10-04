@@ -1,36 +1,37 @@
 import type { LexiconReading } from "../../web/src/lexicon/lookup";
 import type { WriteResult } from "./words";
 
-/** What the toast on the page shows after a word is added from the context menu. */
-export type ToastState = {
-  /** The queued word the buttons act on; null for a message with nothing to undo. */
+/** A word as the toast on the page and the popup show it, or a plain message (id null). */
+export type WordView = {
+  /** The word the buttons act on; null for a message with nothing to act on. */
   id: string | null;
   heading: string;
   description?: string;
   english?: string;
   meanings: string[];
   options: { reading: number; choice: number; label: string; selected: boolean }[];
+  /** The label of the button that takes the word back out, if it can be. */
+  undo?: "Undo" | "Dismiss" | null;
   note?: string;
   tone: "normal" | "error";
 };
 
-export type ToastMessage = { type: "italian-toast"; toast: ToastState };
+/** Shows a toast; `refresh` only updates the toast already showing that word. */
+export type ToastMessage = { type: "italian-toast"; toast: WordView; refresh?: string };
 
-export type ToastAction =
-  | { type: "italian-toast-action"; id: string; action: "undo" }
-  | { type: "italian-toast-action"; id: string; action: "choose"; reading: number; choice: number }
-  | { type: "italian-toast-action"; id: string; action: "english"; english: string }
-  | { type: "italian-toast-action"; id: string; action: "keep" };
+/** From the toast or the popup: a change to a word the extension added. */
+export type WordAction =
+  | { type: "italian-word-action"; id: string; action: "undo" }
+  | { type: "italian-word-action"; id: string; action: "choose"; reading: number; choice: number }
+  | { type: "italian-word-action"; id: string; action: "english"; english: string };
 
-/** From the popup to the background, which owns the queue. */
+/** From the popup to the background, which owns the words. */
 export type PopupRequest =
-  | { type: "queue-get" }
-  | { type: "queue-add"; word: string; readings: LexiconReading[]; reading: number; choice: number }
-  | { type: "queue-remove"; id: string }
-  | { type: "queue-choose"; id: string; reading: number; choice: number }
-  | { type: "queue-clear-recent" }
-  | { type: "deliver-now" };
+  | { type: "words-get" }
+  | { type: "words-add"; word: string; readings: LexiconReading[]; reading: number; choice: number }
+  | { type: "words-forget" }
+  | { type: "words-retry" };
 
-/** From the writer in the hidden frame (offscreen.html): asking for the words to save, then saying what happened. */
+/** From the writer in the hidden frame (offscreen.html): asking for the changes to save, then saying what happened. */
 export type WriterReady = { type: "italian-writer-ready" };
 export type WriterResult = { type: "italian-writer-result"; result: WriteResult };

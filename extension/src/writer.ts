@@ -1,20 +1,20 @@
-// Injected into a page of the app's site to add queued words to the inventory stored there.
-// In an app tab, the background calls window.italianWriteWords with the words (background.ts).
-// In the hidden frame of offscreen.html, it asks the background for the words itself.
-import { writeWords, type WordEntry, type WriteResult } from "./words";
+// Injected into a page of the app's site to make the extension's changes to the inventory stored
+// there. In an app tab, the background calls window.italianWriteChanges (background.ts). In the
+// hidden frame of offscreen.html, it asks the background for the changes itself.
+import { writeChanges, type WriteOp, type WriteResult } from "./words";
 import type { WriterReady, WriterResult } from "./messages";
 
 declare global {
   interface Window {
-    italianWriteWords?: (entries: WordEntry[]) => WriteResult;
+    italianWriteChanges?: (ops: WriteOp[]) => WriteResult;
   }
 }
 
-window.italianWriteWords = writeWords;
+window.italianWriteChanges = writeChanges;
 
 if (window.top !== window && location.hash === "#italian-writer") {
   void (async () => {
-    const entries = await chrome.runtime.sendMessage({ type: "italian-writer-ready" } satisfies WriterReady) as WordEntry[] | null;
-    if (entries) await chrome.runtime.sendMessage({ type: "italian-writer-result", result: writeWords(entries) } satisfies WriterResult);
+    const ops = await chrome.runtime.sendMessage({ type: "italian-writer-ready" } satisfies WriterReady) as WriteOp[] | null;
+    if (ops) await chrome.runtime.sendMessage({ type: "italian-writer-result", result: writeChanges(ops) } satisfies WriterResult);
   })();
 }

@@ -2,17 +2,18 @@ import type { LexiconReading } from "../../web/src/lexicon/lookup";
 import { shortSuggestionLabel } from "../../web/src/lexicon/suggestions";
 import { appUrl } from "./config";
 import { lexicon, lookUpSelection, suggestionsOf } from "./dictionary";
-import { wordLabel, type QueueState } from "./queue";
-import type { PopupRequest } from "./messages";
+import { wordView, type AddedWords } from "./added";
+import { panelStyles, renderPanel } from "./panel";
+import type { PopupRequest, WordAction } from "./messages";
 
 const search = document.querySelector<HTMLInputElement>("#search")!;
 const results = document.querySelector<HTMLElement>("#results")!;
-const queue = document.querySelector<HTMLElement>("#queue")!;
-const recent = document.querySelector<HTMLElement>("#recent")!;
+const added = document.querySelector<HTMLElement>("#added")!;
 document.querySelector<HTMLAnchorElement>("#open-app")!.href = appUrl;
+document.head.append(Object.assign(document.createElement("style"), { textContent: panelStyles }));
 
-async function request(message: PopupRequest): Promise<QueueState> {
-  const response = await chrome.runtime.sendMessage(message) as QueueState | { error: string };
+async function request(message: PopupRequest): Promise<AddedWords> {
+  const response = await chrome.runtime.sendMessage(message) as AddedWords | { error: string };
   if ("error" in response) throw new Error(response.error);
   return response;
 }
@@ -68,7 +69,7 @@ function renderResults(found: Found[], query: string) {
           add.textContent = "Adding…";
           try {
             // Each reading is added on its own, so it keeps just that reading.
-            renderQueue(await request({ type: "queue-add", word: reading.headword.word, readings: [group.readings[readingIndex]!], reading: 0, choice }));
+            renderAdded(await request({ type: "words-add", word: reading.headword.word, readings: [group.readings[readingIndex]!], reading: 0, choice }));
             add.textContent = "Added";
           } catch (error) {
             add.textContent = "Failed";
@@ -102,40 +103,23 @@ search.addEventListener("input", () => {
   }, 250);
 });
 
-// ---- Queue ----
+// ---- Words added ----
 
-function renderQueue(state: QueueState) {
-  queue.replaceChildren();
-  if (state.words.length || state.lastError) {
-    const heading = element("div", "section-heading");
-    heading.append(element("h2", undefined, `Waiting to be saved (${state.words.length})`));
-    if (state.words.length) heading.append(button("text-button", "Save now", async () => renderQueue(await request({ type: "deliver-now" }))));
-    queue.append(heading);
-    if (state.lastError) queue.append(element("p", "error", state.lastError));
-    for (const word of state.words) {
-      const item = element("div", "item");
-      item.append(element("strong", undefined, wordLabel(word)));
-      item.append(button("remove", "Remove", async () => renderQueue(await request({ type: "queue-remove", id: word.id }))));
-      if (word.status === "failed") item.append(element("small", "reason", word.reason ?? "It wasn't saved."));
-      else item.append(element("small", undefined, word.english));
-      queue.append(item);
-    }
-  }
-
-  recent.replaceChildren();
-  if (state.recent.length) {
-    const heading = element("div", "section-heading");
-    heading.append(element("h2", undefined, "Recently saved"));
-    heading.append(button("text-button", "Clear", async () => renderQueue(await request({ type: "queue-clear-recent" }))));
-    recent.append(heading);
-    for (const word of state.recent) {
-      const item = element("div", "item");
-      item.append(element("strong", undefined, word.label));
-      item.append(element("small", word.outcome === "skipped" ? "review" : undefined, word.outcome === "added" ? "Added to your words" : word.reason ?? "Skipped"));
-      recent.append(item);
-    }
-  }
+async function act(action: WordAction) {
+  await chrome.runtime.sendMessage(action);
+  renderAdded(await request({ type: "words-get" }));
 }
 
-void request({ type: "queue-get" }).then(renderQueue);
-chrome.storage.onChanged.addListener(() => void request({ type: "queue-get" }).then(renderQueue));
+function renderAdded(state: AddedWords) {
+  added.replaceChildren();
+  if (!state.words.length) return;
+  const heading = element("div", "section-heading");
+  heading.append(element("h2", undefined, "Added"));
+  if (state.lastError) heading.append(button("text-button", "Try again", async () => renderAdded(await request({ type: "words-retry" }))));
+  else if (state.words.some((word) => word.status !== "pending")) heading.append(button("text-button", "Clear", async () => renderAdded(await request({ type: "words-forget" }))));
+  added.append(heading);
+  for (const word of state.words) added.append(renderPanel(wordView(word, state.lastError), (action) => void act(action)));
+}
+
+void request({ type: "words-get" }).then(renderAdded);
+chrome.storage.onChanged.addListener(() => void request({ type: "words-get" }).then(renderAdded));

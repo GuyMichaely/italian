@@ -1,52 +1,61 @@
-import { shortSuggestionLabel } from "../../web/src/lexicon/suggestions";
+import { newCardId } from "../../web/src/cards/ids";
 import { appMatch, quietPageUrl } from "./config";
 import { lookUpSelection } from "./dictionary";
 import {
-  chosenSuggestion,
-  emptyQueue,
-  newQueuedWord,
-  toEntry,
+  newAddedWord,
+  noWords,
+  pendingOps,
+  trimmed,
   withChoice,
-  withDeliveryResult,
-  wordDescription,
-  wordOptions,
-  type QueuedWord,
-  type QueueState,
-} from "./queue";
-import type { PopupRequest, ToastAction, ToastMessage, ToastState, WriterResult } from "./messages";
-import type { WordEntry, WriteResult } from "./words";
+  withEnglish,
+  withRemoval,
+  withWriteResult,
+  wordView,
+  type AddedWord,
+  type AddedWords,
+} from "./added";
+import type { PopupRequest, ToastMessage, WordAction, WordView, WriterResult } from "./messages";
+import type { WriteOp, WriteResult } from "./words";
 
 declare const DEV_BUILD: boolean;
 
 const menuId = "add-to-italian";
-const queueKey = "queue";
-/** Words wait this long after the last change before they're saved, so Undo and switching stay local. */
-const deliveryDelayMs = 8_000;
+const wordsKey = "words";
 
-// ---- Queue storage. The background is the only writer; changes run one at a time. ----
+// ---- The words added, in chrome.storage.local. The background is the only writer; changes run one at a time. ----
 
-let queueChain: Promise<unknown> = Promise.resolve();
+let wordsChain: Promise<unknown> = Promise.resolve();
 
-async function readQueue(): Promise<QueueState> {
-  const stored = await chrome.storage.local.get(queueKey);
-  return (stored[queueKey] as QueueState | undefined) ?? emptyQueue;
+async function readWords(): Promise<AddedWords> {
+  const stored = await chrome.storage.local.get(wordsKey);
+  return (stored[wordsKey] as AddedWords | undefined) ?? noWords;
 }
 
-function updateQueue(change: (state: QueueState) => QueueState): Promise<QueueState> {
-  const next = queueChain.then(async () => {
-    const state = change(await readQueue());
-    await chrome.storage.local.set({ [queueKey]: state });
+function updateWords(change: (state: AddedWords) => AddedWords): Promise<AddedWords> {
+  const next = wordsChain.then(async () => {
+    const state = change(await readWords());
+    await chrome.storage.local.set({ [wordsKey]: state });
     await showCount(state);
     return state;
   });
-  queueChain = next.catch(() => undefined);
+  wordsChain = next.catch(() => undefined);
   return next;
 }
 
-async function showCount(state: QueueState) {
-  const count = state.words.length;
+/** The badge counts words that need a look: ones that couldn't be added, or saves that failed. */
+async function showCount(state: AddedWords) {
+  const count = state.words.filter((word) => word.status === "failed" || (word.status === "pending" && state.lastError)).length;
   await chrome.action.setBadgeText({ text: count ? String(count) : "" });
-  await chrome.action.setBadgeBackgroundColor({ color: state.words.some((word) => word.status === "failed") ? "#ef7070" : "#8b9dff" });
+  await chrome.action.setBadgeBackgroundColor({ color: "#ef7070" });
+}
+
+/** Words waiting from version 1.0.2 and before, which kept a queue and saved later. */
+async function bringOverQueue() {
+  const { queue } = await chrome.storage.local.get("queue") as { queue?: { words?: Omit<AddedWord, "cardId" | "revision">[] } };
+  if (!queue) return;
+  const waiting = (queue.words ?? []).map((word): AddedWord => ({ ...word, status: "pending", reason: undefined, cardId: newCardId(), revision: 0 }));
+  await updateWords((state) => ({ ...state, words: [...waiting, ...state.words] }));
+  await chrome.storage.local.remove("queue");
 }
 
 // ---- Saving words. ----
@@ -56,34 +65,37 @@ async function showCount(state: QueueState) {
 // hidden extension page (offscreen.html); else that page opened in a background tab. The app
 // doesn't take part. An open app window merges these words in when it next saves.
 
-let deliveryTimer: ReturnType<typeof setTimeout> | undefined;
-
-function scheduleDelivery(delayMs = deliveryDelayMs) {
-  clearTimeout(deliveryTimer);
-  deliveryTimer = setTimeout(() => void deliver(), delayMs);
-  // The worker may be stopped before the timer fires; the alarm wakes it to try again.
-  void chrome.alarms.create("deliver", { when: Date.now() + Math.max(delayMs, 30_000) });
-}
-
 let delivering: Promise<void> | null = null;
+let deliverAgain = false;
 
-function deliver() {
-  delivering ??= deliverPending().finally(() => {
+/** Saves every change waiting, and any made while that save ran. */
+function deliver(): Promise<void> {
+  if (delivering) {
+    deliverAgain = true;
+    return delivering;
+  }
+  delivering = (async () => {
+    do {
+      deliverAgain = false;
+      await deliverPending();
+    } while (deliverAgain);
+  })().finally(() => {
     delivering = null;
   });
   return delivering;
 }
 
-/** Adds the words to the inventory through a page of the site that has loaded. */
-async function writeThrough(tabId: number, entries: WordEntry[]): Promise<WriteResult> {
+/** Makes the changes to the inventory through a page of the site that has loaded. */
+async function writeThrough(tabId: number, ops: WriteOp[]): Promise<WriteResult> {
   await chrome.scripting.executeScript({ target: { tabId }, files: ["writer.js"] });
+  // As JSON text both ways: Chrome drops null fields from objects passed to and from the page.
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: (words: WordEntry[]) => window.italianWriteWords!(words),
-    args: [entries],
+    func: (changes: string) => JSON.stringify(window.italianWriteChanges!(JSON.parse(changes))),
+    args: [JSON.stringify(ops)],
   });
-  if (!injection?.result) throw new Error("The page didn't run the script that saves words.");
-  return injection.result as WriteResult;
+  if (typeof injection?.result !== "string") throw new Error("The page didn't run the script that saves words.");
+  return JSON.parse(injection.result) as WriteResult;
 }
 
 /** An open app tab that's loaded and that Chrome hasn't unloaded or frozen, if there is one. */
@@ -112,21 +124,21 @@ function loaded(tabId: number) {
 }
 
 /** Opens a small static page of the site in the background, saves through it, and closes it. */
-async function writeThroughQuietPage(entries: WordEntry[]): Promise<WriteResult> {
+async function writeThroughQuietPage(ops: WriteOp[]): Promise<WriteResult> {
   const tab = await chrome.tabs.create({ url: quietPageUrl, active: false });
   try {
     await loaded(tab.id!);
-    return await writeThrough(tab.id!, entries);
+    return await writeThrough(tab.id!, ops);
   } finally {
     await chrome.tabs.remove(tab.id!).catch(() => undefined);
   }
 }
 
 const writerScriptId = "italian-writer";
-let hiddenWrite: { entries: WordEntry[]; resolve: (result: WriteResult) => void } | null = null;
+let hiddenWrite: { ops: WriteOp[]; resolve: (result: WriteResult) => void } | null = null;
 
 /** Saves through the small page loaded in a frame of offscreen.html, where writer.js runs as a content script. */
-async function writeThroughHiddenPage(entries: WordEntry[]): Promise<WriteResult> {
+async function writeThroughHiddenPage(ops: WriteOp[]): Promise<WriteResult> {
   const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [writerScriptId] });
   if (!registered.length) {
     await chrome.scripting.registerContentScripts([{ id: writerScriptId, matches: [quietPageUrl], js: ["writer.js"], allFrames: true, runAt: "document_end", persistAcrossSessions: false }]);
@@ -135,7 +147,7 @@ async function writeThroughHiddenPage(entries: WordEntry[]): Promise<WriteResult
   try {
     return await new Promise<WriteResult>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("The site didn't load.")), pageLoadLimitMs);
-      hiddenWrite = { entries, resolve: (result) => { clearTimeout(timer); resolve(result); } };
+      hiddenWrite = { ops, resolve: (result) => { clearTimeout(timer); resolve(result); } };
       chrome.offscreen.createDocument({
         url: "offscreen.html",
         reasons: [chrome.offscreen.Reason.IFRAME_SCRIPTING],
@@ -148,83 +160,84 @@ async function writeThroughHiddenPage(entries: WordEntry[]): Promise<WriteResult
   }
 }
 
+/** Words a save is writing right now. Undo on one not stored yet waits for the save, then removes it. */
+const writing = new Set<string>();
+
 async function deliverPending() {
-  const pending = (await readQueue()).words.filter((word) => word.status === "pending");
+  const pending = pendingOps(await readWords());
   if (!pending.length) return;
-  const entries = pending.map(toEntry);
+  const ops = pending.map((item) => item.op);
+  for (const op of ops) writing.add(op.id);
+  try {
+    await writeAndRecord(pending, ops);
+  } finally {
+    writing.clear();
+  }
+  await refreshToasts(ops.map((op) => op.id));
+}
+
+async function writeAndRecord(pending: ReturnType<typeof pendingOps>, ops: WriteOp[]) {
   let result: WriteResult;
   try {
     const appTab = await openAppTab();
-    const throughAppTab = appTab === undefined ? Promise.reject(new Error("No Italian tab is open.")) : writeThrough(appTab, entries);
+    const throughAppTab = appTab === undefined ? Promise.reject(new Error("No Italian tab is open.")) : writeThrough(appTab, ops);
     // scripts/e2e.mjs turns the hidden page off to try the background tab.
     const noHiddenPage = DEV_BUILD && (globalThis as { italianNoHiddenPage?: boolean }).italianNoHiddenPage;
     result = await throughAppTab
-      .catch(() => noHiddenPage ? Promise.reject(new Error("Hidden page turned off.")) : writeThroughHiddenPage(entries))
-      .catch(() => writeThroughQuietPage(entries));
+      .catch(() => noHiddenPage ? Promise.reject(new Error("Hidden page turned off.")) : writeThroughHiddenPage(ops))
+      .catch(() => writeThroughQuietPage(ops));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    await updateQueue((state) => ({ ...state, lastError: `The words couldn't be saved: ${reason} Press Save now to try again.` }));
+    await updateWords((state) => ({ ...state, lastError: `It couldn't be saved: ${reason} It's tried again in a minute.` }));
+    void chrome.alarms.create("deliver", { delayInMinutes: 1 });
     return;
   }
-  await updateQueue((state) => withDeliveryResult(state, pending, result, Date.now()));
+  await updateWords((state) => withWriteResult(state, pending, result));
 }
 
 // ---- The toast on the page. ----
 
-function toastFor(word: QueuedWord): ToastState {
-  return {
-    id: word.id,
-    heading: `Added “${word.word}” to Italian`,
-    description: word.english ? `“${word.english}”: ${wordDescription(word)}` : wordDescription(word),
-    english: word.english,
-    meanings: chosenSuggestion(word)?.glosses ?? [],
-    options: wordOptions(word).map((option) => ({
-      reading: option.reading,
-      choice: option.choice,
-      label: shortSuggestionLabel(option.suggestion),
-      selected: option.reading === word.reading && option.choice === word.choice,
-    })),
-    note: "It goes to your words in a few seconds.",
-    tone: "normal",
-  };
-}
+/** The tab showing each word's toast, so a save's outcome reaches it. */
+const toastTabs = new Map<string, number>();
 
-function messageToast(heading: string, note?: string, tone: ToastState["tone"] = "normal"): ToastState {
+function messageView(heading: string, note?: string, tone: WordView["tone"] = "normal"): WordView {
   return { id: null, heading, note, meanings: [], options: [], tone };
 }
 
-async function showToast(tabId: number, toast: ToastState) {
+async function viewOf(id: string): Promise<WordView> {
+  const state = await readWords();
+  const word = state.words.find((item) => item.id === id);
+  return word ? wordView(word, state.lastError) : messageView("Removed from your words.");
+}
+
+async function showToast(tabId: number, toast: WordView, refresh?: string) {
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["toast.js"] });
-    await chrome.tabs.sendMessage(tabId, { type: "italian-toast", toast } satisfies ToastMessage);
+    if (refresh === undefined) await chrome.scripting.executeScript({ target: { tabId }, files: ["toast.js"] });
+    await chrome.tabs.sendMessage(tabId, { type: "italian-toast", toast, refresh } satisfies ToastMessage);
   } catch {
-    // Pages like the Chrome Web Store don't allow scripts; the badge still counts the word.
+    // Pages like the Chrome Web Store don't allow scripts; the popup still lists the word.
   }
 }
 
-async function toastAction(action: ToastAction): Promise<ToastState> {
-  if (action.action === "undo") {
-    let removed: QueuedWord | undefined;
-    await updateQueue((state) => {
-      removed = state.words.find((word) => word.id === action.id);
-      return { ...state, words: state.words.filter((word) => word.id !== action.id) };
-    });
-    return removed ? messageToast(`Removed “${removed.word}”.`) : messageToast("It's already in your words.", "Delete it on the Words page.");
+async function refreshToasts(ids: string[]) {
+  for (const id of ids) {
+    const tabId = toastTabs.get(id);
+    if (tabId !== undefined) await showToast(tabId, await viewOf(id), id);
   }
-  let changed: QueuedWord | undefined;
-  await updateQueue((state) => ({
-    ...state,
-    words: state.words.map((word) => {
-      if (word.id !== action.id) return word;
-      changed = action.action === "choose" ? withChoice(word, action.reading, action.choice)
-        : action.action === "english" ? { ...word, english: action.english }
-        : word;
-      return changed;
-    }),
+}
+
+async function wordAction(action: WordAction): Promise<WordView> {
+  const state = await updateWords((current) => ({
+    ...current,
+    words: trimmed(current.words.flatMap((word): AddedWord[] => {
+      if (word.id !== action.id || word.status === "detached" || word.removing) return [word];
+      if (action.action === "undo") return !word.saved && !writing.has(word.id) ? [] : [withRemoval(word)];
+      return [action.action === "choose" ? withChoice(word, action.reading, action.choice) : withEnglish(word, action.english)];
+    })),
   }));
-  if (!changed) return messageToast("It's already in your words.", "Change it on the Words page.");
-  scheduleDelivery();
-  return toastFor(changed);
+  void deliver();
+  const word = state.words.find((item) => item.id === action.id);
+  return word ? wordView(word, state.lastError) : messageView(`Removed from your words.`);
 }
 
 // ---- Adding words. ----
@@ -250,10 +263,10 @@ async function selectionContext(tabId: number) {
   }
 }
 
-async function addWord(input: { word: string; readings: QueuedWord["readings"]; reading?: number; choice?: number; context?: string; url?: string }) {
-  const word = newQueuedWord({ ...input, id: crypto.randomUUID(), now: Date.now() });
-  await updateQueue((state) => ({ ...state, words: [...state.words, word] }));
-  scheduleDelivery();
+async function addWord(input: { word: string; readings: AddedWord["readings"]; reading?: number; choice?: number; context?: string; url?: string }) {
+  const word = newAddedWord({ ...input, id: crypto.randomUUID(), cardId: newCardId(), now: Date.now() });
+  await updateWords((state) => ({ ...state, words: trimmed([word, ...state.words]) }));
+  void deliver();
   return word;
 }
 
@@ -263,16 +276,18 @@ async function addSelection(text: string, tab: chrome.tabs.Tab | undefined) {
   try {
     found = await lookUpSelection(text);
   } catch (error) {
-    if (tabId !== undefined) await showToast(tabId, messageToast("The dictionary couldn't be loaded.", error instanceof Error ? error.message : undefined, "error"));
+    if (tabId !== undefined) await showToast(tabId, messageView("The dictionary couldn't be loaded.", error instanceof Error ? error.message : undefined, "error"));
     return;
   }
   if (!found.readings.length) {
-    if (tabId !== undefined) await showToast(tabId, messageToast(`“${found.word || text.trim()}” isn't in the dictionary.`, "It has Italian nouns, verbs, adjectives, and adverbs.", "error"));
+    if (tabId !== undefined) await showToast(tabId, messageView(`“${found.word || text.trim()}” isn't in the dictionary.`, "It has Italian nouns, verbs, adjectives, and adverbs.", "error"));
     return;
   }
   const context = tabId !== undefined ? await selectionContext(tabId) : undefined;
   const word = await addWord({ word: found.word, readings: found.readings, context, url: tab?.url });
-  if (tabId !== undefined) await showToast(tabId, toastFor(word));
+  if (tabId === undefined) return;
+  toastTabs.set(word.id, tabId);
+  await showToast(tabId, await viewOf(word.id));
 }
 
 // ---- Events. ----
@@ -291,56 +306,46 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "deliver") void deliver();
 });
 
-async function handlePopup(request: PopupRequest): Promise<QueueState> {
+async function handlePopup(request: PopupRequest): Promise<AddedWords> {
   switch (request.type) {
-    case "queue-get":
-      return readQueue();
-    case "queue-add":
+    case "words-get":
+      return readWords();
+    case "words-add":
       await addWord({ word: request.word, readings: request.readings, reading: request.reading, choice: request.choice });
-      return readQueue();
-    case "queue-remove":
-      return updateQueue((state) => ({ ...state, words: state.words.filter((word) => word.id !== request.id) }));
-    case "queue-choose": {
-      const state = await updateQueue((current) => ({
-        ...current,
-        words: current.words.map((word) => word.id === request.id ? withChoice(word, request.reading, request.choice) : word),
-      }));
-      scheduleDelivery();
-      return state;
-    }
-    case "queue-clear-recent":
-      return updateQueue((state) => ({ ...state, recent: [] }));
-    case "deliver-now":
-      await updateQueue((state) => ({ ...state, lastError: undefined, words: state.words.map((word) => ({ ...word, status: "pending" as const, reason: undefined })) }));
+      return readWords();
+    case "words-forget":
+      return updateWords((state) => ({ ...state, words: state.words.filter((word) => word.status === "pending") }));
+    case "words-retry":
+      await updateWords((state) => ({ ...state, lastError: undefined }));
       await deliver();
-      return readQueue();
+      return readWords();
   }
 }
 
 chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
   if (message?.type === "italian-writer-ready") {
-    sendResponse(hiddenWrite?.entries ?? null);
+    sendResponse(hiddenWrite?.ops ?? null);
     return;
   }
   if (message?.type === "italian-writer-result") {
     hiddenWrite?.resolve((message as WriterResult).result);
     return;
   }
-  if (message?.type === "italian-toast-action") {
-    void toastAction(message as ToastAction).then(sendResponse);
+  if (message?.type === "italian-word-action") {
+    void wordAction(message as WordAction).then(sendResponse);
     return true;
   }
-  if (typeof message?.type === "string" && (message.type.startsWith("queue-") || message.type === "deliver-now")) {
+  if (typeof message?.type === "string" && message.type.startsWith("words-")) {
     void handlePopup(message as PopupRequest).then(sendResponse, (error) => sendResponse({ error: error instanceof Error ? error.message : String(error) }));
     return true;
   }
 });
 
 // Development builds let scripts/e2e.mjs add a word without the context menu.
-if (DEV_BUILD) Object.assign(globalThis, { italianAddSelection: addSelection, italianDeliver: deliver, italianReadQueue: readQueue });
+if (DEV_BUILD) Object.assign(globalThis, { italianAddSelection: addSelection, italianDeliver: deliver, italianReadWords: readWords, italianWordAction: wordAction });
 
-// When the worker starts, show the count and deliver anything left from before.
-void readQueue().then((state) => {
+// When the worker starts, show the count and save anything left from before.
+void bringOverQueue().then(readWords).then((state) => {
   void showCount(state);
-  if (state.words.some((word) => word.status === "pending")) scheduleDelivery();
+  if (state.words.some((word) => word.status === "pending")) void deliver();
 });

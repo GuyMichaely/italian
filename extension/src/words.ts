@@ -1,7 +1,6 @@
 import type { Flashcard } from "../../web/src/cards/types";
 import type { NounMorphology } from "../../web/src/cards/nounMorphology";
 import type { AdjectiveMorphology } from "../../web/src/cards/adjectiveMorphology";
-import { newCardId } from "../../web/src/cards/ids";
 import { nounCardFromDraft } from "../../web/src/cards/nounDraft";
 import { adjectiveCardFromDraft } from "../../web/src/cards/adjectiveDraft";
 import { adverbCard, verbCard } from "../../web/src/cards/editorModel";
@@ -16,9 +15,8 @@ import type { LexiconReading } from "../../web/src/lexicon/lookup";
 export const extensionTag = "from-extension";
 export const reviewTag = "needs-review";
 
-/** A queued word on its way into the inventory: a dictionary reading and which of its suggestions to add. */
+/** A word on its way into the inventory: a dictionary reading and which of its suggestions to add. */
 export type WordEntry = {
-  id: string;
   /** The text that was selected or searched. */
   word: string;
   reading: LexiconReading;
@@ -30,9 +28,27 @@ export type WordEntry = {
   url?: string;
 };
 
-/** What happened to a delivery: which entries became cards, and which didn't, with why. */
+/**
+ * A change to the stored inventory. `card` is the card as the extension last wrote it: a change
+ * or removal only goes ahead while the stored card is still exactly that.
+ */
+export type WriteOp =
+  | { kind: "add"; id: string; cardId: number; entry: WordEntry }
+  | { kind: "change"; id: string; card: Flashcard; entry: WordEntry }
+  | { kind: "remove"; id: string; card: Flashcard };
+
+export type OpResult =
+  /** The card is stored as given. */
+  | { id: string; outcome: "saved"; card: Flashcard }
+  | { id: string; outcome: "removed" }
+  /** Nothing changed, with why: a word already there, or one that can't be made into a card. */
+  | { id: string; outcome: "skipped"; reason: string }
+  /** The card was changed or deleted in the app, so the extension leaves it alone from now on. */
+  | { id: string; outcome: "detached"; reason: string };
+
+/** What happened to a write: each change's outcome, or why nothing was written. */
 export type WriteResult =
-  | { ok: true; added: string[]; skipped: { id: string; reason: string }[] }
+  | { ok: true; results: OpResult[] }
   | { ok: false; error: string };
 
 function text(value: unknown) {
@@ -49,14 +65,14 @@ function readingHeadword(entry: WordEntry): LexiconHeadword {
   return headword as LexiconHeadword;
 }
 
-function entryCard(entry: WordEntry, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard {
+export function entryCard(entry: WordEntry, cardId: number, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard {
   const headword = readingHeadword(entry);
   const suggestions = suggestionsForReading({ headword, via: entry.reading.via ?? null }, { noun: morphology, adjective: adjectiveMorphology });
   const suggestion = suggestions[Number.isInteger(entry.choice) ? entry.choice : 0] ?? suggestions[0];
   if (!suggestion) throw new Error("The dictionary entry has nothing to add.");
   const english = text(entry.english) || suggestion.fields.english;
   if (!english) throw new Error("The dictionary gives no English for it.");
-  const common = { id: newCardId(), setName: null, tags: suggestion.review ? [extensionTag, reviewTag] : [extensionTag] };
+  const common = { id: cardId, setName: null, tags: suggestion.review ? [extensionTag, reviewTag] : [extensionTag] };
   switch (suggestion.type) {
     case "noun":
       return normalizeCard(nounCardFromDraft({ ...suggestion.fields, english }, common, morphology));
@@ -69,33 +85,58 @@ function entryCard(entry: WordEntry, morphology: NounMorphology, adjectiveMorpho
   }
 }
 
+const sameCard = (left: Flashcard, right: Flashcard) => JSON.stringify(normalizeCard(left)) === JSON.stringify(normalizeCard(right));
+const failure = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+
 /**
- * Turns words into cards with the learner's own rules. A word that can't be made into a card, or
- * that the learner already has, is skipped with the reason rather than failing the rest.
+ * Applies the changes to the cards, with the learner's own rules. A change that can't be made is
+ * skipped with the reason rather than failing the rest. New cards go first.
  */
-export function entriesToCards(entries: WordEntry[], existing: Flashcard[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
-  const keys = new Set(existing.map(cardDuplicateKey));
-  const cards: Flashcard[] = [];
-  const added: string[] = [];
-  const skipped: { id: string; reason: string }[] = [];
-  entries.forEach((entry, index) => {
-    const id = text(entry?.id) || `entry-${index}`;
-    try {
-      const card = entryCard(entry, morphology, adjectiveMorphology);
-      const key = cardDuplicateKey(card);
-      if (keys.has(key)) {
-        skipped.push({ id, reason: "It's already in your words." });
-        return;
+export function applyOps(ops: WriteOp[], existing: Flashcard[], morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
+  let cards = [...existing];
+  const added: Flashcard[] = [];
+  const results: OpResult[] = [];
+  const index = (id: number) => cards.findIndex((card) => card.id === id);
+  for (const op of ops) {
+    if (op.kind === "add") {
+      // Already written, by a save whose result didn't come back.
+      const stored = cards[index(op.cardId)] ?? added.find((card) => card.id === op.cardId);
+      if (stored) {
+        results.push({ id: op.id, outcome: "saved", card: stored });
+        continue;
       }
-      keys.add(key);
-      cards.push(card);
-      added.push(id);
-    } catch (error) {
-      skipped.push({ id, reason: error instanceof Error ? error.message : "It couldn't be made into a card." });
+    } else {
+      const at = index(op.card.id);
+      if (at < 0) {
+        results.push(op.kind === "remove" ? { id: op.id, outcome: "removed" } : { id: op.id, outcome: "detached", reason: "It's no longer in your words." });
+        continue;
+      }
+      if (!sameCard(cards[at]!, op.card)) {
+        results.push({ id: op.id, outcome: "detached", reason: "It was changed on the Words page. Change it there." });
+        continue;
+      }
+      if (op.kind === "remove") {
+        cards = cards.filter((card) => card.id !== op.card.id);
+        results.push({ id: op.id, outcome: "removed" });
+        continue;
+      }
     }
-  });
-  assertCardsFitMorphology(cards, morphology, adjectiveMorphology);
-  return { cards, added, skipped };
+    try {
+      const card = entryCard(op.entry, op.kind === "add" ? op.cardId : op.card.id, morphology, adjectiveMorphology);
+      const others = [...added, ...cards].filter((other) => other.id !== card.id);
+      if (others.some((other) => cardDuplicateKey(other) === cardDuplicateKey(card))) {
+        results.push({ id: op.id, outcome: "skipped", reason: "It's already in your words." });
+        continue;
+      }
+      assertCardsFitMorphology([card], morphology, adjectiveMorphology);
+      if (op.kind === "add") added.push(card);
+      else cards = cards.map((other) => other.id === card.id ? card : other);
+      results.push({ id: op.id, outcome: "saved", card });
+    } catch (error) {
+      results.push({ id: op.id, outcome: "skipped", reason: failure(error, "It couldn't be made into a card.") });
+    }
+  }
+  return { cards: [...added, ...cards], results };
 }
 
 /** Whether writing `written` back keeps every field and list item of `original`; values may be tidied. */
@@ -111,11 +152,11 @@ function keepsEverything(original: unknown, written: unknown): boolean {
 }
 
 /**
- * Adds words to the inventory in this page's local storage: read, add, write, all in one go so
- * nothing else on the page can write in between. Windows of the app that are open keep these
- * words when they next save, because the app merges its saves with what is stored.
+ * Makes the changes to the inventory in this page's local storage: read, change, write, all in one
+ * go so nothing else on the page can write in between. Windows of the app that are open keep
+ * these changes when they next save, because the app merges its saves with what is stored.
  */
-export function writeWords(entries: WordEntry[]): WriteResult {
+export function writeChanges(ops: WriteOp[]): WriteResult {
   let snapshot;
   try {
     snapshot = readLocalSnapshot();
@@ -126,10 +167,10 @@ export function writeWords(entries: WordEntry[]): WriteResult {
     return { ok: false, error: "Your words are stored in a way this version of the extension doesn't understand. Update the extension." };
   }
   try {
-    const { cards, added, skipped } = entriesToCards(entries, snapshot.cards, snapshot.nounMorphology, snapshot.adjectiveMorphology);
-    if (cards.length) writeLocalSnapshot({ ...snapshot, cards: [...cards, ...snapshot.cards], updatedAt: new Date().toISOString() });
-    return { ok: true, added, skipped };
+    const { cards, results } = applyOps(ops, snapshot.cards, snapshot.nounMorphology, snapshot.adjectiveMorphology);
+    if (JSON.stringify(cards) !== JSON.stringify(snapshot.cards)) writeLocalSnapshot({ ...snapshot, cards, updatedAt: new Date().toISOString() });
+    return { ok: true, results };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "The words couldn't be saved." };
+    return { ok: false, error: failure(error, "The words couldn't be saved.") };
   }
 }
