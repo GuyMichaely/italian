@@ -49,15 +49,6 @@ async function showCount(state: AddedWords) {
   await chrome.action.setBadgeBackgroundColor({ color: "#ef7070" });
 }
 
-/** Words waiting from version 1.0.2 and before, which kept a queue and saved later. */
-async function bringOverQueue() {
-  const { queue } = await chrome.storage.local.get("queue") as { queue?: { words?: Omit<AddedWord, "cardId" | "revision">[] } };
-  if (!queue) return;
-  const waiting = (queue.words ?? []).map((word): AddedWord => ({ ...word, status: "pending", reason: undefined, cardId: newCardId(), revision: 0 }));
-  await updateWords((state) => ({ ...state, words: [...waiting, ...state.words] }));
-  await chrome.storage.local.remove("queue");
-}
-
 // ---- Saving words. ----
 //
 // Words are saved straight into the inventory in the site's local storage, by a script run in a
@@ -345,7 +336,7 @@ chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendR
 if (DEV_BUILD) Object.assign(globalThis, { italianAddSelection: addSelection, italianDeliver: deliver, italianReadWords: readWords, italianWordAction: wordAction });
 
 // When the worker starts, show the count and save anything left from before.
-void bringOverQueue().then(readWords).then((state) => {
+void readWords().then((state) => {
   void showCount(state);
   if (state.words.some((word) => word.status === "pending")) void deliver();
 });
