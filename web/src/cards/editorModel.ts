@@ -1,5 +1,6 @@
 import type {
   AdverbCard,
+  CardCommon,
   CardType,
   VerbCard,
 } from "./types";
@@ -138,7 +139,7 @@ export function emptyAdverbBatchRow(id: string): AdverbBatchRow {
   return { id, english: "", form: "" };
 }
 
-export function verbCard(input: Omit<VerbBatchRow, "id"> & { id: number; setName: string | null; tags: string[] }): VerbCard {
+export function verbCard(input: Omit<VerbBatchRow, "id"> & CardCommon): VerbCard {
   return {
     id: input.id,
     type: "verb",
@@ -146,12 +147,13 @@ export function verbCard(input: Omit<VerbBatchRow, "id"> & { id: number; setName
     italian: input.infinitive,
     setName: input.setName,
     tags: input.tags,
+    editedAt: input.editedAt,
     details: { io: input.io, tu: input.tu, luiLei: input.luiLei, noi: input.noi, voi: input.voi, loro: input.loro, auxiliary: input.auxiliary, participle: input.participle },
   };
 }
 
-export function adverbCard(input: Omit<AdverbBatchRow, "id"> & { id: number; setName: string | null; tags: string[] }): AdverbCard {
-  return { id: input.id, type: "adverb", english: input.english, italian: input.form, setName: input.setName, tags: input.tags, details: {} };
+export function adverbCard(input: Omit<AdverbBatchRow, "id"> & CardCommon): AdverbCard {
+  return { id: input.id, type: "adverb", english: input.english, italian: input.form, setName: input.setName, tags: input.tags, editedAt: input.editedAt, details: {} };
 }
 
 export function verbRowFromCard(card: VerbCard): VerbBatchRow {

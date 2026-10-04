@@ -34,6 +34,7 @@ import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { AdjectiveRowCells, AdverbRowCells, NounBatchRowCells, VerbRowCells } from "./CardEditorFields";
 import { italianHeadword } from "./CardAnswer";
 import { newCardId } from "../cards/ids";
+import { editedNow } from "../cards/edited";
 import { RowDictionaryNote } from "./DictionaryNoteRow";
 import { useDictionaryRows } from "../lexicon/useDictionary";
 
@@ -45,6 +46,18 @@ type GridRow =
   | ({ type: "adverb" } & Omit<AdverbBatchRow, "id"> & Metadata);
 
 export type GridTab = CardType | "all";
+
+/** The Words page's order: as stored (newest added first), or by when each word was last edited. */
+export type EditedSort = "newest" | "oldest" | null;
+
+const nextSort: Record<string, EditedSort> = { null: "newest", newest: "oldest", oldest: null };
+
+/** “14:05” today, “3 Oct” this year, “3 Oct 2025” before. */
+function editedLabel(iso: string, now = new Date()) {
+  const date = new Date(iso);
+  if (date.toDateString() === now.toDateString()) return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleDateString(undefined, date.getFullYear() === now.getFullYear() ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+}
 
 /** Rows typed at the bottom of a part-of-speech tab, which become new words on save. */
 type NewRows = {
@@ -89,7 +102,8 @@ function rowFromCard(card: Flashcard, morphology: NounMorphology, adjectiveMorph
 }
 
 function cardFromRow(row: GridRow, id: number, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard {
-  const common = { id, setName: row.setName.trim() || null, tags: parseTags(row.tags) };
+  // Saving stamps a card that changed with the time; see withEditTimes.
+  const common = { id, setName: row.setName.trim() || null, tags: parseTags(row.tags), editedAt: editedNow() };
   const english = row.english.trim();
   if (!english) throw new Error("English is required.");
   if (row.type === "noun") {
@@ -128,6 +142,8 @@ export function WordsGrid({
   morphology,
   adjectiveMorphology,
   selectedIds,
+  editedSort,
+  onEditedSort,
   onToggleSelected,
   onSelectAll,
   onSave,
@@ -142,6 +158,8 @@ export function WordsGrid({
   morphology: NounMorphology;
   adjectiveMorphology: AdjectiveMorphology;
   selectedIds: number[];
+  editedSort: EditedSort;
+  onEditedSort: (sort: EditedSort) => void;
   onToggleSelected: (id: number) => void;
   onSelectAll: (ids: number[], selected: boolean) => void;
   onSave: (updated: Flashcard[]) => Promise<boolean>;
@@ -206,7 +224,7 @@ export function WordsGrid({
 
   function changeNewRows<T extends CardType>(type: T, change: (rows: NewRows[T]) => NewRows[T][number][]) {
     const kind = newRowKinds[type];
-    setNewRows((current) => ({ ...current, [type]: withSpareRows(change(current[type]), kind.used, kind.empty, 1) }));
+    setNewRows((current) => ({ ...current, [type]: withSpareRows(change(current[type]), kind.used, kind.empty) }));
   }
 
   function updateNewRow<T extends CardType>(type: T, id: string, change: (row: NewRows[T][number]) => NewRows[T][number]) {
@@ -227,7 +245,7 @@ export function WordsGrid({
 
   function removeNewRow(type: CardType, id: string) {
     const kind = newRowKinds[type];
-    setNewRows((current) => ({ ...current, [type]: withoutRow(current[type] as { id: string }[], id, kind.used as (row: { id: string }) => boolean, kind.empty, 1) }));
+    setNewRows((current) => ({ ...current, [type]: withoutRow(current[type] as { id: string }[], id, kind.used as (row: { id: string }) => boolean, kind.empty) }));
   }
 
   function discard() {
@@ -291,6 +309,7 @@ export function WordsGrid({
     return <>
       {tab !== "all" && <td data-label="Set"><input aria-label={`Set for ${card.english}`} list="known-card-sets" value={row.setName} onChange={(event) => update(card.id, { setName: event.target.value })} placeholder="—" /></td>}
       <td data-label="Tags"><input aria-label={`Tags for ${card.english}`} value={row.tags} onChange={(event) => update(card.id, { tags: event.target.value })} /></td>
+      <td data-label="Edited" className="edited-cell"><time dateTime={card.editedAt} title={new Date(card.editedAt).toLocaleString()}>{editedLabel(card.editedAt)}</time></td>
       <td className="row-action-cell"><div className="inventory-row-actions">
         <button type="button" className="row-open" onClick={() => onOpen(card)} aria-label={`Open ${card.english}`} title="Open in editor">↗</button>
         <button type="button" className="row-remove" onClick={() => { if (window.confirm(`Delete “${card.english}”?`)) onRemove(card.id); }} aria-label={`Delete ${card.english}`} title="Delete">×</button>
@@ -342,6 +361,7 @@ export function WordsGrid({
           {newRowCells(type, row.id, index)}
           <td data-label="Set"><input aria-label={`Row ${index + 1} set`} list="known-card-sets" value={row.setName} onChange={(event) => setMetadata({ setName: event.target.value })} placeholder="—" /></td>
           <td data-label="Tags"><input aria-label={`Row ${index + 1} tags`} value={row.tags} onChange={(event) => setMetadata({ tags: event.target.value })} /></td>
+          <td className="edited-cell" />
           <td className="row-action-cell">{used && <div className="inventory-row-actions">
             <button type="button" className="row-remove" tabIndex={-1} onClick={() => removeNewRow(type, row.id)} aria-label={`Remove new row ${index + 1}`} title="Remove">×</button>
           </div>}</td>
@@ -353,7 +373,8 @@ export function WordsGrid({
   }
 
   const headers = tab === "all" ? ["Italian", "English"] : [...typeHeaders[tab], "Set"];
-  const columnCount = headers.length + 3;
+  const columnCount = headers.length + 4;
+  const sortLabel = editedSort === "newest" ? "newest first" : editedSort === "oldest" ? "oldest first" : null;
 
   return <form className="words-grid" onSubmit={save}>
     <datalist id="known-card-sets">{knownSets.map((name) => <option key={name} value={name} />)}</datalist>
@@ -363,6 +384,11 @@ export function WordsGrid({
           <th className="select-cell">{visibleCards.length > 0 && <input type="checkbox" aria-label="Select all shown words" checked={allVisibleSelected} onChange={() => onSelectAll(visibleCards.map((card) => card.id), !allVisibleSelected)} />}</th>
           {headers.map((header) => <th key={header}>{header}</th>)}
           <th>Tags</th>
+          <th aria-sort={editedSort === "newest" ? "descending" : editedSort === "oldest" ? "ascending" : "none"}>
+            <button type="button" className={`sort-button${editedSort ? " active" : ""}`} onClick={() => onEditedSort(nextSort[String(editedSort)]!)} title={sortLabel ? `Sorted by edited, ${sortLabel}. Click to change.` : "Sort by when each word was last edited"}>
+              Edited{editedSort === "newest" ? " ↓" : editedSort === "oldest" ? " ↑" : ""}
+            </button>
+          </th>
           <th><span className="sr-only">Actions</span></th>
         </tr></thead>
         <tbody>

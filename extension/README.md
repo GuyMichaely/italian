@@ -6,7 +6,7 @@ A Chrome extension that adds Italian words you meet on the web to Italian.
 
 - **Add from a page.** Select a word, right-click, and choose **Add “…” to Italian**. The word is looked up in the dictionary (see `docs/LEXICON.md`), and a panel in the corner shows what was added. It has **Undo**, the dictionary's other English meanings, and its other readings, such as cantante as a feminine noun or as a form of cantare. An inflected form adds its dictionary word, so selecting libri adds libro.
 - **Search from the toolbar.** The toolbar popup searches Italian or English words and adds any result. It also lists the words you've added recently, each in the same panel as on the page.
-- **Changing a word.** Undo, another meaning, or another reading, in the panel on the page or in the popup, changes the card that's stored. Once you edit or delete the word on the Words page, it's the app's: the extension leaves it alone and says so.
+- **Changing a word.** Undo, another meaning, or another reading, in the panel on the page or in the popup, changes the card that's stored. Once you edit or delete the word on the Words page, it's the app's: the extension leaves it alone and says so. Opening the popup reads your words back from the site (through an open Italian tab or the hidden page, never a new tab), so a word changed there shows as it is now.
 - **Saving.** Words are added at once, straight to your words, which the Italian site keeps in your browser's storage:
   - Each word becomes a card with your own declension rules.
   - Words you already have are skipped.

@@ -151,12 +151,19 @@ try {
   assert.match(refused.lastError, /Update the extension/);
   assert.equal((await stored(app)).cards.length, 2);
   console.log("Unknown stored data: the word waits.", refused.lastError);
+  await app.evaluate(() => {
+    const inventory = JSON.parse(localStorage.getItem("italian:inventory"));
+    delete inventory.cards[0].fromTheFuture;
+    localStorage.setItem("italian:inventory", JSON.stringify(inventory));
+  });
 
   // ---- The popup finds English words too. ----
   const extensionId = new URL(worker.url()).host;
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
   await popup.getByRole("heading", { name: "Adding “gatto” to Italian…" }).waitFor({ timeout: 5000 });
+  // Opening the popup reads the cards back: the word edited in the app shows as it is there.
+  await popup.getByText("“dog”: cane / cani, masculine noun.").waitFor({ timeout: 10000 });
   assert.equal(await popup.locator("#added .panel").count(), 4);
   console.log("Popup lists the words added:", (await popup.locator("#added .panel h2").allTextContents()).join(" | "));
   await popup.fill("#search", "egg");

@@ -16,7 +16,7 @@ export type NounDeclension =
 
 /**
  * Per-form article-group exceptions. `null` means the group is chosen from the form's spelling
- * using the morphology's article groups; a name forces that group (e.g. plural "dei" → "lo" gives "gli dei").
+ * using the morphology's article groups; a name forces that group (e.g. plural "dei" → "lo / gli" gives "gli dei").
  */
 export type NounArticleGroupOverrides = {
   singular: string | null;
@@ -58,12 +58,18 @@ export type AdjectiveDetails = {
 
 export type AdverbDetails = Record<string, never>;
 
-type CardBase<Type extends CardType, Details> = {
+/** What every card has besides its word: what the constructors take. */
+export type CardCommon = {
   id: number;
-  type: Type;
-  english: string;
   setName: string | null;
   tags: string[];
+  /** When the card was added or last changed, as an ISO time. */
+  editedAt: string;
+};
+
+type CardBase<Type extends CardType, Details> = CardCommon & {
+  type: Type;
+  english: string;
   details: Details;
 };
 

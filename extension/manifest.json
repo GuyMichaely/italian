@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Italian",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Add Italian words you meet on the web to your Italian flashcards, filled in from Wiktionary.",
   "update_url": "https://github.com/GuyMichaely/italian/releases/latest/download/updates.xml",
   "permissions": ["storage", "contextMenus", "scripting", "activeTab", "alarms", "offscreen"],

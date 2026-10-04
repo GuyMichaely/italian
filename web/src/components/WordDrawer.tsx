@@ -54,7 +54,7 @@ export function WordDrawer({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const common = { id: card.id, setName: setName.trim() || null, tags: parseTags(tags) };
+    const common = { id: card.id, setName: setName.trim() || null, tags: parseTags(tags), editedAt: card.editedAt };
     let updated: Flashcard;
     try {
       if (card.type === "noun") {
@@ -137,7 +137,7 @@ export function WordDrawer({
           </label>
           <details className="exceptions-box" open={Boolean(noun.singularGroup || noun.pluralGroup)}>
             <summary>Article exceptions{noun.singularGroup || noun.pluralGroup ? " · on" : ""}</summary>
-            <p className="field-hint">Articles normally follow the spelling rules in Grammar → Articles. Override a form’s group when a word breaks them, e.g. plural “dei” in the “lo” group gives “gli dei”.</p>
+            <p className="field-hint">Articles normally follow the spelling rules in Grammar → Articles. Override a form’s group when a word breaks them, e.g. plural “dei” in the “lo / gli” group gives “gli dei”.</p>
             <div className="field-row">
               {(["singular", "plural"] as const).map((number) => {
                 const form = number === "singular" ? noun.singular : noun.plural;

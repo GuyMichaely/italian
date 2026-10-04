@@ -70,6 +70,15 @@ test("a change rebuilds the card under the same id; a removal deletes it", () =>
   assert.deepEqual(removed.cards, []);
 });
 
+test("a look reads a card back as the learner's rules make it; a change back keeps its edit time", () => {
+  const added = apply([add("a", libro)]);
+  const book = savedCard(added, "a");
+  assert.deepEqual(apply([{ kind: "look", id: "a", cardId: book.id }], added.cards).results, [{ id: "a", outcome: "found", card: book, summary: "libro / libri, masculine noun" }]);
+  assert.deepEqual(apply([{ kind: "look", id: "a", cardId: 1 }], added.cards).results, [{ id: "a", outcome: "missing" }]);
+  const unchanged = apply([{ kind: "change", id: "a", card: book, entry: entry(libro) }], added.cards);
+  assert.equal(savedCard(unchanged, "a").editedAt, book.editedAt);
+});
+
 test("a card changed or deleted in the app is left alone", () => {
   const added = apply([add("q", qui)]);
   const here = savedCard(added, "q");

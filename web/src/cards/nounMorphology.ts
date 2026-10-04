@@ -102,19 +102,19 @@ export const defaultNounMorphology: NounMorphology = {
   },
   articleGroups: [
     {
-      name: "lo",
+      name: "lo / gli",
       startsWith: ["sC", "z", "gn", "ps", "pn", "x", "y", "iV"],
       masculine: { definiteSingular: "lo", definitePlural: "gli", indefiniteSingular: "uno" },
       feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },
     },
     {
-      name: "vowel",
+      name: "l’ / gli",
       startsWith: ["V"],
       masculine: { definiteSingular: "l’", definitePlural: "gli", indefiniteSingular: "un" },
       feminine: { definiteSingular: "l’", definitePlural: "le", indefiniteSingular: "un’" },
     },
     {
-      name: "consonant",
+      name: "il / i",
       startsWith: ["C"],
       masculine: { definiteSingular: "il", definitePlural: "i", indefiniteSingular: "un" },
       feminine: { definiteSingular: "la", definitePlural: "le", indefiniteSingular: "una" },

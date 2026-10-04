@@ -46,6 +46,7 @@ import {
 import { RowDictionaryNote } from "./DictionaryNoteRow";
 import { useDictionaryRows } from "../lexicon/useDictionary";
 import { newCardId } from "../cards/ids";
+import { editedNow } from "../cards/edited";
 import { Icon } from "./Icons";
 import { Sheet } from "./Sheet";
 
@@ -65,7 +66,7 @@ export function BatchNouns({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<BatchDraft<NounBatchRow>>(() => {
-    const stored = readBatchDraft("noun", () => Array.from({ length: 3 }, (_, index) => emptyNounBatchRow(String(index + 1))));
+    const stored = readBatchDraft("noun", () => [emptyNounBatchRow("1")]);
     return { ...stored, rows: withSpareRows(stored.rows.map((row) => ({ ...emptyNounBatchRow(row.id), ...row })), nounRowUsed, emptyNounBatchRow) };
   });
   const [localError, setLocalError] = useState("");
@@ -102,7 +103,7 @@ export function BatchNouns({
     }
     let cards: Flashcard[];
     try {
-      cards = used.map((row) => nounCardFromDraft(row, { id: newCardId(), setName, tags }, morphology));
+      cards = used.map((row) => nounCardFromDraft(row, { id: newCardId(), setName, tags, editedAt: editedNow() }, morphology));
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "The noun rows do not match the configured morphology.");
       return;
@@ -158,7 +159,7 @@ export function BatchVerbs({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<BatchDraft<VerbBatchRow>>(() => {
-    const stored = readBatchDraft("verb", () => Array.from({ length: 3 }, (_, index) => emptyVerbBatchRow(String(index + 1))));
+    const stored = readBatchDraft("verb", () => [emptyVerbBatchRow("1")]);
     return { ...stored, rows: withSpareRows(stored.rows, verbRowUsed, emptyVerbBatchRow) };
   });
   const [localError, setLocalError] = useState("");
@@ -212,6 +213,7 @@ export function BatchVerbs({
       participle: row.participle.trim(),
       setName,
       tags,
+      editedAt: editedNow(),
     })));
   }
 
@@ -254,7 +256,7 @@ export function BatchAdjectives({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<BatchDraft<AdjectiveBatchRow>>(() => {
-    const stored = readBatchDraft("adjective", () => Array.from({ length: 3 }, (_, index) => emptyAdjectiveBatchRow(String(index + 1))));
+    const stored = readBatchDraft("adjective", () => [emptyAdjectiveBatchRow("1")]);
     return { ...stored, rows: withSpareRows(stored.rows, adjectiveRowUsed, emptyAdjectiveBatchRow) };
   });
   const [localError, setLocalError] = useState("");
@@ -291,7 +293,7 @@ export function BatchAdjectives({
     }
     let cards: Flashcard[];
     try {
-      cards = used.map((row) => adjectiveCardFromDraft(row, { id: newCardId(), setName, tags }, morphology));
+      cards = used.map((row) => adjectiveCardFromDraft(row, { id: newCardId(), setName, tags, editedAt: editedNow() }, morphology));
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "The adjective rows do not match the adjective rules.");
       return;
@@ -325,7 +327,7 @@ export function BatchAdjectives({
 
 export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { knownSets: string[]; saving: boolean; error: string; onSave: (cards: Flashcard[]) => Promise<void>; onCancel: () => void }) {
   const [draft, setDraft] = useState<BatchDraft<AdverbBatchRow>>(() => {
-    const stored = readBatchDraft("adverb", () => Array.from({ length: 3 }, (_, index) => emptyAdverbBatchRow(String(index + 1))));
+    const stored = readBatchDraft("adverb", () => [emptyAdverbBatchRow("1")]);
     return { ...stored, rows: withSpareRows(stored.rows, adverbRowUsed, emptyAdverbBatchRow) };
   });
   const [localError, setLocalError] = useState("");
@@ -357,7 +359,7 @@ export function BatchAdverbs({ knownSets, saving, error, onSave, onCancel }: { k
     setLocalError("");
     const setName = draft.setName.trim() || null;
     const tags = parseTags(draft.tags);
-    await onSave(used.map((row) => adverbCard({ id: newCardId(), english: row.english.trim(), form: row.form.trim(), setName, tags })));
+    await onSave(used.map((row) => adverbCard({ id: newCardId(), english: row.english.trim(), form: row.form.trim(), setName, tags, editedAt: editedNow() })));
   }
 
   return <form onSubmit={submit} className="batch-form">

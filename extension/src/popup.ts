@@ -121,5 +121,7 @@ function renderAdded(state: AddedWords) {
   for (const word of state.words) added.append(renderPanel(wordView(word, state.lastError), (action) => void act(action)));
 }
 
-void request({ type: "words-get" }).then(renderAdded);
+// What the extension knows shows at once; then the cards are read back from the site, and any
+// changed in the app since are shown as they are there.
+void request({ type: "words-get" }).then(renderAdded).then(() => request({ type: "words-check" })).then(renderAdded);
 chrome.storage.onChanged.addListener(() => void request({ type: "words-get" }).then(renderAdded));

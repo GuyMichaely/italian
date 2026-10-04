@@ -1,4 +1,4 @@
-import type { NounCard, NounDetails } from "./types";
+import type { CardCommon, NounCard, NounDetails } from "./types";
 import {
   articleGroupForWord,
   articleProfileCompatibleWithForms,
@@ -121,7 +121,7 @@ export function resolveNounDraft(draft: NounDraft, morphology: NounMorphology): 
 
 export function nounCardFromDraft(
   draft: NounDraft,
-  common: { id: number; setName: string | null; tags: string[] },
+  common: CardCommon,
   morphology: NounMorphology,
 ): NounCard {
   const english = draft.english.trim();

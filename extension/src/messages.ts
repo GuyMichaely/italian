@@ -30,6 +30,8 @@ export type PopupRequest =
   | { type: "words-get" }
   | { type: "words-add"; word: string; readings: LexiconReading[]; reading: number; choice: number }
   | { type: "words-forget" }
+  /** Reads the saved words back from the site, to show changes made in the app. */
+  | { type: "words-check" }
   | { type: "words-retry" };
 
 /** From the writer in the hidden frame (offscreen.html): asking for the changes to save, then saying what happened. */

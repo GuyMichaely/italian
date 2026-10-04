@@ -100,6 +100,8 @@ Inventory validation checks relationships between cards and morphology. Every no
 
 The stored inventory can change while a window is open: another window of the app saves, or something else on the site writes it (the extension adds words this way). So `BrowserStorage` remembers the inventory as this window last read or wrote it, and `saveInventory()` merges three ways (`storage/merge.ts`): that base, this window's inventory, and what is stored now.
 
+Each card records when it was added or last changed (`editedAt`). Saving stamps the cards that are new or differ from what the window had (`cards/edited.ts`), so the Words page can sort by it; an unchanged card keeps its time.
+
 - Cards are matched by id. A card added on either side is kept. A card changed or deleted on one side only takes that side's version; the same change on both sides is fine.
 - A card changed differently on both sides, or deleted on one and changed on the other, is a conflict. So are the noun rules, adjective rules, or study preferences changed differently on both sides (each merges as one piece).
 - The merged inventory is validated as usual: every card fits the rules and no word appears twice. A failure is a conflict too.

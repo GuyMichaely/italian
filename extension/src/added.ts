@@ -28,6 +28,8 @@ export type AddedWord = {
   status: "pending" | "saved" | "failed" | "detached";
   /** Undo was pressed: the card is to be removed. */
   removing?: boolean;
+  /** For a word the app owns now: its card as last seen there. */
+  stored?: { english: string; summary: string };
   /** The card as stored, and the choices it was made from. */
   saved?: { card: Flashcard; reading: number; choice: number; english: string };
   reason?: string;
@@ -168,6 +170,33 @@ function pick({ reading, choice, english }: { reading: number; choice: number; e
   return { reading, choice, english };
 }
 
+/** Reads back the cards of the words saved or detached, to see whether they changed in the app. */
+export function lookOps(state: AddedWords): PendingOp[] {
+  return state.words.filter((word) => (word.status === "saved" || word.status === "detached") && !word.removing).map((word) => ({
+    revision: word.revision,
+    choices: { reading: word.reading, choice: word.choice, english: word.english },
+    op: { kind: "look", id: word.id, cardId: word.saved?.card.id ?? word.cardId },
+  }));
+}
+
+/** The words after a look: one changed or deleted in the app is the app's from now on, shown as it is there. */
+export function withLookResults(state: AddedWords, looks: PendingOp[], result: WriteResult): AddedWords {
+  if (!result.ok) return state;
+  const outcomes = new Map(result.results.map((outcome) => [outcome.id, outcome]));
+  const revisions = new Map(looks.map((look) => [look.op.id, look.revision]));
+  return {
+    ...state,
+    words: state.words.map((word) => {
+      const outcome = outcomes.get(word.id);
+      if (!outcome || revisions.get(word.id) !== word.revision || (word.status !== "saved" && word.status !== "detached")) return word;
+      if (outcome.outcome === "missing") return { ...word, status: "detached", stored: undefined, reason: "It's no longer in your words." };
+      if (outcome.outcome !== "found") return word;
+      if (word.status === "saved" && JSON.stringify(outcome.card) === JSON.stringify(word.saved?.card)) return word;
+      return { ...word, status: "detached", stored: { english: outcome.card.english, summary: outcome.summary }, reason: "It was changed on the Words page. Change it there." };
+    }),
+  };
+}
+
 /** Keeps every word with something left to do, and the latest finished ones. */
 export function trimmed(words: AddedWord[]): AddedWord[] {
   let finished = 0;
@@ -185,7 +214,8 @@ export function wordView(word: AddedWord, lastError?: string): WordView {
       : word.status === "detached" ? `“${word.word}” is in your words`
       : word.saved ? `Added “${word.word}” to Italian`
       : `Adding “${word.word}” to Italian…`,
-    description: word.english ? `“${word.english}”: ${wordDescription(word)}` : wordDescription(word),
+    description: word.status === "detached" && word.stored ? `“${word.stored.english}”: ${word.stored.summary}.`
+      : word.english ? `“${word.english}”: ${wordDescription(word)}` : wordDescription(word),
     english: word.english,
     meanings: editable ? suggestion?.glosses ?? [] : [],
     options: editable ? wordOptions(word).map((option) => ({

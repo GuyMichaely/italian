@@ -120,11 +120,14 @@ export function normalizeCard(value: unknown): Flashcard {
     throw new Error("Storage returned an incomplete or invalid card.");
   }
 
+  const editedAt = typeof raw.editedAt === "string" ? raw.editedAt : "";
+  if (!editedAt || Number.isNaN(Date.parse(editedAt))) throw new Error(`Card ${id} needs the time it was edited (editedAt).`);
   const common = {
     id,
     english,
     setName: typeof raw.setName === "string" && raw.setName ? raw.setName : null,
     tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+    editedAt,
   };
   const details = objectValue(raw.details, `${type} card ${id} details`);
 

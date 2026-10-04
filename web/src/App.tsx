@@ -14,6 +14,7 @@ import {
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
 import { InventoryConflictError } from "./storage/merge";
+import { withEditTimes } from "./cards/edited";
 import {
   cloneNounMorphology,
   defaultNounMorphology,
@@ -308,8 +309,9 @@ export default function Home() {
    * this one last read or saved. If the save fails the previous inventory comes back; if it
    * conflicts with the other changes, a banner offers to reload. Throws the save's error.
    */
-  async function saveInventory(next: InventoryState, failureMessage: string) {
+  async function saveInventory(changed: InventoryState, failureMessage: string) {
     const previous: InventoryState = { cards, nounMorphology, adjectiveMorphology, studyPreferences };
+    const next = { ...changed, cards: withEditTimes(cards, changed.cards) };
     showInventory(next);
     setSyncWarning("");
     setSaveState("saving");

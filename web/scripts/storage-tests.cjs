@@ -13,9 +13,11 @@ const { normalizeCard } = require(path.join(testDist, "storage", "cardCodec.js")
 const { assertCardsFitMorphology, emptyInventoryState } = require(path.join(testDist, "storage", "inventoryState.js"));
 const { InventoryConflictError, mergeInventory } = require(path.join(testDist, "storage", "merge.js"));
 const { BrowserStorage, readLocalSnapshot, writeLocalSnapshot } = require(path.join(testDist, "storage", "browser.js"));
+const { withEditTimes } = require(path.join(testDist, "cards", "edited.js"));
+const { withSpareRows } = require(path.join(testDist, "cards", "batchRows.js"));
 
 function adverb(id, italian, english = italian, overrides = {}) {
-  return { id, type: "adverb", english, italian, setName: null, tags: [], details: {}, ...overrides };
+  return { id, type: "adverb", english, italian, setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: {}, ...overrides };
 }
 
 function noun(overrides = {}) {
@@ -25,6 +27,7 @@ function noun(overrides = {}) {
     english: "mirror",
     setName: null,
     tags: [],
+    editedAt: "2026-01-01T00:00:00.000Z",
     details: {
       declension: { kind: "rule", rule: "-chio → -chi", base: "spec" },
       gender: "masculine",
@@ -63,6 +66,19 @@ test("cards in retired shapes are refused", () => {
   assert.throws(() => normalizeCard(adverb(1, "esso", "it", { type: "pronoun" })), /incomplete or invalid card/i);
 });
 
+test("a card without the time it was edited is refused", () => {
+  assert.throws(() => normalizeCard(adverb(1, "qui", "here", { editedAt: undefined })), /editedAt/);
+  assert.throws(() => normalizeCard(adverb(1, "qui", "here", { editedAt: "yesterday" })), /editedAt/);
+});
+
+test("saving stamps new and changed cards with the time, and leaves the rest", () => {
+  const before = [adverb(1, "qui"), adverb(2, "là")].map(normalizeCard);
+  // Same content in another key order is not a change.
+  const reordered = { details: {}, tags: [], setName: null, italian: "là", english: "là", type: "adverb", id: 2, editedAt: "2026-10-04T11:00:00.000Z" };
+  const after = withEditTimes(before, [adverb(3, "già"), adverb(1, "qui", "here"), reordered], "2026-10-04T12:00:00.000Z");
+  assert.deepEqual(after.map((card) => card.editedAt), ["2026-10-04T12:00:00.000Z", "2026-10-04T12:00:00.000Z", before[1].editedAt]);
+});
+
 test("a noun whose article profile its declension can't support doesn't fit the rules", () => {
   const card = normalizeCard(noun({
     english: "clothes",
@@ -75,6 +91,18 @@ test("a noun whose article profile its declension can't support doesn't fit the 
     },
   }));
   assert.throws(() => assertCardsFitMorphology([card], defaultNounMorphology, defaultAdjectiveMorphology), /requires a noun form/i);
+});
+
+// ---- Add words rows. ----
+
+test("rows end with exactly one empty row", () => {
+  const empty = (id) => ({ id, text: "" });
+  const used = (row) => Boolean(row.text);
+  assert.deepEqual(withSpareRows([empty("a")], used, empty).map((row) => row.id), ["a"]);
+  assert.equal(withSpareRows([], used, empty).length, 1);
+  assert.deepEqual(withSpareRows([{ id: "a", text: "x" }, empty("b"), empty("c")], used, empty).map((row) => row.id), ["a", "b"]);
+  const grown = withSpareRows([{ id: "a", text: "x" }], used, empty);
+  assert.deepEqual([grown.length, grown[1].text], [2, ""]);
 });
 
 // ---- Merging. ----

@@ -10,7 +10,7 @@ const { appendMistakeReviewSet, availableReviewItems } = require(path.join(testD
 
 const cards = Array.from({ length: 20 }, (_, index) => ({
   id: index + 1, type: "adverb", english: `Word ${index + 1}`, italian: `Parole ${index + 1}`,
-  setName: null, tags: [], details: {},
+  setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: {},
 }));
 const items = cards.map((card) => ({ key: `${card.id}:english`, card, promptLanguage: "english" }));
 

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Flashcard } from "../../web/src/cards/types";
 import type { LexiconReading } from "../../web/src/lexicon/lookup";
-import { newAddedWord, noWords, pendingOps, withChoice, withEnglish, withRemoval, withWriteResult, wordLabel, wordOptions, wordView, type AddedWords } from "../src/added";
+import { lookOps, newAddedWord, noWords, pendingOps, withLookResults, withChoice, withEnglish, withRemoval, withWriteResult, wordLabel, wordOptions, wordView, type AddedWords } from "../src/added";
 import { cleanSelection } from "../src/dictionary";
 
 const cantante: LexiconReading[] = [
@@ -46,7 +46,7 @@ test("a new word is added, then changed and removed by the card it was saved as"
   assert.deepEqual(pendingOps(first.next), []);
 
   const changed = save(state(withEnglish(saved, "vocalist")), "saved", "vocalist");
-  assert.deepEqual(changed.pending.map(({ op }) => [op.kind, op.kind !== "add" && op.card.english]), [["change", "singer"]]);
+  assert.deepEqual(changed.pending.map(({ op }) => [op.kind, "card" in op && op.card.english]), [["change", "singer"]]);
   assert.equal(changed.next.words[0]!.saved?.english, "vocalist");
 
   const removed = save(state(withRemoval(changed.next.words[0]!)), "removed");
@@ -82,6 +82,25 @@ test("a word edited in the app can't be changed from the extension any more", ()
   assert.equal(detached.status, "detached");
   const view = wordView(detached);
   assert.deepEqual([view.undo, view.meanings, view.options], [null, [], []]);
+});
+
+test("reading the cards back shows a word changed or deleted in the app as the app's", () => {
+  const saved = save(state(word("a")), "saved").next.words[0]!;
+  const words = state(saved, { ...saved, id: "b" }, { ...saved, id: "c" });
+  const looks = lookOps(words);
+  assert.deepEqual(looks.map(({ op }) => op.kind), ["look", "look", "look"]);
+  const next = withLookResults(words, looks, { ok: true, results: [
+    { id: "a", outcome: "found", card: saved.saved!.card, summary: "cantante / cantanti, masculine noun" },
+    { id: "b", outcome: "found", card: card("vocalist"), summary: "cantante / cantanti, masculine noun" },
+    { id: "c", outcome: "missing" },
+  ] });
+  assert.deepEqual(next.words.map((item) => item.status), ["saved", "detached", "detached"]);
+  assert.equal(wordView(next.words[1]!).description, "“vocalist”: cantante / cantanti, masculine noun.");
+  assert.equal(next.words[2]!.reason, "It's no longer in your words.");
+
+  // A word changed in the extension meanwhile is left for its save.
+  const meanwhile = state(withEnglish(saved, "vocalist"));
+  assert.equal(withLookResults(meanwhile, lookOps(state(saved)), { ok: true, results: [{ id: "a", outcome: "missing" }] }).words[0]!.status, "pending");
 });
 
 test("a failed save keeps everything pending and says why", () => {

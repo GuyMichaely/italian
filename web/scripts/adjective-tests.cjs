@@ -30,7 +30,7 @@ function forms(masculineSingular, feminineSingular, masculinePlural, femininePlu
 }
 
 function adjective(english, declension, id = nextId++) {
-  return { id, type: "adjective", english, setName: null, tags: [], details: { declension } };
+  return { id, type: "adjective", english, setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: { declension } };
 }
 
 function ruled(english, rule, base) {
@@ -140,10 +140,10 @@ test("adjective morphology and cards are validated strictly", () => {
   assert.throws(() => normalizeAdjectiveMorphology({ declensionRules: [{ name: "x", endings: { masculineSingular: "o" } }] }), /must contain exactly/);
   assert.throws(() => normalizeAdjectiveMorphology({ declensionRules: [{ name: "x", endings: forms("o", "a", "i", "e") }, { name: "x", endings: forms("e", "e", "i", "i") }] }), /Duplicate/);
 
-  const card = normalizeCard({ id: 1, type: "adjective", english: "red", setName: null, tags: [], details: { declension: { kind: "rule", rule: "-o/-a/-i/-e", base: "ross" } } });
+  const card = normalizeCard({ id: 1, type: "adjective", english: "red", setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: { declension: { kind: "rule", rule: "-o/-a/-i/-e", base: "ross" } } });
   assert.deepEqual(card.details, { declension: { kind: "rule", rule: "-o/-a/-i/-e", base: "ross" } });
-  assert.throws(() => normalizeCard({ id: 1, type: "adjective", english: "red", italian: "rosso", setName: null, tags: [], details: { declension: { kind: "rule", rule: "-o/-a/-i/-e", base: "ross" } } }), /must not store a derived italian/);
-  assert.throws(() => normalizeCard({ id: 1, type: "adjective", english: "red", setName: null, tags: [], details: forms("rosso", "rossa", "rossi", "rosse") }), /must contain exactly: declension/);
+  assert.throws(() => normalizeCard({ id: 1, type: "adjective", english: "red", italian: "rosso", setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: { declension: { kind: "rule", rule: "-o/-a/-i/-e", base: "ross" } } }), /must not store a derived italian/);
+  assert.throws(() => normalizeCard({ id: 1, type: "adjective", english: "red", setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: forms("rosso", "rossa", "rossi", "rosse") }), /must contain exactly: declension/);
 });
 
 test("the adjective preview reads one form or four without the card", () => {

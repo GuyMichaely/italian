@@ -41,7 +41,7 @@ An irregular noun stores its forms outright; an empty form means the noun lacks 
     "gender": "masculine",
     "genderDiffersWithPlurality": false,
     "articleProfile": { "definiteSingular": true, "definitePlural": true, "indefiniteSingular": true },
-    "articleGroups": { "singular": null, "plural": "lo" }
+    "articleGroups": { "singular": null, "plural": "lo / gli" }
   }
 }
 ```
@@ -118,7 +118,7 @@ Articles come from an editable table of article groups. Each group has a name, s
 | vowel | V | l’ | gli | un | l’ | le | un’ |
 | consonant | C | il | i | un | la | le | una |
 
-In a pattern, `V` stands for any letter in the vowel list and `C` for any letter in the consonant list; every other letter stands for itself, so `sC` is s + consonant and `iV` is i + vowel. Both lists are part of the morphology (`articleLetters`) and editable; by default `h`, `j`, `k`, `w`, `x`, and `y` are consonants. Groups are checked from top to bottom and the first group with a matching pattern wins, so `lo` must stay above `consonant` for `sC` to take effect. There is no catch-all group: a form that needs an article but matches no pattern is an error until a pattern or a noun exception covers it.
+In a pattern, `V` stands for any letter in the vowel list and `C` for any letter in the consonant list; every other letter stands for itself, so `sC` is s + consonant and `iV` is i + vowel. Both lists are part of the morphology (`articleLetters`) and editable; by default `h`, `j`, `k`, `w`, `x`, and `y` are consonants. Groups are checked from top to bottom and the first group with a matching pattern wins, so `lo / gli` must stay above `il / i` for `sC` to take effect. There is no catch-all group: a form that needs an article but matches no pattern is an error until a pattern or a noun exception covers it.
 
 Singular and plural forms are grouped separately, which is how `amico` / `amici` gives `l’amico` / `gli amici`.
 
@@ -132,8 +132,8 @@ The table is read in two directions:
 Where spelling and pronunciation disagree, a noun overrides a form's group:
 
 ```text
-dio / dei with plural group "lo"   -> il dio, gli dei, un dio
-chef with both groups "lo"          -> lo chef, gli chef, uno chef
+dio / dei with plural group "lo / gli"   -> il dio, gli dei, un dio
+chef with both groups "lo / gli"          -> lo chef, gli chef, uno chef
 ```
 
 Exceptions change a form's group only, never its gender or number. The Grammar page lists every noun that is irregular or has an exception.

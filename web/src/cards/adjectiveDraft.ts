@@ -1,4 +1,4 @@
-import type { AdjectiveCard, AdjectiveDeclension, AdjectiveForms } from "./types";
+import type { AdjectiveCard, AdjectiveDeclension, AdjectiveForms, CardCommon } from "./types";
 import {
   adjectiveFormAbbreviations,
   adjectiveForms,
@@ -81,7 +81,7 @@ export function resolveAdjectiveDraft(draft: AdjectiveDraft, morphology: Adjecti
 
 export function adjectiveCardFromDraft(
   draft: AdjectiveDraft,
-  common: { id: number; setName: string | null; tags: string[] },
+  common: CardCommon,
   morphology: AdjectiveMorphology,
 ): AdjectiveCard {
   const english = draft.english.trim();

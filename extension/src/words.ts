@@ -8,6 +8,9 @@ import { cardDuplicateKey, normalizeCard } from "../../web/src/storage/cardCodec
 import { assertCardsFitMorphology } from "../../web/src/storage/inventoryState";
 import { readLocalSnapshot, readLocalSnapshotJson, storedSnapshot, writeLocalSnapshot } from "../../web/src/storage/browser";
 import { suggestionsForReading } from "../../web/src/lexicon/suggestions";
+import { editedNow, withEditTimes } from "../../web/src/cards/edited";
+import { resolvedNounForms } from "../../web/src/cards/nounMorphology";
+import { resolvedAdjectiveForms } from "../../web/src/cards/adjectiveMorphology";
 import type { LexiconHeadword } from "../../web/src/lexicon/format";
 import type { LexiconReading } from "../../web/src/lexicon/lookup";
 
@@ -35,7 +38,9 @@ export type WordEntry = {
 export type WriteOp =
   | { kind: "add"; id: string; cardId: number; entry: WordEntry }
   | { kind: "change"; id: string; card: Flashcard; entry: WordEntry }
-  | { kind: "remove"; id: string; card: Flashcard };
+  | { kind: "remove"; id: string; card: Flashcard }
+  /** Reads the card back, to show what it is now. */
+  | { kind: "look"; id: string; cardId: number };
 
 export type OpResult =
   /** The card is stored as given. */
@@ -44,7 +49,10 @@ export type OpResult =
   /** Nothing changed, with why: a word already there, or one that can't be made into a card. */
   | { id: string; outcome: "skipped"; reason: string }
   /** The card was changed or deleted in the app, so the extension leaves it alone from now on. */
-  | { id: string; outcome: "detached"; reason: string };
+  | { id: string; outcome: "detached"; reason: string }
+  /** What a look found: the card, and its Italian as the learner's rules make it. */
+  | { id: string; outcome: "found"; card: Flashcard; summary: string }
+  | { id: string; outcome: "missing" };
 
 /** What happened to a write: each change's outcome, or why nothing was written. */
 export type WriteResult =
@@ -72,7 +80,7 @@ export function entryCard(entry: WordEntry, cardId: number, morphology: NounMorp
   if (!suggestion) throw new Error("The dictionary entry has nothing to add.");
   const english = text(entry.english) || suggestion.fields.english;
   if (!english) throw new Error("The dictionary gives no English for it.");
-  const common = { id: cardId, setName: null, tags: suggestion.review ? [extensionTag, reviewTag] : [extensionTag] };
+  const common = { id: cardId, setName: null, tags: suggestion.review ? [extensionTag, reviewTag] : [extensionTag], editedAt: editedNow() };
   switch (suggestion.type) {
     case "noun":
       return normalizeCard(nounCardFromDraft({ ...suggestion.fields, english }, common, morphology));
@@ -82,6 +90,26 @@ export function entryCard(entry: WordEntry, cardId: number, morphology: NounMorp
       return normalizeCard(verbCard({ ...suggestion.fields, english, ...common }));
     case "adverb":
       return normalizeCard(adverbCard({ ...suggestion.fields, english, ...common }));
+  }
+}
+
+/** “cane / cani, masculine noun”, as the learner's own rules make the forms. */
+export function cardSummary(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
+  try {
+    switch (card.type) {
+      case "noun": {
+        const forms = resolvedNounForms(card, morphology);
+        return `${[forms.singular, forms.plural].filter(Boolean).join(" / ")}, ${card.details.gender} noun`;
+      }
+      case "adjective":
+        return `${resolvedAdjectiveForms(card, adjectiveMorphology).forms.masculineSingular}, adjective`;
+      case "verb":
+        return `${card.italian}, verb with ${card.details.auxiliary}`;
+      case "adverb":
+        return `${card.italian}, adverb`;
+    }
+  } catch {
+    return `a ${card.type}`;
   }
 }
 
@@ -98,6 +126,11 @@ export function applyOps(ops: WriteOp[], existing: Flashcard[], morphology: Noun
   const results: OpResult[] = [];
   const index = (id: number) => cards.findIndex((card) => card.id === id);
   for (const op of ops) {
+    if (op.kind === "look") {
+      const card = cards[index(op.cardId)];
+      results.push(card ? { id: op.id, outcome: "found", card, summary: cardSummary(card, morphology, adjectiveMorphology) } : { id: op.id, outcome: "missing" });
+      continue;
+    }
     if (op.kind === "add") {
       // Already written, by a save whose result didn't come back.
       const stored = cards[index(op.cardId)] ?? added.find((card) => card.id === op.cardId);
@@ -122,7 +155,8 @@ export function applyOps(ops: WriteOp[], existing: Flashcard[], morphology: Noun
       }
     }
     try {
-      const card = entryCard(op.entry, op.kind === "add" ? op.cardId : op.card.id, morphology, adjectiveMorphology);
+      // A change back to what's stored keeps the card, and the time it was edited, as they are.
+      const [card] = withEditTimes(cards, [entryCard(op.entry, op.kind === "add" ? op.cardId : op.card.id, morphology, adjectiveMorphology)]) as [Flashcard];
       const others = [...added, ...cards].filter((other) => other.id !== card.id);
       if (others.some((other) => cardDuplicateKey(other) === cardDuplicateKey(card))) {
         results.push({ id: op.id, outcome: "skipped", reason: "It's already in your words." });

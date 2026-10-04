@@ -4,7 +4,7 @@ import type { NounMorphology } from "../cards/nounMorphology";
 import type { AdjectiveMorphology } from "../cards/adjectiveMorphology";
 import { cardTypes, typeLabels } from "../cardTypes";
 import { Icon } from "../components/Icons";
-import { WordsGrid } from "../components/WordsGrid";
+import { WordsGrid, type EditedSort } from "../components/WordsGrid";
 
 export type WordsTypeFilter = CardType | "all";
 
@@ -159,6 +159,12 @@ export function WordsView({
     return [...counts].sort(([left], [right]) => left.localeCompare(right));
   }, [cards]);
   const typeCounts = useMemo(() => Object.fromEntries(cardTypes.map((type) => [type, matchingCards.filter((card) => card.type === type).length])) as Record<CardType, number>, [matchingCards]);
+  const [editedSort, setEditedSort] = useState<EditedSort>(null);
+  const shownCards = useMemo(() => {
+    if (!editedSort) return filteredCards;
+    const direction = editedSort === "newest" ? -1 : 1;
+    return [...filteredCards].sort((left, right) => direction * left.editedAt.localeCompare(right.editedAt));
+  }, [editedSort, filteredCards]);
   const visibleIds = new Set(filteredCards.map((card) => card.id));
   const selectedVisible = selectedIds.filter((id) => visibleIds.has(id));
 
@@ -220,12 +226,14 @@ export function WordsView({
               </>}
         {!loading && (cards.length > 0 || typeFilter !== "all") && <WordsGrid
           allCards={cards}
-          visibleCards={filteredCards}
+          visibleCards={shownCards}
           tab={typeFilter}
           knownSets={knownSets}
           morphology={morphology}
           adjectiveMorphology={adjectiveMorphology}
           selectedIds={selectedIds}
+          editedSort={editedSort}
+          onEditedSort={setEditedSort}
           onToggleSelected={toggleSelected}
           onSelectAll={selectAll}
           onSave={onSaveGrid}

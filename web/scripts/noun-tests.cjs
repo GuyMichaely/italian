@@ -66,6 +66,7 @@ function nounCard({
     english,
     setName: null,
     tags: [],
+    editedAt: "2026-01-01T00:00:00.000Z",
     details: {
       declension: irregular ? { kind: "irregular", ...irregular } : { kind: "rule", rule, base },
       gender,
@@ -174,7 +175,7 @@ test("a form that no article group matches is an error only when it needs an art
   const hotel = nounCard({ english: "hotel", rule: rules.identity, base: "hotel" });
   assert.throws(() => resolvedNounForms(hotel, morphology), /no article group matches/i);
 
-  const exception = nounCard({ english: "hotel", rule: rules.identity, base: "hotel", articleGroups: { singular: "vowel", plural: "consonant" } });
+  const exception = nounCard({ english: "hotel", rule: rules.identity, base: "hotel", articleGroups: { singular: "l’ / gli", plural: "il / i" } });
   assert.equal(resolvedNounForms(exception, morphology).definiteSingularArticle, "l’");
 
   const articleless = nounCard({ english: "Hollywood", rule: rules.singularBase, base: "Hollywood", articleProfile: nounArticleProfiles.none });
@@ -260,7 +261,7 @@ test("a wrong answer marks the typed tokens that are wrong", () => {
 });
 
 test("irregular nouns need both forms", () => {
-  const dio = nounCard({ english: "god", irregular: { singular: "dio", plural: "dei" }, articleGroups: { singular: null, plural: "lo" } });
+  const dio = nounCard({ english: "god", irregular: { singular: "dio", plural: "dei" }, articleGroups: { singular: null, plural: "lo / gli" } });
   assert.equal(word(dio, "il dio gli dei").correct, true);
   assert.equal(word(dio, "gli dei il dio").correct, true);
   const single = word(dio, "il dio");
@@ -343,7 +344,7 @@ test("nouns spelled alike in both numbers are placed by their article", () => {
 
 test("articles come from the editable article table", () => {
   const morphology = cloneNounMorphology(defaultNounMorphology);
-  morphology.articleGroups.find((group) => group.name === "consonant").masculine.definiteSingular = "el";
+  morphology.articleGroups.find((group) => group.name === "il / i").masculine.definiteSingular = "el";
   const card = nounCard({ english: "book", rule: rules.oI, base: "libr" });
   assert.equal(word(card, "el libro", { morphology }).correct, true);
   assert.equal(word(card, "il libro", { morphology }).correct, false);
@@ -457,7 +458,7 @@ test("article answers only ask for the articles a noun takes", () => {
   assert.equal(article(nozze, "le").correct, true);
   assert.deepEqual(articlePromptForms(nozze, defaultNounMorphology), ["nozze"]);
 
-  const dio = nounCard({ english: "god", irregular: { singular: "dio", plural: "dei" }, articleGroups: { singular: null, plural: "lo" } });
+  const dio = nounCard({ english: "god", irregular: { singular: "dio", plural: "dei" }, articleGroups: { singular: null, plural: "lo / gli" } });
   assert.equal(article(dio, "il gli un").correct, true);
   assert.deepEqual(articlePromptForms(dio, defaultNounMorphology), ["dio", "dei"]);
 });
@@ -489,7 +490,7 @@ test("words with articles need every article plus the forms word mode asks for",
 test("study items follow the chosen modes", () => {
   const libro = nounCard({ english: "book", rule: rules.oI, base: "libr" });
   const venezia = nounCard({ english: "Venice", rule: rules.singularBase, base: "Venezia", gender: "feminine", articleProfile: nounArticleProfiles.none });
-  const verb = { id: 99, type: "verb", english: "to speak", italian: "parlare", setName: null, tags: [], details: {} };
+  const verb = { id: 99, type: "verb", english: "to speak", italian: "parlare", setName: null, tags: [], editedAt: "2026-01-01T00:00:00.000Z", details: {} };
   const cards = [libro, venezia, verb];
   const setup = { studyWords: true, studyArticles: false, scopeMode: "all", selectedScopes: [], promptMode: "both", typeToVerify: true, oneDirectionPerWord: false, englishFirstWhenBoth: false };
   const modes = (patch) => buildStudyItems(cards, cards, { ...setup, ...patch }, defaultNounMorphology, 0).map((item) => `${item.card.english}:${item.promptLanguage}:${item.mode}`);

@@ -4,16 +4,16 @@ import { nounDraftWithRule, suggestedPlural, type NounDraft } from "./nounDraft"
 import { suggestedAdjectiveForms, type AdjectiveDraft } from "./adjectiveDraft";
 import { newRowId, type AdjectiveBatchRow, type AdverbBatchRow, type NounBatchRow, type VerbBatchRow } from "./editorModel";
 
-/** Keeps at least `minRows` rows and an empty last row, so there's always a row to type the next word into. */
-export function withSpareRows<Row>(rows: Row[], used: (row: Row) => boolean, emptyRow: (id: string) => Row, minRows = 2): Row[] {
-  const next = [...rows];
-  if (!next.length || used(next.at(-1)!)) next.push(emptyRow(newRowId()));
-  while (next.length < minRows) next.push(emptyRow(newRowId()));
-  return next;
+/** Ends the rows with exactly one empty row, so there's always a row to type the next word into. */
+export function withSpareRows<Row>(rows: Row[], used: (row: Row) => boolean, emptyRow: (id: string) => Row): Row[] {
+  let end = rows.length;
+  while (end > 0 && !used(rows[end - 1]!)) end -= 1;
+  // An emptied last row stays (it may be the one being typed in); empty rows after it go.
+  return end < rows.length ? rows.slice(0, end + 1) : [...rows, emptyRow(newRowId())];
 }
 
-export function withoutRow<Row extends { id: string }>(rows: Row[], id: string, used: (row: Row) => boolean, emptyRow: (id: string) => Row, minRows = 2): Row[] {
-  return withSpareRows(rows.filter((row) => row.id !== id), used, emptyRow, minRows);
+export function withoutRow<Row extends { id: string }>(rows: Row[], id: string, used: (row: Row) => boolean, emptyRow: (id: string) => Row): Row[] {
+  return withSpareRows(rows.filter((row) => row.id !== id), used, emptyRow);
 }
 
 /** Refreshes the plural suggestion unless the learner typed a plural. */

@@ -18,6 +18,8 @@
     "src/storage/sync.ts",
     "src/storage/browser.ts",
     "src/storage/merge.ts",
+    "src/cards/edited.ts",
+    "src/cards/batchRows.ts",
     "src/cards/adjectiveMorphology.ts",
     "src/cards/adjectiveDraft.ts",
     "src/study/verification.ts",

@@ -365,6 +365,9 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .grid-table tbody tr.dirty td.select-cell { box-shadow: inset 3px 0 0 var(--accent); }
 .grid-table tbody tr.has-error td.select-cell { box-shadow: inset 3px 0 0 var(--wrong); }
 .grid-table tbody tr.new-row td { background: var(--surface-2); }
+.edited-cell { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.sort-button { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.sort-button:hover, .sort-button.active { color: var(--text); }
 .new-row-mark { display: block; color: var(--muted); font-size: 16px; line-height: 1; text-align: center; }
 .dictionary-note-row td { padding: 0 10px 10px !important; border-top: 0 !important; }
 .grid-table .dictionary-note-row td { padding-left: 52px !important; background: var(--surface-2); }

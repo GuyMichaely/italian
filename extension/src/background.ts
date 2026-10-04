@@ -2,6 +2,7 @@ import { newCardId } from "../../web/src/cards/ids";
 import { appMatch, quietPageUrl } from "./config";
 import { lookUpSelection } from "./dictionary";
 import {
+  lookOps,
   newAddedWord,
   noWords,
   pendingOps,
@@ -9,6 +10,7 @@ import {
   withChoice,
   withEnglish,
   withRemoval,
+  withLookResults,
   withWriteResult,
   wordView,
   type AddedWord,
@@ -167,16 +169,23 @@ async function deliverPending() {
   await refreshToasts(ops.map((op) => op.id));
 }
 
+/**
+ * Runs the changes in a page of the site: an open Italian tab, else the hidden page, else (unless
+ * `quietly`) the site's static page in a background tab.
+ */
+async function runInSite(ops: WriteOp[], quietly = false): Promise<WriteResult> {
+  const appTab = await openAppTab();
+  const throughAppTab = appTab === undefined ? Promise.reject(new Error("No Italian tab is open.")) : writeThrough(appTab, ops);
+  // scripts/e2e.mjs turns the hidden page off to try the background tab.
+  const noHiddenPage = DEV_BUILD && (globalThis as { italianNoHiddenPage?: boolean }).italianNoHiddenPage;
+  const throughHiddenPage = throughAppTab.catch(() => noHiddenPage ? Promise.reject(new Error("Hidden page turned off.")) : writeThroughHiddenPage(ops));
+  return quietly ? throughHiddenPage : throughHiddenPage.catch(() => writeThroughQuietPage(ops));
+}
+
 async function writeAndRecord(pending: ReturnType<typeof pendingOps>, ops: WriteOp[]) {
   let result: WriteResult;
   try {
-    const appTab = await openAppTab();
-    const throughAppTab = appTab === undefined ? Promise.reject(new Error("No Italian tab is open.")) : writeThrough(appTab, ops);
-    // scripts/e2e.mjs turns the hidden page off to try the background tab.
-    const noHiddenPage = DEV_BUILD && (globalThis as { italianNoHiddenPage?: boolean }).italianNoHiddenPage;
-    result = await throughAppTab
-      .catch(() => noHiddenPage ? Promise.reject(new Error("Hidden page turned off.")) : writeThroughHiddenPage(ops))
-      .catch(() => writeThroughQuietPage(ops));
+    result = await runInSite(ops);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     await updateWords((state) => ({ ...state, lastError: `It couldn't be saved: ${reason} It's tried again in a minute.` }));
@@ -184,6 +193,27 @@ async function writeAndRecord(pending: ReturnType<typeof pendingOps>, ops: Write
     return;
   }
   await updateWords((state) => withWriteResult(state, pending, result));
+}
+
+let checking: Promise<void> | null = null;
+
+/** Reads the saved words back, after any save running now, without opening a tab. */
+function checkStored(): Promise<void> {
+  checking ??= (async () => {
+    await delivering;
+    const looks = lookOps(await readWords());
+    if (!looks.length) return;
+    let result: WriteResult;
+    try {
+      result = await runInSite(looks.map((look) => look.op), true);
+    } catch {
+      return;
+    }
+    await updateWords((state) => withLookResults(state, looks, result));
+  })().finally(() => {
+    checking = null;
+  });
+  return checking;
 }
 
 // ---- The toast on the page. ----
@@ -306,6 +336,9 @@ async function handlePopup(request: PopupRequest): Promise<AddedWords> {
       return readWords();
     case "words-forget":
       return updateWords((state) => ({ ...state, words: state.words.filter((word) => word.status === "pending") }));
+    case "words-check":
+      await checkStored();
+      return readWords();
     case "words-retry":
       await updateWords((state) => ({ ...state, lastError: undefined }));
       await deliver();
