@@ -126,23 +126,33 @@ test("the same change made on both sides is no conflict", () => {
   assert.equal(mergeInventory(base, changed, changed).cards[0].english, "right here");
 });
 
-test("deletions are kept unless the other side changed the word", () => {
+const conflictsOf = (run) => {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof InventoryConflictError) return error.conflicts;
+    throw error;
+  }
+  assert.fail("expected a conflict");
+};
+
+test("deletions are kept unless the other side changed the word; choosing settles it", () => {
   const base = inventory([adverb(1, "qui"), adverb(2, "là")]);
   const merged = mergeInventory(base, inventory([adverb(2, "là")]), inventory([adverb(1, "qui"), adverb(2, "là", "there")]));
   assert.deepEqual(merged.cards.map((card) => [card.id, card.english]), [[2, "there"]]);
 
-  assert.throws(
-    () => mergeInventory(base, inventory([adverb(2, "là")]), inventory([adverb(1, "qui", "here!"), adverb(2, "là")])),
-    (error) => error instanceof InventoryConflictError && error.words.join() === "qui",
-  );
+  const mine = inventory([adverb(2, "là")]);
+  const theirs = inventory([adverb(1, "qui", "here!"), adverb(2, "là")]);
+  const [conflict] = conflictsOf(() => mergeInventory(base, mine, theirs));
+  assert.deepEqual([conflict.key, conflict.kind, conflict.mine, conflict.theirs.english], ["card:1", "card", null, "here!"]);
+  assert.deepEqual(mergeInventory(base, mine, theirs, { "card:1": "mine" }).cards.map((card) => card.id), [2]);
+  assert.deepEqual(mergeInventory(base, mine, theirs, { "card:1": "theirs" }).cards.map((card) => card.english), ["here!", "là"]);
 });
 
-test("a word changed differently on both sides is a conflict that names it", () => {
-  const base = inventory([adverb(1, "qui")]);
-  assert.throws(
-    () => mergeInventory(base, inventory([adverb(1, "qui", "right here")]), inventory([adverb(1, "qui", "in here")])),
-    (error) => error instanceof InventoryConflictError && error.words.join() === "qui" && /“qui”/.test(error.message),
-  );
+test("a word changed differently on both sides is a conflict; every conflict is listed at once", () => {
+  const base = inventory([adverb(1, "qui"), adverb(2, "là")]);
+  const conflicts = conflictsOf(() => mergeInventory(base, inventory([adverb(1, "qui", "right here"), adverb(2, "là", "over there")]), inventory([adverb(1, "qui", "in here"), adverb(2, "là", "yonder")])));
+  assert.deepEqual(conflicts.map((conflict) => conflict.key), ["card:1", "card:2"]);
 });
 
 test("settings merge as a whole: one side's change is kept, two different changes conflict", () => {
@@ -151,21 +161,26 @@ test("settings merge as a whole: one side's change is kept, two different change
   assert.equal(merged.studyPreferences.answerKeywords.masculine, "masc");
   assert.equal(merged.cards.length, 2);
 
-  assert.throws(() => mergeInventory(base, withKeyword(base, "masc"), withKeyword(base, "mas")), /study preferences/);
+  const [conflict] = conflictsOf(() => mergeInventory(base, withKeyword(base, "masc"), withKeyword(base, "mas")));
+  assert.deepEqual([conflict.key, conflict.changedInBoth], ["part:studyPreferences", true]);
+  assert.equal(mergeInventory(base, withKeyword(base, "masc"), withKeyword(base, "mas"), { "part:studyPreferences": "theirs" }).studyPreferences.answerKeywords.masculine, "mas");
 });
 
-test("the same word added on both sides is a conflict", () => {
+test("the same word added on both sides is a conflict; the chosen one is kept", () => {
   const base = inventory([]);
-  assert.throws(
-    () => mergeInventory(base, inventory([adverb(2, "qui")]), inventory([adverb(3, "qui")])),
-    (error) => error instanceof InventoryConflictError && /already exists/.test(error.message),
-  );
+  const [conflict] = conflictsOf(() => mergeInventory(base, inventory([adverb(2, "qui")]), inventory([adverb(3, "qui")])));
+  assert.deepEqual([conflict.key, conflict.kind, conflict.mine.id, conflict.theirs.id], ["duplicate:2:3", "duplicate", 2, 3]);
+  assert.deepEqual(mergeInventory(base, inventory([adverb(2, "qui")]), inventory([adverb(3, "qui")]), { "duplicate:2:3": "theirs" }).cards.map((card) => card.id), [3]);
 });
 
-test("a word added on the other side must still fit this side's rules", () => {
+test("a word that doesn't fit the merged rules makes the rules a conflict, naming what each choice drops", () => {
   const base = inventory([]);
   const withoutRule = { ...base, nounMorphology: { ...base.nounMorphology, declensionRules: base.nounMorphology.declensionRules.filter((rule) => rule.name !== "-chio → -chi") } };
-  assert.throws(() => mergeInventory(base, withoutRule, inventory([noun({ id: 5 })])), InventoryConflictError);
+  const theirs = inventory([noun({ id: 5 })]);
+  const [conflict] = conflictsOf(() => mergeInventory(base, withoutRule, theirs));
+  assert.deepEqual([conflict.key, conflict.changedInBoth, conflict.removes.mine.map((card) => card.id), conflict.removes.theirs], ["part:nounMorphology", false, [5], []]);
+  assert.deepEqual(mergeInventory(base, withoutRule, theirs, { "part:nounMorphology": "theirs" }).cards.map((card) => card.id), [5]);
+  assert.deepEqual(mergeInventory(base, withoutRule, theirs, { "part:nounMorphology": "mine" }).cards, []);
 });
 
 // ---- Saving in the browser. ----
@@ -209,4 +224,103 @@ test("a save that conflicts writes nothing", async () => {
   // Replacing (an import) writes over whatever is stored.
   await second.replaceInventory(inventory([adverb(9, "mai")]));
   assert.deepEqual(readLocalSnapshot().cards.map((card) => card.id), [9]);
+});
+
+// ---- Syncing with the server. ----
+
+const { syncOnce, saveSyncToken, SyncSignedOutError } = require(path.join(testDist, "storage", "cloudSync.js"));
+
+/** A fake sync server with the real one's rules, and devices that each have their own storage. */
+function fakeServer() {
+  const server = { version: 0, inventory: null, beforePut: null };
+  global.fetch = async (url, init = {}) => {
+    if (init.headers?.authorization !== "Bearer token") return new Response("{}", { status: 401 });
+    if ((init.method ?? "GET") === "GET") return Response.json({ version: server.version, inventory: server.inventory });
+    server.beforePut?.();
+    server.beforePut = null;
+    const body = JSON.parse(init.body);
+    if (body.baseVersion !== server.version) return Response.json({ version: server.version, inventory: server.inventory }, { status: 409 });
+    server.version += 1;
+    server.inventory = body.inventory;
+    return Response.json({ version: server.version });
+  };
+  return server;
+}
+
+function device(cards) {
+  const localStorage = fakeLocalStorage();
+  const use = () => { global.window = { localStorage }; };
+  use();
+  saveSyncToken("token");
+  if (cards) writeLocalSnapshot({ ...inventory(cards), updatedAt: new Date().toISOString() });
+  return {
+    use,
+    sync: (choices) => { use(); return syncOnce("https://sync.test", "token", choices); },
+    edit: (change) => { use(); const stored = readLocalSnapshot(); writeLocalSnapshot({ ...stored, cards: change(stored.cards).map(normalizeCard), updatedAt: new Date().toISOString() }); },
+    words: () => { use(); return readLocalSnapshot().cards.map((card) => card.english).sort(); },
+  };
+}
+
+test("a first sync uploads this device's words, and a new device takes them", async () => {
+  const server = fakeServer();
+  const laptop = device([adverb(1, "qui", "here")]);
+  await laptop.sync();
+  assert.equal(server.version, 1);
+  const phone = device();
+  await phone.sync();
+  assert.deepEqual(phone.words(), ["here"]);
+  assert.equal(server.version, 1, "nothing new to upload");
+});
+
+test("words added on two devices both end up on both", async () => {
+  fakeServer();
+  const laptop = device([adverb(1, "qui", "here")]);
+  await laptop.sync();
+  const phone = device();
+  await phone.sync();
+  laptop.edit((cards) => [normalizeCard(adverb(2, "là", "there")), ...cards]);
+  phone.edit((cards) => [normalizeCard(adverb(3, "già", "already")), ...cards]);
+  await laptop.sync();
+  await phone.sync();
+  await laptop.sync();
+  assert.deepEqual(laptop.words(), ["already", "here", "there"]);
+  assert.deepEqual(phone.words(), ["already", "here", "there"]);
+});
+
+test("a word changed differently on two devices waits for a choice, then syncs", async () => {
+  const server = fakeServer();
+  const laptop = device([adverb(1, "qui", "here")]);
+  await laptop.sync();
+  const phone = device();
+  await phone.sync();
+  laptop.edit(() => [adverb(1, "qui", "right here")]);
+  phone.edit(() => [adverb(1, "qui", "in here")]);
+  await laptop.sync();
+  await assert.rejects(phone.sync(), (error) => error instanceof InventoryConflictError && error.conflicts[0].key === "card:1");
+  assert.deepEqual(phone.words(), ["in here"], "nothing changed while it waits");
+  await phone.sync({ "card:1": "theirs" });
+  assert.deepEqual(phone.words(), ["right here"]);
+  assert.equal(server.inventory.cards[0].english, "right here");
+});
+
+test("a device that synced in between is merged in, not overwritten", async () => {
+  const server = fakeServer();
+  const laptop = device([adverb(1, "qui", "here")]);
+  await laptop.sync();
+  laptop.edit((cards) => [normalizeCard(adverb(2, "là", "there")), ...cards]);
+  // Another device uploads between this one's download and upload.
+  server.beforePut = () => {
+    server.version += 1;
+    server.inventory = { ...server.inventory, cards: [normalizeCard(adverb(3, "già", "already")), ...server.inventory.cards] };
+  };
+  await laptop.sync();
+  assert.deepEqual(laptop.words(), ["already", "here", "there"]);
+  assert.deepEqual(server.inventory.cards.map((card) => card.english).sort(), ["already", "here", "there"]);
+});
+
+test("a token the server doesn't accept means signing in again", async () => {
+  fakeServer();
+  const laptop = device([adverb(1, "qui")]);
+  laptop.use();
+  await assert.rejects(syncOnce("https://sync.test", "wrong"), SyncSignedOutError);
 });

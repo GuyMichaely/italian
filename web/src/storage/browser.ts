@@ -5,7 +5,7 @@ import {
   emptyInventoryState,
   parseInventoryState,
 } from "./inventoryState";
-import { mergeInventory } from "./merge";
+import { mergeInventory, type MergeChoices } from "./merge";
 import type { CardStorage, InventoryState } from "./types";
 import { storageKey } from "./keys";
 
@@ -67,11 +67,11 @@ export class BrowserStorage implements CardStorage {
     return cloneInventoryState(this.base);
   }
 
-  async saveInventory(state: InventoryState) {
+  async saveInventory(state: InventoryState, choices?: MergeChoices) {
     const mine = parseInventoryState(consistentInventoryState(state), "Inventory");
     const stored = readLocalSnapshot();
     const base = this.base ?? stored;
-    const merged = stored.updatedAt === base.updatedAt ? mine : mergeInventory(base, mine, stored);
+    const merged = stored.updatedAt === base.updatedAt ? mine : mergeInventory(base, mine, stored, choices);
     return this.write(merged);
   }
 

@@ -1,19 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  createCardStorage,
-  readStorageEndpoint,
-  readSyncLoadPolicy,
-  readSyncPersistLocal,
-  saveStorageEndpoint,
-  saveSyncLoadPolicy,
-  saveSyncPersistLocal,
-  type CardStorage,
-  type InventoryState,
-  type SyncLoadPolicy,
-} from "./storage";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BrowserStorage, type InventoryState } from "./storage";
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
-import { InventoryConflictError } from "./storage/merge";
+import { InventoryConflictError, type MergeChoices } from "./storage/merge";
+import { CloudSync, type SyncStatus } from "./storage/cloudSync";
+import { storageKey } from "./storage/keys";
+import { syncServerUrl } from "./syncServer";
+import { ConflictSheet, type ConflictSource } from "./components/ConflictSheet";
 import { withEditTimes } from "./cards/edited";
 import {
   cloneNounMorphology,
@@ -56,6 +49,19 @@ function cardItalianText(card: Flashcard, morphology: NounMorphology, adjectiveM
   return forms.singular || forms.plural;
 }
 
+/** A clash waiting for the learner: with another window's save, or with another device's sync. */
+type PendingConflict = {
+  error: InventoryConflictError;
+  source: ConflictSource;
+  resolve: (choices: MergeChoices) => Promise<void>;
+  /** Closing the screen: drops this window's change, or leaves a sync conflict for later. */
+  dismiss: () => void;
+};
+
+/** Syncs every few minutes while the app is open, to pick up other devices' changes. */
+const syncIntervalMs = 5 * 60_000;
+const inventoryKey = storageKey("inventory");
+
 function cardSearchText(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
   let italian = "";
   try {
@@ -74,13 +80,13 @@ export default function Home() {
   const [nounMorphology, setNounMorphology] = useState<NounMorphology>(() => cloneNounMorphology(defaultNounMorphology));
   const [adjectiveMorphology, setAdjectiveMorphology] = useState<AdjectiveMorphology>(() => cloneAdjectiveMorphology(defaultAdjectiveMorphology));
   const [loadingCards, setLoadingCards] = useState(true);
-  const [storageEndpoint, setStorageEndpoint] = useState(readStorageEndpoint);
-  const [persistLocal, setPersistLocal] = useState(readSyncPersistLocal);
-  const [syncLoadPolicy, setSyncLoadPolicy] = useState<SyncLoadPolicy>(readSyncLoadPolicy);
-  const storage = useMemo<CardStorage>(() => createCardStorage(storageEndpoint, {
-    persistLocal,
-    loadPolicy: syncLoadPolicy,
-  }), [persistLocal, storageEndpoint, syncLoadPolicy]);
+  const storage = useMemo(() => new BrowserStorage(), []);
+  // After a sync changed the words here, show them; refreshRef always holds the current function.
+  const refreshRef = useRef<() => void>(() => undefined);
+  const cloud = useMemo(() => new CloudSync(syncServerUrl, () => refreshRef.current()), []);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloud.current);
+  const savesInFlight = useRef(0);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [adding, setAdding] = useState(false);
   const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
   const [setup, setSetup] = useState<StudySetup>(readStudySetup);
@@ -105,7 +111,8 @@ export default function Home() {
   const [activeReviewSetId, setActiveReviewSetId] = useState<number | null>(null);
   const [mistakeTagName, setMistakeTagName] = useState("");
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
-  const [conflict, setConflict] = useState("");
+  const [windowConflict, setWindowConflict] = useState<PendingConflict | null>(null);
+  const [conflictOpen, setConflictOpen] = useState(false);
 
   const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
@@ -163,6 +170,31 @@ export default function Home() {
       .finally(() => { if (active) setLoadingCards(false); });
     return () => { active = false; };
   }, [storage]);
+
+  // Sync: on opening, when the network or the tab comes back, every few minutes, and after changes
+  // here (this window's saves, or another window's or the extension's, seen as storage events).
+  useEffect(() => {
+    const unsubscribe = cloud.subscribe(setSyncStatus);
+    const sync = () => void cloud.sync();
+    const whenVisible = () => { if (document.visibilityState === "visible") sync(); };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== inventoryKey) return;
+      void refreshFromStorage();
+      scheduleSync();
+    };
+    sync();
+    const interval = setInterval(whenVisible, syncIntervalMs);
+    window.addEventListener("online", sync);
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", whenVisible);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+      window.removeEventListener("online", sync);
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", whenVisible);
+    };
+  }, [cloud]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -304,10 +336,26 @@ export default function Home() {
     removeUnavailableInventoryTags(state.cards);
   }
 
+  /** Shows what's stored here now, unless a save is about to show it. */
+  async function refreshFromStorage() {
+    if (savesInFlight.current) return;
+    try {
+      showInventory(await storage.readInventory());
+    } catch {
+      // The load already reported an unreadable inventory.
+    }
+  }
+  refreshRef.current = () => void refreshFromStorage();
+
+  function scheduleSync() {
+    clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => void cloud.sync(), 1500);
+  }
+
   /**
    * Shows `next` straight away and saves it, merged with anything changed in another window since
    * this one last read or saved. If the save fails the previous inventory comes back; if it
-   * conflicts with the other changes, a banner offers to reload. Throws the save's error.
+   * conflicts with the other changes, the conflict screen asks which to keep. Throws the save's error.
    */
   async function saveInventory(changed: InventoryState, failureMessage: string) {
     const previous: InventoryState = { cards, nounMorphology, adjectiveMorphology, studyPreferences };
@@ -315,19 +363,59 @@ export default function Home() {
     showInventory(next);
     setSyncWarning("");
     setSaveState("saving");
+    savesInFlight.current += 1;
     try {
       showInventory(await storage.saveInventory(next));
-      // What was saved includes the other window's changes, so nothing is left to reload for.
-      setConflict("");
       setSaveState("saved");
+      scheduleSync();
     } catch (error) {
       showInventory(previous);
       setSaveState("failed");
-      if (error instanceof InventoryConflictError) setConflict(error.message);
+      if (error instanceof InventoryConflictError) showWindowConflict(error, next);
       else setSyncWarning(failureMessage);
       throw error;
+    } finally {
+      savesInFlight.current -= 1;
     }
   }
+
+  function showWindowConflict(error: InventoryConflictError, next: InventoryState) {
+    setWindowConflict({
+      error,
+      source: "window",
+      resolve: async (choices) => {
+        try {
+          showInventory(await storage.saveInventory(next, choices));
+          setWindowConflict(null);
+          setConflictOpen(false);
+          setSaveState("saved");
+          scheduleSync();
+        } catch (caught) {
+          if (caught instanceof InventoryConflictError) showWindowConflict(caught, next);
+          else throw caught;
+        }
+      },
+      dismiss: () => {
+        setWindowConflict(null);
+        setConflictOpen(false);
+        void refreshFromStorage();
+      },
+    });
+    setConflictOpen(true);
+  }
+
+  const syncConflict: PendingConflict | null = syncStatus.state === "conflict" ? {
+    error: syncStatus.error,
+    source: "device",
+    resolve: async (choices) => {
+      await cloud.sync(choices);
+      const after = cloud.current;
+      if (after.state === "synced") setConflictOpen(false);
+      else if (after.state !== "conflict") throw new Error("message" in after ? after.message : "Sync didn't finish.");
+    },
+    dismiss: () => setConflictOpen(false),
+  } : null;
+  const conflict = windowConflict ?? syncConflict;
 
   /** Saves a complete card list (and optionally new study preferences); false when it couldn't be saved. */
   async function commitCards(nextCards: Flashcard[], failureMessage: string, nextPreferences = studyPreferences) {
@@ -458,48 +546,15 @@ export default function Home() {
     );
   }
 
-  async function applyStorageSettings(endpoint: string, nextPersistLocal: boolean, nextLoadPolicy: SyncLoadPolicy) {
-    const normalizedEndpoint = endpoint.trim();
-    const effectivePersistLocal = normalizedEndpoint ? nextPersistLocal : true;
-
-    if (!normalizedEndpoint && storageEndpoint) {
-      const latestState = storage.syncNow ? await storage.syncNow() : await storage.readInventory();
-      await createCardStorage("").replaceInventory(latestState);
-      setCards(latestState.cards);
-      setNounMorphology(latestState.nounMorphology);
-      setAdjectiveMorphology(latestState.adjectiveMorphology);
-      setStudyPreferences(latestState.studyPreferences);
-    }
-
-    saveStorageEndpoint(normalizedEndpoint);
-    saveSyncPersistLocal(effectivePersistLocal);
-    saveSyncLoadPolicy(nextLoadPolicy);
-    setStorageEndpoint(normalizedEndpoint);
-    setPersistLocal(effectivePersistLocal);
-    setSyncLoadPolicy(nextLoadPolicy);
-    setSyncWarning("");
-    setSaveState("idle");
-    setCurrent(0);
-    setSessionComplete(false);
-  }
-
-  async function syncNow() {
-    if (!storage.syncNow) return;
-    const nextState = await storage.syncNow();
-    setCards(nextState.cards);
-    setNounMorphology(nextState.nounMorphology);
-    setAdjectiveMorphology(nextState.adjectiveMorphology);
-    setStudyPreferences(nextState.studyPreferences);
-    removeUnavailableInventoryTags(nextState.cards);
-    setCurrent(0);
-    setSessionComplete(false);
+  function signInToSync() {
+    window.location.href = `${syncServerUrl}/signin?return=${encodeURIComponent(window.location.origin + window.location.pathname)}`;
   }
 
   return <>
-    <AppShell route={route} syncing={Boolean(storageEndpoint)} syncLabel={storage.label} saveState={saveState} onAdd={() => setAdding(true)}>
-      {conflict && <div className="sync-warning" role="alert">
-        <p>{conflict}</p>
-        <button type="button" className="neutral-button" onClick={() => window.location.reload()}>Reload</button>
+    <AppShell route={route} sync={syncStatus} saveState={saveState} onAdd={() => setAdding(true)}>
+      {conflict && !conflictOpen && <div className="sync-warning conflict-banner" role="alert">
+        <p>{conflict.error.conflicts.length} {conflict.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with {conflict.source === "window" ? "another window" : "another device"}.{conflict.source === "device" ? " Sync is paused until you choose." : ""}</p>
+        <button type="button" className="neutral-button" onClick={() => setConflictOpen(true)}>Resolve</button>
       </div>}
       {route === "study" && <StudyView
         loading={loadingCards}
@@ -575,7 +630,7 @@ export default function Home() {
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
         <SettingsView
-          storageProps={{ storage, endpoint: storageEndpoint, persistLocal, loadPolicy: syncLoadPolicy, onApply: applyStorageSettings, onSyncNow: syncNow }}
+          storageProps={{ storage, sync: syncStatus, onSignIn: signInToSync, onSignOut: () => cloud.signOut(), onSyncNow: () => void cloud.sync(), onResolve: () => setConflictOpen(true) }}
           morphology={nounMorphology}
           adjectiveMorphology={adjectiveMorphology}
           preferences={studyPreferences}
@@ -585,6 +640,7 @@ export default function Home() {
     </AppShell>
 
     {adding && <AddWordsSheet knownSets={setNames} morphology={nounMorphology} adjectiveMorphology={adjectiveMorphology} onClose={() => setAdding(false)} onBatch={addBatch} />}
+    {conflict && conflictOpen && <ConflictSheet key={conflict.error.conflicts.map((item) => item.key).join()} error={conflict.error} source={conflict.source} onResolve={conflict.resolve} onClose={conflict.dismiss} />}
     {editingCard && <WordDrawer card={editingCard} knownSets={setNames} morphology={nounMorphology} adjectiveMorphology={adjectiveMorphology} studyPreferences={studyPreferences} onClose={() => setEditingCard(null)} onSave={saveWord} onRemove={removeCard} />}
   </>;
 }

@@ -132,13 +132,16 @@ try {
     localStorage.setItem("italian:inventory", JSON.stringify(inventory));
   });
   await app.getByRole("button", { name: "Delete egg" }).click();
-  const banner = app.getByRole("alert").filter({ hasText: "changed in another window" });
-  await banner.waitFor({ timeout: 5000 });
-  assert.match(await banner.textContent(), /“uovo”/);
+  const sheet = app.getByRole("dialog").filter({ hasText: "Changed in another window too" });
+  await sheet.waitFor({ timeout: 5000 });
+  assert.match(await sheet.textContent(), /“uovo”/);
+  assert.match(await sheet.textContent(), /Deleted here, changed in another window/);
   assert.deepEqual(english(await stored(app)), ["dog", "eggs"], "nothing was written");
-  await banner.getByRole("button", { name: "Reload" }).click();
+  await sheet.locator("label.conflict-side").filter({ hasText: "Other window" }).click();
+  await sheet.getByRole("button", { name: "Apply" }).click();
   await app.getByRole("button", { name: "Delete eggs" }).waitFor();
-  console.log("Conflict: banner shown, nothing written, Reload shows the other window's change.");
+  assert.deepEqual(english(await stored(app)), ["dog", "eggs"]);
+  console.log("Conflict: the screen asked, nothing was written until the choice, and the other window's change was kept.");
 
   // ---- Stored data this version doesn't understand is left alone. ----
   await app.evaluate(() => {

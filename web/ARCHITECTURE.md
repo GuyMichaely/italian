@@ -1,13 +1,13 @@
 # Architecture
 
-Italian consists of a static React frontend and an optional remote sync API. Extension work is separate from the web app.
+Italian consists of a static React frontend and an optional sync server (`../sync/`, a Cloudflare Worker). Extension work is separate from the web app.
 
 ```text
 Italian web (React + Vite)
     |
-    +--> local inventory snapshot
+    +--> local inventory (localStorage)
     |
-    +--> optional remote sync snapshot
+    +--> sync server, when signed in (merged three ways on the device)
 ```
 
 ## Web
@@ -64,9 +64,10 @@ src/
     ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview
     ├── NounMorphologyPanel.tsx     declension and article-table editing
-    ├── StorageSettingsPanel.tsx    sync and inventory-transfer settings
+    ├── StorageSettingsPanel.tsx    signing in to sync, and backup and restore
+    ├── ConflictSheet.tsx           the conflict screen: changes made both here and elsewhere, side by side
     ├── AnswerKeywordSettings.tsx   noun marker keyword settings
-    ├── SaveIndicator.tsx           persistence status UI
+    ├── SaveIndicator.tsx           saving and sync status
     └── Icons.tsx                   inline SVG icon set
 ```
 
@@ -92,9 +93,9 @@ See `../docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the detailed model.
 
 ## Storage and sync
 
-Cards and noun morphology form one logical `InventoryState`. `App` loads them with one `readInventory()` call, and every change (adding, editing or deleting words, Grammar, study preferences) is saved as a whole inventory with `saveInventory()`, so card definitions and morphology are validated and saved together. `replaceInventory()` writes over what is stored; only importing a backup and switching storage use it.
+Cards and noun morphology form one logical `InventoryState`. `App` loads them with one `readInventory()` call, and every change (adding, editing or deleting words, Grammar, study preferences) is saved as a whole inventory with `saveInventory()`, so card definitions and morphology are validated and saved together. `replaceInventory()` writes over what is stored; only importing a backup uses it.
 
-Local snapshots contain `cards`, `nounMorphology`, `studyPreferences`, and an internal `updatedAt`. Remote synchronized snapshots contain the same four values. `studyPreferences` holds the answer keywords, drilled declension rules, and nouns that always need both forms; references to deleted nouns or rules are pruned on every save.
+Local snapshots contain `cards`, `nounMorphology`, `adjectiveMorphology`, `studyPreferences`, and an internal `updatedAt`. `studyPreferences` holds the answer keywords, drilled declension rules, and nouns that always need both forms; references to deleted nouns or rules are pruned on every save.
 
 Inventory validation checks relationships between cards and morphology. Every noun must reference an existing rule, and enabled article capabilities must have the necessary noun forms. There is no stored noun surface form to cross-check because morphology is the source of truth.
 
@@ -104,14 +105,17 @@ Each card records when it was added or last changed (`editedAt`). Saving stamps 
 
 - Cards are matched by id. A card added on either side is kept. A card changed or deleted on one side only takes that side's version; the same change on both sides is fine.
 - A card changed differently on both sides, or deleted on one and changed on the other, is a conflict. So are the noun rules, adjective rules, or study preferences changed differently on both sides (each merges as one piece).
-- The merged inventory is validated as usual: every card fits the rules and no word appears twice. A failure is a conflict too.
-- A merge without conflicts is saved and the window shows the merged inventory. On a conflict nothing is written, the window's change is undone, and a banner names the words and offers Reload. Add words drafts are kept on the device, so they survive the reload.
+- The same word added on both sides under different ids is a conflict. So are rules changed on one side such that words in the merge no longer fit them; each choice says which words it would drop.
+- Every conflict has a key, and `mergeInventory(base, mine, theirs, choices)` settles those with a choice. Without one it throws `InventoryConflictError` listing them all, with both versions, and nothing is written.
+- `ConflictSheet` (the conflict screen) shows each conflict side by side and merges again with the choices. Closing it on a window conflict drops this window's change; on a sync conflict, sync waits until it's settled.
+
+Other windows' saves, and the extension's, reach an open window as `storage` events; it shows the new inventory at once.
+
+`storage/cloudSync.ts` syncs signed-in devices through the server, which keeps the inventory and a version. A sync merges the inventory as this browser last synced it, the inventory here, and the server's, saves the result here, and uploads it "only if the server is still on the version merged with"; if another device synced in between it merges again. Syncs run one at a time (across windows too, with a Web Lock), on opening, after changes, when the network or tab comes back, and every five minutes. Signing in goes through Cloudflare Access to the Worker, which sends the app back a token that doesn't expire; see `../sync/README.md`.
 
 New cards get random ids (`cards/ids.ts`) when they are made, so cards added in two places at once can't share an id. Older cards keep their small sequential ids.
 
-Both local and remote sides carry an inventory-level `updatedAt` timestamp. When they differ, the later timestamp wins. Local changes automatically push remotely when sync is configured. The user can choose whether a synchronized local copy persists between browser sessions and whether startup mismatches reconcile automatically or wait for an explicit Sync now action.
-
-Inventory JSON export/import contains `cards`, `nounMorphology`, and `studyPreferences` without transport metadata.
+Inventory JSON export/import contains `cards`, `nounMorphology`, `adjectiveMorphology`, and `studyPreferences` without sync metadata.
 
 ## Morphology editing
 
@@ -131,20 +135,14 @@ This boundary is not a migration layer.
 
 `npm test` compiles parser, preview, synchronization, and import-validation modules into temporary CommonJS test output and runs deterministic Node tests against the real source modules. Test files run serially so their shared temporary CommonJS package marker cannot race.
 
-The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (optional articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article and combined checking in any order, study item modes, prompt gender hints, and study-preference validation and pruning. The sync suite covers automatic newer-remote reconciliation, newer-local push, ask-first reconciliation, non-persistent local mode, and offline fallback. Storage tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected, and cover the three-way merge and saving over changes made in another window.
+The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (optional articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article and combined checking in any order, study item modes, prompt gender hints, and study-preference validation and pruning. Storage tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected, and cover the three-way merge with its conflicts and choices, saving over changes made in another window, and syncing two devices against a fake server (first sign-in, words added on both, a conflict settled by a choice, another device syncing in between, a rejected token). `../sync/scripts/e2e.mjs` tries the same in a browser against `wrangler dev`.
 
-These synchronization tests verify decision logic without mutating a deployed inventory. A live browser-to-API smoke test remains the environment-level check for endpoint configuration, CORS/networking, and deployed persistence.
-
-`.github/workflows/validate.yml` runs `npm ci`, `npm test`, the production web build, API syntax, migration-script syntax, and the extension's typecheck, tests, and build on relevant pull requests and pushes to `main`.
-
-## API
-
-The API is an independent Node service that stores the timestamped inventory snapshot used for synchronization. It validates the same structured noun schema and name-reference morphology structure as the web app. Noun cards omit `italian`; the API validates rule references and article-profile/rule compatibility instead of storing or checking a redundant noun surface form.
+`.github/workflows/validate.yml` runs `npm ci`, `npm test`, the production web build, the sync server's typecheck and tests, migration-script syntax, and the extension's typecheck, tests, and build on relevant pull requests and pushes to `main`.
 
 ## Deployment
 
 - `.github/workflows/deploy-pages.yml` tests, builds, and deploys only the web app to GitHub Pages.
 - `.github/workflows/release-extension.yml` independently validates, signs, and publishes extension release assets through GitHub Releases.
-- `.github/workflows/deploy-api.yml` independently deploys the API to Azure App Service.
+- The sync server is deployed from `../sync/` with `npx wrangler deploy`.
 
 The former Pages extension compatibility path is retired.

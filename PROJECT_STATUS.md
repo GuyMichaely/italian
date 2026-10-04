@@ -18,23 +18,22 @@ Treat each release as if it were a fresh 1.0. Keep one canonical data model. Whe
 
 ## Current architecture
 
-The web app is a static React/Vite application served at `https://guymichaely.com/italian/`. It is local-first and may optionally synchronize the same complete inventory snapshot with the Node API deployed separately to Azure.
+The web app is a static React/Vite application served at `https://guymichaely.com/italian/`. It is local-first, and signed-in devices sync through the Cloudflare Worker in `sync/`.
 
-Cards and noun morphology form one logical inventory. Browser persistence stores one `italian:inventory` JSON value containing cards, noun morphology, and an internal `updatedAt` timestamp. Remote synchronization uses the same complete snapshot and last-write-wins timestamp semantics.
+Cards and noun morphology form one logical inventory. Browser persistence stores one `italian:inventory` JSON value containing cards, noun morphology, and an internal `updatedAt` timestamp.
 
 `Flashcard` is a discriminated union keyed by `type`. Nouns, verbs, adjectives, and adverbs each have their own typed `details` shape. Storage/import code validates external JSON at runtime before it enters that typed model.
 
 ## Inventory synchronization
 
-- Local and remote are copies of one complete inventory snapshot.
-- The later `updatedAt` wins; there is no per-card merge.
-- Local mutations push automatically while sync is configured.
-- The server rejects stale snapshot writes.
-- Startup can reconcile automatically or wait for explicit **Sync now**.
-- Browser persistence can be disabled while remote sync remains active for the session.
-- Manual inventory export/import contains `cards`, `nounMorphology`, and `studyPreferences`, without sync transport metadata.
+- The app works without sync. Settings → **Sign in with Cloudflare** goes through Cloudflare Access (only the owner's Cloudflare login) to get a sync token that doesn't expire; **Sign out** forgets it on that device.
+- The server (`sync/`, a Worker with one Durable Object) stores the inventory and a version; uploads succeed only against the current version.
+- Each device merges three ways (its last-synced copy, its words now, the server's) with the same card-by-card merge windows use. Words added on different devices are all kept.
+- A word or the rules changed differently on two devices pause sync until the conflict screen settles which version to keep. The same screen settles clashes between windows.
+- Sync runs on opening, after changes, when the network or the tab comes back, and every five minutes while the app is open.
+- Manual inventory export/import contains `cards`, `nounMorphology`, `adjectiveMorphology`, and `studyPreferences`, without sync metadata.
 
-Deterministic tests cover newer-remote reconciliation, newer-local push, ask-first behavior, non-persistent local mode, and offline fallback. A real browser-to-Azure smoke test remains an environment-level verification task rather than missing synchronization logic.
+`web/scripts/storage-tests.cjs` covers the merge and the sync protocol against a fake server; `sync/scripts/e2e.mjs` tries two devices in a browser against `wrangler dev`.
 
 ## Inventory and editing
 
@@ -88,12 +87,12 @@ The browser's stored inventory can change while the app is open, from another wi
 
 Test files run serially because they share one temporary CommonJS output directory.
 
-`.github/workflows/validate.yml` runs tests, the production web build, API syntax, migration-script syntax, and repository static checks on relevant pull requests and pushes to `main`.
+`.github/workflows/validate.yml` runs tests, the production web build, the sync server's typecheck and tests, migration-script syntax, and repository static checks on relevant pull requests and pushes to `main`.
 
 ## Deployment
 
 - `.github/workflows/deploy-pages.yml` tests, builds, and deploys only the web app to GitHub Pages.
-- `.github/workflows/deploy-api.yml` independently deploys the optional synchronization API to Azure.
+- The sync server is deployed from `sync/` with `npx wrangler deploy`.
 - Extension release infrastructure is separate from Pages.
 
 The former Pages extension compatibility feed/package path has been removed.
@@ -106,7 +105,6 @@ The current noun and adjective schemas are intentionally canonical and do not re
 
 Remaining work is primarily validation and product iteration:
 
-1. Run a live browser-to-Azure synchronization smoke test.
-2. Manually exercise noun-study edge cases in the actual UI.
-3. Expand automated coverage beyond the current noun-heavy suite if useful.
-4. Continue normal UX/product iteration as new requirements are identified.
+1. Manually exercise noun-study edge cases in the actual UI.
+2. Expand automated coverage beyond the current noun-heavy suite if useful.
+3. Continue normal UX/product iteration as new requirements are identified.

@@ -12,7 +12,7 @@ The app is intentionally small and hosting-provider agnostic:
 - No Next.js.
 - No application server required for local-only use.
 - Browser `localStorage` for optional persistent local inventory state.
-- Optional user-supplied HTTP API for synchronization between machines.
+- Optional sync between devices through the Cloudflare Worker in `../sync/`.
 
 A production build is just static files in `dist/`. The build uses relative asset URLs, so the same `dist/` can be served at `/`, `/italian/`, or another directory without rebuilding.
 
@@ -20,13 +20,7 @@ The canonical production deployment is `https://guymichaely.com/italian/`.
 
 ## Storage and sync
 
-The app always has a local working inventory. With no API endpoint configured, it is local-only.
-
-Configure a sync API endpoint from **Storage & sync** to maintain a remote copy of the same timestamped inventory. Local and remote are not mutually exclusive storage modes.
-
-When local and remote timestamps differ, the newer snapshot is authoritative. Local changes automatically push to remote while sync is configured. Settings control whether the local synchronized copy persists between browser sessions and whether startup mismatches sync automatically or wait for **Sync now**.
-
-See `docs/REMOTE_API.md` for the sync endpoint contract.
+The app always has a local working inventory and works on its own. Settings → **Sign in with Cloudflare** turns on sync with `https://sync.guymichaely.com` (`../sync/`): every signed-in device keeps the same words, changes from each are merged, and anything changed on two devices at once waits on the conflict screen for you to choose. `VITE_SYNC_URL` points a dev build at `wrangler dev`.
 
 ## Noun morphology
 
@@ -36,7 +30,7 @@ See `../docs/NOUN_MORPHOLOGY_AND_STUDY.md` for the model and how answers are che
 
 ## Inventory transfer
 
-**Storage & sync** can export/download the inventory, copy it to the clipboard, import a JSON file, or replace the inventory from pasted JSON.
+**Backup & restore** in Settings can export/download the inventory, copy it to the clipboard, import a JSON file, or replace the inventory from pasted JSON.
 
 The inventory JSON payload contains `cards`, `nounMorphology`, and `studyPreferences`; export-format/version/timestamp metadata is not added.
 

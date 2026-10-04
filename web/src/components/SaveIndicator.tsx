@@ -1,25 +1,20 @@
-import { useEffect, useState } from "react";
-import { readSyncStatus, subscribeSyncStatus } from "../storage";
+import type { SyncStatus } from "../storage/cloudSync";
 
 export type SaveState = "idle" | "saving" | "saved" | "failed";
 
-export function SaveIndicator({ state }: { state: SaveState }) {
-  const [sync, setSync] = useState(readSyncStatus);
+function indicator(className: string, text: string) {
+  return <div className={`save-indicator ${className}`} role="status" aria-live="polite"><i />{text}</div>;
+}
 
-  useEffect(() => subscribeSyncStatus(setSync), []);
-
-  if (state === "saving") return <div className="save-indicator saving" role="status" aria-live="polite"><i />Saving…</div>;
-  if (state === "failed") return <div className="save-indicator failed" role="status" aria-live="polite"><i />Save failed</div>;
-
-  if (sync.status !== "local") {
-    const visualState = sync.status === "synced"
-      ? "saved"
-      : sync.status === "checking" || sync.status === "syncing"
-        ? "saving"
-        : "idle";
-    return <div className={`save-indicator ${visualState}`} role="status" aria-live="polite"><i />{sync.message}</div>;
+export function SaveIndicator({ state, sync }: { state: SaveState; sync: SyncStatus }) {
+  if (state === "saving") return indicator("saving", "Saving…");
+  if (state === "failed") return indicator("failed", "Save failed");
+  switch (sync.state) {
+    case "syncing": return indicator("saving", "Syncing…");
+    case "synced": return indicator("saved", "Synced");
+    case "conflict": return indicator("failed", "Sync needs you");
+    case "offline": return indicator("idle", "Offline");
+    case "error": return indicator("failed", "Sync failed");
+    case "signed-out": return state === "saved" ? indicator("saved", "Saved") : null;
   }
-
-  if (state === "saved") return <div className="save-indicator saved" role="status" aria-live="polite"><i />Saved</div>;
-  return null;
 }

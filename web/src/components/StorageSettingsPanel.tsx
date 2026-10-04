@@ -1,61 +1,45 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   parseInventory,
-  readSyncStatus,
   replaceInventory,
   serializeInventory,
-  subscribeSyncStatus,
   type CardStorage,
-  type SyncLoadPolicy,
 } from "../storage";
+import type { SyncStatus } from "../storage/cloudSync";
+
+function syncSummary(status: SyncStatus): { title: string; detail: string; tone: "local" | "remote" | "warning" } {
+  switch (status.state) {
+    case "signed-out": return { title: "Not syncing", detail: "Your words are kept in this browser. Sign in to keep the same words on every device.", tone: "local" };
+    case "syncing": return { title: "Syncing…", detail: "Merging this browser’s words with the other devices’.", tone: "remote" };
+    case "synced": return { title: "Synced", detail: `Last synced ${new Date(status.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}. Changes sync as you make them.`, tone: "remote" };
+    case "offline": return { title: "Can’t reach the sync server", detail: status.message, tone: "warning" };
+    case "conflict": return { title: "Waiting for you", detail: `${status.error.conflicts.length} ${status.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with another device. Sync is paused until you pick which to keep.`, tone: "warning" };
+    case "error": return { title: "Sync failed", detail: status.message, tone: "warning" };
+  }
+}
 
 export function StorageSettingsPanel({
   storage,
-  endpoint,
-  persistLocal,
-  loadPolicy,
-  onApply,
+  sync,
+  onSignIn,
+  onSignOut,
   onSyncNow,
+  onResolve,
 }: {
   storage: CardStorage;
-  endpoint: string;
-  persistLocal: boolean;
-  loadPolicy: SyncLoadPolicy;
-  onApply: (endpoint: string, persistLocal: boolean, loadPolicy: SyncLoadPolicy) => Promise<void>;
-  onSyncNow: () => Promise<void>;
+  sync: SyncStatus;
+  onSignIn: () => void;
+  onSignOut: () => void;
+  onSyncNow: () => void;
+  onResolve: () => void;
 }) {
-  const [draftEndpoint, setDraftEndpoint] = useState(endpoint);
-  const [draftPersistLocal, setDraftPersistLocal] = useState(persistLocal);
-  const [draftLoadPolicy, setDraftLoadPolicy] = useState<SyncLoadPolicy>(loadPolicy);
-  const [syncStatus, setSyncStatus] = useState(readSyncStatus);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [savedMessage, setSavedMessage] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
   const [transferError, setTransferError] = useState("");
   const [importText, setImportText] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
-  const syncConfigured = Boolean(endpoint.trim());
-  const draftSyncConfigured = Boolean(draftEndpoint.trim());
-
-  useEffect(() => subscribeSyncStatus(setSyncStatus), []);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setSavedMessage("");
-    setSaving(true);
-    try {
-      const normalizedEndpoint = draftEndpoint.trim();
-      await onApply(normalizedEndpoint, normalizedEndpoint ? draftPersistLocal : true, draftLoadPolicy);
-      setSavedMessage(normalizedEndpoint ? "Sync settings saved." : "Saved. Your words are stored in this browser only.");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sync settings could not be changed.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const signedIn = sync.state !== "signed-out";
+  const summary = syncSummary(sync);
 
   function currentInventory() {
     return storage.readInventory();
@@ -100,7 +84,7 @@ export function StorageSettingsPanel({
 
   async function replaceWithImportedInventory(imported: ReturnType<typeof parseInventory>, sourceDescription: string) {
     const confirmed = window.confirm(
-      `Replace the current inventory with the ${imported.cards.length}-card inventory ${sourceDescription}?\n\nThis replaces cards, noun morphology, and study preferences and will sync remotely when sync is configured.`,
+      `Replace the current inventory with the ${imported.cards.length}-card inventory ${sourceDescription}?\n\nThis replaces cards, noun morphology, and study preferences${signedIn ? ", and syncs to your other devices" : ""}.`,
     );
     if (!confirmed) {
       setTransferMessage("Import canceled; the current inventory was not changed.");
@@ -143,66 +127,26 @@ export function StorageSettingsPanel({
     }
   }
 
-  async function syncNow() {
-    setTransferError("");
-    setTransferMessage("");
-    setTransferBusy(true);
-    try {
-      await onSyncNow();
-      setTransferMessage("Sync completed using the newer timestamp.");
-    } catch (caught) {
-      setTransferError(caught instanceof Error ? caught.message : "Inventory could not be synced.");
-    } finally {
-      setTransferBusy(false);
-    }
-  }
-
-  const syncDirty = draftEndpoint.trim() !== endpoint.trim()
-    || (draftSyncConfigured && draftPersistLocal !== persistLocal)
-    || draftLoadPolicy !== loadPolicy;
-
   return <>
-    <form className="settings-section" onSubmit={submit} aria-labelledby="sync-heading">
+    <section className="settings-section" aria-labelledby="sync-heading">
       <div className="settings-section-heading">
         <h2 id="sync-heading">Sync</h2>
-        <p>Your words are always kept in this browser. Add your API server to keep the same copy on every device.</p>
+        <p>Your words are always kept in this browser, and the app works without sync. Signed in, every device keeps the same words: changes made on each are merged, and anything changed on two devices at once is shown for you to choose.</p>
       </div>
-      <div className={`sync-status-card ${syncConfigured ? "remote" : "local"}`}>
+      <div className={`sync-status-card ${summary.tone}`}>
         <span className="status-dot" aria-hidden="true" />
         <div>
-          <strong>{syncConfigured ? syncStatus.message : "Local only"}</strong>
-          <p>{syncConfigured ? "Local and remote are copies of one inventory. The copy with the later timestamp wins." : "No sync server configured."}</p>
+          <strong>{summary.title}</strong>
+          <p>{summary.detail}</p>
         </div>
-        {syncConfigured && <button type="button" className="neutral-button" onClick={() => void syncNow()} disabled={saving || transferBusy}>Sync now</button>}
       </div>
-
-      <label className="field">
-        <span>Sync API endpoint</span>
-        <input type="url" inputMode="url" value={draftEndpoint} onChange={(event) => { setDraftEndpoint(event.target.value); setSavedMessage(""); }} placeholder="https://example.com/cards" autoComplete="off" />
-      </label>
-
-      <label className="check-option">
-        <input type="checkbox" checked={draftSyncConfigured ? draftPersistLocal : true} disabled={!draftSyncConfigured} onChange={(event) => setDraftPersistLocal(event.target.checked)} />
-        <span><strong>Keep a persistent local copy</strong><small>{draftSyncConfigured ? "Store the synchronized inventory in this browser between sessions." : "Always on when no sync server is configured."}</small></span>
-      </label>
-
-      <fieldset className="radio-cards">
-        <legend>When local and remote differ on startup</legend>
-        <label className={draftLoadPolicy === "automatic" ? "selected" : ""}>
-          <input type="radio" name="sync-load-policy" checked={draftLoadPolicy === "automatic"} onChange={() => setDraftLoadPolicy("automatic")} />
-          <span><strong>Sync automatically</strong><small>Copy the newer state over the older one right away.</small></span>
-        </label>
-        <label className={draftLoadPolicy === "ask" ? "selected" : ""}>
-          <input type="radio" name="sync-load-policy" checked={draftLoadPolicy === "ask"} onChange={() => setDraftLoadPolicy("ask")} />
-          <span><strong>Ask first</strong><small>Wait until you press Sync now.</small></span>
-        </label>
-      </fieldset>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {savedMessage && <p className="success-message" role="status">{savedMessage}</p>}
-      <div className="button-row">
-        <button type="submit" className="primary-button" disabled={saving || transferBusy || !syncDirty}>{saving ? "Saving…" : "Save sync settings"}</button>
+      <div className="button-row start">
+        {!signedIn && <button type="button" className="primary-button" onClick={onSignIn}>Sign in with Cloudflare</button>}
+        {sync.state === "conflict" && <button type="button" className="primary-button" onClick={onResolve}>Resolve</button>}
+        {signedIn && sync.state !== "conflict" && <button type="button" className="neutral-button" onClick={onSyncNow} disabled={sync.state === "syncing"}>Sync now</button>}
+        {signedIn && <button type="button" className="text-button" onClick={() => { if (window.confirm("Stop syncing on this device? Your words stay here.")) onSignOut(); }}>Sign out</button>}
       </div>
-    </form>
+    </section>
 
     <section className="settings-section" aria-labelledby="backup-heading">
       <div className="settings-section-heading">
@@ -210,14 +154,14 @@ export function StorageSettingsPanel({
         <p>Export your words, grammar rules, and study preferences as JSON, or replace everything from a backup.</p>
       </div>
       <div className="button-row start">
-        <button type="button" className="neutral-button" onClick={() => void exportInventory()} disabled={saving || transferBusy}>Download backup</button>
-        <button type="button" className="neutral-button" onClick={() => void copyInventory()} disabled={saving || transferBusy}>Copy to clipboard</button>
+        <button type="button" className="neutral-button" onClick={() => void exportInventory()} disabled={transferBusy}>Download backup</button>
+        <button type="button" className="neutral-button" onClick={() => void copyInventory()} disabled={transferBusy}>Copy to clipboard</button>
       </div>
       <div className="restore-box">
         <h3>Restore</h3>
-        <p className="field-hint">Restoring replaces every word and grammar rule{syncConfigured ? " and syncs remotely" : ""}. Make a backup first.</p>
+        <p className="field-hint">Restoring replaces every word and grammar rule{signedIn ? " on every device" : ""}. Make a backup first.</p>
         <div className="button-row start">
-          <button type="button" className="neutral-button" onClick={() => importInput.current?.click()} disabled={saving || transferBusy}>Restore from file…</button>
+          <button type="button" className="neutral-button" onClick={() => importInput.current?.click()} disabled={transferBusy}>Restore from file…</button>
           <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) void importInventory(file);
@@ -230,12 +174,12 @@ export function StorageSettingsPanel({
             onChange={(event) => setImportText(event.target.value)}
             placeholder={'{\n  "cards": [...],\n  "nounMorphology": { ... },\n  "adjectiveMorphology": { ... },\n  "studyPreferences": { ... }\n}'}
             rows={6}
-            disabled={saving || transferBusy}
+            disabled={transferBusy}
             spellCheck={false}
           />
         </label>
         <div className="button-row start">
-          <button type="button" className="neutral-button" onClick={() => void importInventoryText()} disabled={saving || transferBusy || !importText.trim()}>Import pasted JSON</button>
+          <button type="button" className="neutral-button" onClick={() => void importInventoryText()} disabled={transferBusy || !importText.trim()}>Import pasted JSON</button>
         </div>
       </div>
       {transferMessage && <p className="success-message" role="status">{transferMessage}</p>}

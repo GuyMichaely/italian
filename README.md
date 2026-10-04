@@ -4,7 +4,7 @@ Italian is a flashcard suite for learning Italian with three independently under
 
 - `web/` — static React/Vite frontend.
 - `extension/` — Chrome extension: select a word on any page, right-click, and it's added to Italian, filled in from the dictionary.
-- `api/` — optional Node synchronization API.
+- `sync/` — the sync server, a Cloudflare Worker at `https://sync.guymichaely.com` that keeps one copy of the inventory for every signed-in device.
 
 ## Production
 
@@ -16,9 +16,9 @@ The public repository is the canonical source for both the web app and extension
 
 `.github/workflows/release-extension.yml` independently validates, signs, and publishes the extension through GitHub Releases. An installed `0.2.4` client successfully updated to `0.2.5` through that feed, so GitHub Pages no longer packages or publishes an extension compatibility feed.
 
-`.github/workflows/deploy-pages.yml` builds, tests, and deploys only the web app. The optional API is deployed separately to Azure by `.github/workflows/deploy-api.yml`.
+`.github/workflows/deploy-pages.yml` builds, tests, and deploys only the web app. The sync server is deployed with `npx wrangler deploy` from `sync/` (see `sync/README.md`).
 
-The frontend always has a local working inventory. Configuring an API endpoint adds timestamp-based synchronization with a remote copy so the same inventory can be kept in sync across machines.
+The frontend always has a local working inventory and works on its own. Signing in to sync (Settings → Sign in with Cloudflare) keeps the same inventory on every device: changes from each are merged, and anything changed on two devices at once is shown to choose from.
 
 Stored and imported inventories must use the current canonical `Flashcard` schema. Noun cards store a `declension` (a declension rule and base, or an irregular noun's forms), `gender`, `genderDiffersWithPlurality` (the plural takes the other gender, as in l’uovo / le uova), an explicit `articleProfile` object with `definiteSingular`, `definitePlural`, and `indefiniteSingular` Boolean capabilities, and `articleGroups` exceptions. They do not store a top-level `italian` value or article strings: forms come from the declension and articles from the editable article table. Adjective cards likewise store only a `declension` (an adjective rule and base, or an irregular adjective's four forms) and no `italian` value; see `docs/ADJECTIVE_DECLENSIONS.md`. Only the four supported article-profile combinations are accepted: all three capabilities, definite singular only, definite plural only, or none. Italian does not translate retired card schemas at this boundary; `scripts/migrate-noun-declensions.mjs` converts inventories using the earlier rule/base noun shape.
 

@@ -522,6 +522,30 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .sync-status-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); }
 .sync-status-card > div { flex: 1; }
 .sync-status-card p { color: var(--muted); font-size: 13px; }
+.sync-status-card.remote .status-dot { background: var(--accent); }
+.sync-status-card.warning .status-dot { background: var(--wrong); }
+
+/* Conflicts */
+.conflict-sheet { display: grid; gap: 14px; }
+.conflict-row { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.conflict-row h3 { margin: 0; font-size: 15px; }
+.conflict-row header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.conflict-differences { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.conflict-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.conflict-side { display: grid; align-content: start; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.conflict-side.selected { border-color: var(--accent); background: rgba(139, 157, 255, .08); }
+.conflict-side input { position: absolute; opacity: 0; pointer-events: none; }
+.conflict-side strong { font-size: 13px; }
+.conflict-fields { display: grid; gap: 3px; margin: 0; font-size: 13px; }
+.conflict-fields > div { display: flex; gap: 8px; }
+.conflict-fields dt { flex: none; width: 56px; color: var(--faint); }
+.conflict-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.conflict-fields .changed dd { color: var(--text); font-weight: 600; }
+.conflict-fields .changed dt { color: var(--accent); }
+.conflict-deleted, .conflict-removes { margin: 0; color: var(--muted); font-size: 13px; }
+.conflict-banner { display: flex; align-items: center; gap: 12px; }
+.conflict-banner p { flex: 1; margin: 0; }
+@media (max-width: 640px) { .conflict-sides { grid-template-columns: minmax(0, 1fr); } }
 .radio-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; padding: 0; border: 0; }
 .radio-cards legend { margin-bottom: 8px; padding: 0; color: var(--muted); font-size: 13px; font-weight: 560; }
 .radio-cards label { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; cursor: pointer; }
