@@ -25,12 +25,10 @@ Cloudflare Access guards all of `sync.guymichaely.com`: the Access application "
 
 ## Developing
 
-## Developing
-
 ```sh
 npm ci
 npm run typecheck
-npm test                 # sign-in and token checks
+npm test                 # sign-in checks
 npx wrangler deploy      # needs `npx wrangler login` once
 ```
 

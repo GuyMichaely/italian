@@ -19,9 +19,6 @@ export interface Env {
   ACCESS_CERTS?: string;
 }
 
-/** Inventories can grow; this is far above any real one and keeps a mistake from filling storage. */
-const maxInventoryBytes = 5_000_000;
-
 export class InventoryStore extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -78,13 +75,9 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function page(message: string, status: number) {
-  return new Response(`<!doctype html><meta charset="utf-8"><title>Italian sync</title><p style="font:16px system-ui;margin:2em">${message}</p>`, { status, headers: { "content-type": "text/html; charset=utf-8" } });
-}
-
 async function signedIn(request: Request, env: Env) {
   const keys = env.ACCESS_CERTS ? (JSON.parse(env.ACCESS_CERTS) as { keys: Jwk[] }).keys : undefined;
-  const email = await accessEmail(accessJwt(request), env.ACCESS_TEAM_DOMAIN, env.ACCESS_AUD, keys);
+  const email = await accessEmail(accessJwt(request)!, env.ACCESS_TEAM_DOMAIN, env.ACCESS_AUD, keys);
   return Boolean(email && email.toLowerCase() === env.ALLOWED_EMAIL.toLowerCase());
 }
 
@@ -97,11 +90,7 @@ async function inventory(request: Request, env: Env, url: URL) {
     const since = url.searchParams.get("since");
     return json(since !== null && Number(since) === stored.version ? { version: stored.version, unchanged: true } : show(stored));
   }
-  if (request.method !== "PUT") return json({ error: "Use GET or PUT." }, 405);
-  const text = await request.text();
-  if (text.length > maxInventoryBytes) return json({ error: "That inventory is too large." }, 413);
-  const body = JSON.parse(text) as { baseVersion?: unknown; inventory?: unknown };
-  if (typeof body.baseVersion !== "number" || !body.inventory || typeof body.inventory !== "object") return json({ error: "Send { baseVersion, inventory }." }, 400);
+  const body = await request.json() as { baseVersion: number; inventory: unknown };
   const written = await store(env).write(body.baseVersion, JSON.stringify(body.inventory));
   return written.ok ? json({ version: written.version }) : json(show(written), 409);
 }
@@ -116,17 +105,18 @@ export default {
         headers: { "access-control-allow-methods": "GET, PUT", "access-control-allow-headers": "content-type", "access-control-max-age": "86400" },
       }));
     }
-    if (!await signedIn(request, env)) return cors(request, env, url.pathname === "/signin" ? page("This account can’t sync with Italian.", 403) : json({ error: "Sign in to sync." }, 401));
+    if (!await signedIn(request, env)) return cors(request, env, new Response(null, { status: 403 }));
     if (url.pathname === "/signin") {
-      const back = returnUrl(url.searchParams.get("return"), env.APP_URLS);
-      return back ? Response.redirect(`${back}#sync-signed-in`, 302) : page("Open this from the Italian app’s Settings.", 400);
+      // Only back to the app, so signing in can't be used to send someone elsewhere.
+      const back = returnUrl(url.searchParams.get("return")!, env.APP_URLS);
+      return back ? Response.redirect(`${back}#sync-signed-in`, 302) : new Response(null, { status: 403 });
     }
     if (url.pathname === "/live") {
       // Only the app's pages may open one, so another site can't ride on the Access cookie.
-      if (request.headers.get("upgrade") !== "websocket" || !appOrigins(env.APP_URLS).includes(request.headers.get("origin") ?? "")) return json({ error: "Open this from the app." }, 400);
+      if (!appOrigins(env.APP_URLS).includes(request.headers.get("origin")!)) return new Response(null, { status: 403 });
       return store(env).fetch(request);
     }
     if (url.pathname === "/inventory") return cors(request, env, await inventory(request, env, url));
-    return page("Italian sync server.", 404);
+    return new Response(null, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

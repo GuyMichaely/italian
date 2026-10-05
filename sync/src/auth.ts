@@ -21,27 +21,20 @@ async function accessKeys(teamDomain: string, kid: string) {
 }
 
 /** The email Cloudflare Access signed in, if the JWT is genuine, current, and for this app. */
-export async function accessEmail(jwt: string | null, teamDomain: string, audience: string, keys?: Jwk[]): Promise<string | null> {
-  if (!jwt || !audience) return null;
-  const [headerPart, payloadPart, signaturePart] = jwt.split(".");
-  if (!headerPart || !payloadPart || !signaturePart) return null;
-  try {
-    const header = JSON.parse(new TextDecoder().decode(fromBase64url(headerPart))) as { kid?: string; alg?: string };
-    if (header.alg !== "RS256" || !header.kid) return null;
-    const jwk = (keys ?? await accessKeys(teamDomain, header.kid)).find((key) => key.kid === header.kid);
-    if (!jwk) return null;
-    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-    const signed = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, fromBase64url(signaturePart), encoder.encode(`${headerPart}.${payloadPart}`));
-    if (!signed) return null;
-    const payload = JSON.parse(new TextDecoder().decode(fromBase64url(payloadPart))) as { aud?: string | string[]; exp?: number; iss?: string; email?: string };
-    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!audiences.includes(audience)) return null;
-    if (payload.iss !== `https://${teamDomain}`) return null;
-    if (!payload.exp || payload.exp * 1000 < Date.now()) return null;
-    return payload.email ?? null;
-  } catch {
-    return null;
-  }
+export async function accessEmail(jwt: string, teamDomain: string, audience: string, keys?: Jwk[]): Promise<string | null> {
+  const [headerPart, payloadPart, signaturePart] = jwt.split(".") as [string, string, string];
+  const header = JSON.parse(new TextDecoder().decode(fromBase64url(headerPart))) as { kid: string; alg: string };
+  if (header.alg !== "RS256") return null;
+  const jwk = (keys ?? await accessKeys(teamDomain, header.kid)).find((key) => key.kid === header.kid);
+  if (!jwk) return null;
+  const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  const signed = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, fromBase64url(signaturePart), encoder.encode(`${headerPart}.${payloadPart}`));
+  if (!signed) return null;
+  const payload = JSON.parse(new TextDecoder().decode(fromBase64url(payloadPart))) as { aud: string[]; exp: number; iss: string; email: string };
+  if (!payload.aud.includes(audience)) return null;
+  if (payload.iss !== `https://${teamDomain}`) return null;
+  if (payload.exp * 1000 < Date.now()) return null;
+  return payload.email;
 }
 
 /** The JWT Access sent: its header, or its cookie (which is what a local test sets). */
@@ -53,16 +46,10 @@ export function accessJwt(request: Request) {
 }
 
 /** The app address to send the browser back to after signing in, if it's one of the app's. */
-export function returnUrl(requested: string | null, appUrls: string) {
-  if (!requested) return null;
-  const allowed = appUrls.split(/\s+/).filter(Boolean);
-  try {
-    const url = new URL(requested);
-    url.hash = "";
-    return allowed.find((app) => url.href === app || url.href.startsWith(app)) ? url.href : null;
-  } catch {
-    return null;
-  }
+export function returnUrl(requested: string, appUrls: string) {
+  const url = new URL(requested);
+  url.hash = "";
+  return appUrls.split(/\s+/).some((app) => app && url.href.startsWith(app)) ? url.href : null;
 }
 
 /** Origins the app is served from, for CORS and for checking where a live connection comes from. */

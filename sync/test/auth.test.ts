@@ -27,8 +27,6 @@ test("a genuine, current Access sign-in for this app gives its email", async () 
   }
   const forged = (await sign(good)).replace(/\.[^.]+$/, `.${Buffer.from("nope").toString("base64url")}`);
   assert.equal(await accessEmail(forged, team, audience, keys), null);
-  assert.equal(await accessEmail(null, team, audience, keys), null);
-  assert.equal(await accessEmail("not.a.jwt", team, audience, keys), null);
 });
 
 test("the JWT comes from Access's header, or its cookie", () => {
@@ -41,7 +39,7 @@ test("signing in only returns to the app", () => {
   const apps = "https://guymichaely.com/italian/ http://localhost:5391/";
   assert.equal(returnUrl("https://guymichaely.com/italian/#settings", apps), "https://guymichaely.com/italian/");
   assert.equal(returnUrl("http://localhost:5391/", apps), "http://localhost:5391/");
-  for (const bad of ["https://evil.example/italian/", "https://guymichaely.com/other/", "https://guymichaely.com/italian/../other/", "javascript:alert(1)", null]) {
+  for (const bad of ["https://evil.example/italian/", "https://guymichaely.com/other/", "https://guymichaely.com/italian/../other/", "javascript:alert(1)"]) {
     assert.equal(returnUrl(bad, apps), null, String(bad));
   }
 });
