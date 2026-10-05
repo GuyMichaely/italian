@@ -12,11 +12,10 @@ function DictionarySettings() {
   return <section className="settings-section" aria-labelledby="dictionary-heading">
     <div className="settings-section-heading">
       <h2 id="dictionary-heading">Dictionary</h2>
-      <p>When you type an Italian word in Add words or a new row of the Words grid, the app can look it up and fill in its English, gender, and forms. Each lookup downloads a few kilobytes of the dictionary.</p>
     </div>
     <label className="check-option">
       <input type="checkbox" checked={autofill} onChange={(event) => setAutofill(event.target.checked)} />
-      <span><strong>Fill in words from the dictionary</strong><small>Rows where you’ve typed the other fields are left alone. This setting is kept on this device.</small></span>
+      <span><strong>Fill in words from the dictionary</strong><small>When you type an Italian word in Add words or a new row of the Words grid, the app looks it up and fills in its English, gender, and forms. Rows where you’ve typed the other fields are left alone. Each lookup downloads a few kilobytes of the dictionary.</small></span>
     </label>
     <p className="settings-credit">Dictionary data from <a href="https://en.wiktionary.org/" target="_blank" rel="noreferrer">Wiktionary</a>, available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>.</p>
   </section>;

@@ -147,6 +147,9 @@ button.chip.selected { background: var(--accent-soft); border-color: var(--accen
 .save-indicator { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
 .save-indicator.failed { color: var(--wrong); }
 .save-indicator.failed i { width: 7px; height: 7px; border-radius: 50%; background: var(--wrong); }
+.save-indicator.pending { color: var(--caution); }
+.save-indicator.pending i { width: 7px; height: 7px; border-radius: 50%; background: var(--caution); }
+.save-indicator-last { color: var(--muted); font-weight: 500; white-space: pre; }
 .content-frame { width: calc(100% - 48px); margin: 0 auto; padding: 28px 0 64px; }
 .content-frame.route-study { width: min(1120px, 100% - 48px); }
 .bottom-nav { display: none; }
@@ -518,6 +521,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .sync-status-card > div { flex: 1; }
 .sync-status-card p { color: var(--muted); font-size: 13px; }
 .sync-status-card.remote .status-dot { background: var(--accent); }
+.sync-status-card.pending .status-dot { background: var(--caution); }
 .sync-status-card.warning .status-dot { background: var(--wrong); }
 
 /* Conflicts */
@@ -577,6 +581,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 }
 
 @media (max-width: 1000px) {
+  .save-indicator-last { display: none; }
   .words-layout { grid-template-columns: minmax(0, 1fr); }
   .words-rail { display: none; }
   .filters-button { display: inline-flex; }

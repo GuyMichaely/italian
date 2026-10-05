@@ -5,7 +5,8 @@ import {
   serializeInventory,
   type CardStorage,
 } from "../storage";
-import type { SyncMode, SyncStatus } from "../storage/cloudSync";
+import { readLastSynced, type SyncMode, type SyncStatus } from "../storage/cloudSync";
+import { syncTime } from "./SaveIndicator";
 
 const modes: { mode: SyncMode; title: string; detail: string }[] = [
   { mode: "automatic", title: "Automatically", detail: "Your changes go up as you make them, and other devices’ changes appear here as they’re made." },
@@ -13,13 +14,19 @@ const modes: { mode: SyncMode; title: string; detail: string }[] = [
   { mode: "manual", title: "Manually", detail: "Only when you press Sync now. Words from your other devices and the extension wait until then, and the longer devices go between syncs, the likelier a clash." },
 ];
 
-function syncSummary(status: SyncStatus): { title: string; detail: string; tone: "local" | "remote" | "warning" } {
+function syncSummary(status: SyncStatus, mode: SyncMode | Error, unsynced: boolean): { title: string; detail: string; tone: "local" | "remote" | "pending" | "warning" } {
   switch (status.state) {
     case "signed-out": return { title: "Not syncing", detail: "Your words are kept in this browser. Sign in to keep the same words on every device.", tone: "local" };
     case "expired": return { title: "Sign in again", detail: "Your sign-in has expired, so this device has stopped syncing. Your words are kept here and sync once you sign in again.", tone: "warning" };
-    case "idle": return { title: "Signed in", detail: "This device syncs with your other devices.", tone: "remote" };
     case "syncing": return { title: "Syncing…", detail: "Merging this browser’s words with the other devices’.", tone: "remote" };
-    case "synced": return { title: "Synced", detail: `Last synced ${new Date(status.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}. Changes sync as you make them.`, tone: "remote" };
+    case "idle":
+    case "synced": {
+      const at = status.state === "synced" ? status.at : readLastSynced();
+      const last = at ? `Last synced ${syncTime(at)}.` : "Not synced yet.";
+      if (!unsynced) return { title: "Up to date", detail: `${last} Nothing here is waiting to sync.`, tone: "remote" };
+      const next = mode === "manual" ? "Press Sync now to send them." : mode instanceof Error ? "Choose when to sync to send them." : "They’ll sync in a moment.";
+      return { title: "Unsynced changes", detail: `${last} Some changes here haven’t synced yet. ${next}`, tone: "pending" };
+    }
     case "offline": return { title: "Can’t reach the sync server", detail: status.message, tone: "warning" };
     case "conflict": return { title: "Waiting for you", detail: `${status.error.conflicts.length} ${status.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with another device. Sync is paused until you pick which to keep.`, tone: "warning" };
     case "error": return { title: "Sync failed", detail: status.message, tone: "warning" };
@@ -35,10 +42,12 @@ export function StorageSettingsPanel({
   onSignOut,
   onSyncNow,
   onResolve,
+  unsynced,
 }: {
   storage: CardStorage;
   sync: SyncStatus;
   mode: SyncMode | Error;
+  unsynced: boolean;
   onMode: (mode: SyncMode) => void;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -51,7 +60,7 @@ export function StorageSettingsPanel({
   const [importText, setImportText] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
   const signedIn = sync.state !== "signed-out";
-  const summary = syncSummary(sync);
+  const summary = syncSummary(sync, mode, unsynced);
 
   function currentInventory() {
     return storage.readInventory();
@@ -158,7 +167,6 @@ export function StorageSettingsPanel({
           <input type="radio" name="sync-mode" checked={mode === option.mode} onChange={() => onMode(option.mode)} />
           <span><strong>{option.title}</strong><small>{option.detail}</small></span>
         </label>)}
-        <p className="field-hint">This setting is kept on this device.</p>
       </fieldset>}
       <div className="button-row start">
         {!signedIn && <button type="button" className="primary-button" onClick={onSignIn}>Sign in with Cloudflare</button>}

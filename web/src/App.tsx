@@ -3,7 +3,7 @@ import { BrowserStorage, type InventoryState } from "./storage";
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
 import { InventoryConflictError, type MergeChoices } from "./storage/merge";
-import { CloudSync, LiveUpdates, readSyncMode, saveSyncMode, type SyncMode, type SyncStatus } from "./storage/cloudSync";
+import { CloudSync, hasUnsyncedChanges, LiveUpdates, readSyncMode, saveSyncMode, type SyncMode, type SyncStatus } from "./storage/cloudSync";
 import { storageKey } from "./storage/keys";
 import { syncServerUrl } from "./syncServer";
 import { ConflictSheet, type ConflictSource } from "./components/ConflictSheet";
@@ -124,6 +124,11 @@ export default function Home() {
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
   const [windowConflict, setWindowConflict] = useState<PendingConflict | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
+  // Read again after every sync (syncStatus changes) as well as every change here.
+  const unsynced = useMemo(
+    () => syncStatus.state !== "signed-out" && !loadingCards && hasUnsyncedChanges({ cards, nounMorphology, adjectiveMorphology, studyPreferences }),
+    [syncStatus, loadingCards, cards, nounMorphology, adjectiveMorphology, studyPreferences],
+  );
 
   const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
@@ -576,7 +581,7 @@ export default function Home() {
   }
 
   return <>
-    <AppShell route={route} sync={syncStatus} syncMode={syncMode} saveState={saveState} onAdd={() => setAdding(true)}>
+    <AppShell route={route} sync={syncStatus} syncMode={syncMode} unsynced={unsynced} saveState={saveState} onAdd={() => setAdding(true)}>
       {conflict && !conflictOpen && <div className="sync-warning conflict-banner" role="alert">
         <p>{conflict.error.conflicts.length} {conflict.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with {conflict.source === "window" ? "another window" : "another device"}.{conflict.source === "device" ? " Sync is paused until you choose." : ""}</p>
         <button type="button" className="neutral-button" onClick={() => setConflictOpen(true)}>Resolve</button>
@@ -655,7 +660,7 @@ export default function Home() {
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
         <SettingsView
-          storageProps={{ storage, sync: syncStatus, mode: syncMode, onMode: (mode) => { saveSyncMode(mode); setSyncMode(mode); }, onSignIn: signInToSync, onSignOut: () => cloud.signOut(), onSyncNow: () => void cloud.sync(), onResolve: () => setConflictOpen(true) }}
+          storageProps={{ storage, sync: syncStatus, mode: syncMode, onMode: (mode) => { saveSyncMode(mode); setSyncMode(mode); }, onSignIn: signInToSync, onSignOut: () => cloud.signOut(), onSyncNow: () => void cloud.sync(), onResolve: () => setConflictOpen(true), unsynced }}
           morphology={nounMorphology}
           adjectiveMorphology={adjectiveMorphology}
           preferences={studyPreferences}

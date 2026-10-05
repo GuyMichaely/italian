@@ -88,6 +88,12 @@ export function saveSyncMode(mode: SyncMode) {
   window.localStorage.setItem(modeKey, mode);
 }
 
+/** Whether `inventory` has changes this device hasn't synced: true until its first sync. */
+export function hasUnsyncedChanges(inventory: InventoryState) {
+  const base = readBase();
+  return !base || !inventoryStatesEqual(base.inventory, inventory);
+}
+
 function readBase(): Base | null {
   const stored = window.localStorage.getItem(baseKey);
   if (!stored) return null;

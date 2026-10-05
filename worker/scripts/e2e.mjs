@@ -20,7 +20,7 @@ try {
     await page.goto(appUrl);
     await page.goto(`${syncUrl}/signin`);
     await page.waitForURL(`${appUrl}#/settings`);
-    await page.getByText("Synced", { exact: true }).first().waitFor({ timeout: 15000 });
+    await page.getByText("Up to date", { exact: true }).first().waitFor({ timeout: 15000 });
     return { name, page };
   }
 
