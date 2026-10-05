@@ -5,7 +5,7 @@ import { panelStyles, renderPanel } from "./panel";
 
 declare global {
   interface Window {
-    italianToastAlive?: () => boolean;
+    italianToast?: true;
   }
 }
 
@@ -21,10 +21,9 @@ const styles = `
 `;
 
 (() => {
-  // A toast left from an older version of the extension can't reach it any more; replace it.
-  if (window.italianToastAlive?.()) return;
-  window.italianToastAlive = () => Boolean(chrome.runtime?.id);
-  document.getElementById("italian-extension-toast")?.remove();
+  // The background injects this before every toast; once per page is enough.
+  if (window.italianToast) return;
+  window.italianToast = true;
 
   const host = document.createElement("div");
   host.id = "italian-extension-toast";

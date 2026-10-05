@@ -77,9 +77,12 @@ export function forgetSync() {
   window.localStorage.removeItem(baseKey);
 }
 
+/** The device's sync mode: Automatically until one is chosen. Throws on a value it doesn't know. */
 export function readSyncMode(): SyncMode {
-  const stored = read(modeKey);
-  return stored === "on-edit" || stored === "manual" ? stored : "automatic";
+  const stored = window.localStorage.getItem(modeKey);
+  if (stored === null) return "automatic";
+  if (stored === "automatic" || stored === "on-edit" || stored === "manual") return stored;
+  throw new Error(`This device's sync setting is “${stored}”, which isn't one this version knows. Choose when to sync.`);
 }
 
 export function saveSyncMode(mode: SyncMode) {

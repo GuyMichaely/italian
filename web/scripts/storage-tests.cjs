@@ -79,6 +79,28 @@ test("saving stamps new and changed cards with the time, and leaves the rest", (
   assert.deepEqual(after.map((card) => card.editedAt), ["2026-10-04T12:00:00.000Z", "2026-10-04T12:00:00.000Z", before[1].editedAt]);
 });
 
+test("cards with fields of the wrong kind, or extra fields, are refused rather than patched up", () => {
+  for (const bad of [
+    adverb(1, "qui", 5),
+    adverb(1, "qui", "here", { id: "1" }),
+    adverb(1, "qui", "here", { tags: "a, b" }),
+    adverb(1, "qui", "here", { tags: [3] }),
+    adverb(1, "qui", "here", { setName: "" }),
+    adverb(1, "qui", "here", { setName: 7 }),
+    adverb(1, 4, "here"),
+    adverb(1, "qui", "here", { addedFrom: "somewhere" }),
+    noun({ details: { ...noun().details, declension: { kind: "rule", rule: "-chio → -chi", base: 3 } } }),
+  ]) {
+    assert.throws(() => normalizeCard(bad), Error, JSON.stringify(bad));
+  }
+});
+
+test("an inventory with two cards under one id, or one word twice, is refused", () => {
+  const { parseInventoryState } = require(path.join(testDist, "storage", "inventoryState.js"));
+  assert.throws(() => parseInventoryState(inventory([adverb(1, "qui"), adverb(1, "là")]), "Test"), /same id/);
+  assert.throws(() => parseInventoryState(inventory([adverb(1, "qui"), adverb(2, "qui")]), "Test"), /already exists/);
+});
+
 test("a noun whose article profile its declension can't support doesn't fit the rules", () => {
   const card = normalizeCard(noun({
     english: "clothes",

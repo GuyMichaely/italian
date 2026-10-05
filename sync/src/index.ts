@@ -8,6 +8,7 @@
 //   GET  /live                     a WebSocket that's sent { version } whenever the inventory changes
 import { DurableObject } from "cloudflare:workers";
 import { accessEmail, accessJwt, appOrigins, returnUrl, type Jwk } from "./auth.ts";
+import { parseInventoryState } from "../../web/src/storage/inventoryState";
 
 export interface Env {
   INVENTORY: DurableObjectNamespace<InventoryStore>;
@@ -83,15 +84,23 @@ async function signedIn(request: Request, env: Env) {
 
 const store = (env: Env) => env.INVENTORY.get(env.INVENTORY.idFromName("inventory"));
 
-async function inventory(request: Request, env: Env, url: URL) {
+async function handleInventory(request: Request, env: Env, url: URL) {
   const show = (stored: { version: number; inventory: string | null }) => ({ version: stored.version, inventory: stored.inventory && JSON.parse(stored.inventory) });
   if (request.method === "GET") {
     const stored = await store(env).read();
     const since = url.searchParams.get("since");
     return json(since !== null && Number(since) === stored.version ? { version: stored.version, unchanged: true } : show(stored));
   }
-  const body = await request.json() as { baseVersion: number; inventory: unknown };
-  const written = await store(env).write(body.baseVersion, JSON.stringify(body.inventory));
+  const body = await request.json() as { baseVersion: unknown; inventory: unknown };
+  // Whatever is sent, only an inventory the app can read is stored: the app's own checks decide.
+  let inventory;
+  try {
+    if (!Number.isSafeInteger(body.baseVersion)) throw new Error("No version.");
+    inventory = parseInventoryState(body.inventory, "The upload");
+  } catch {
+    return new Response(null, { status: 400 });
+  }
+  const written = await store(env).write(body.baseVersion as number, JSON.stringify(inventory));
   return written.ok ? json({ version: written.version }) : json(show(written), 409);
 }
 
@@ -116,7 +125,7 @@ export default {
       if (!appOrigins(env.APP_URLS).includes(request.headers.get("origin")!)) return new Response(null, { status: 403 });
       return store(env).fetch(request);
     }
-    if (url.pathname === "/inventory") return cors(request, env, await inventory(request, env, url));
+    if (url.pathname === "/inventory") return cors(request, env, await handleInventory(request, env, url));
     return new Response(null, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

@@ -6,6 +6,7 @@ import {
   nonEmptyString,
   normalizeText,
   objectValue,
+  textField,
 } from "./nounMorphology";
 
 export type { AdjectiveDeclension, AdjectiveForm, AdjectiveForms } from "./types";
@@ -173,7 +174,7 @@ export function normalizeAdjectiveMorphology(value: unknown): AdjectiveMorpholog
     if (name === irregularDeclensionName || name.startsWith(":")) throw new Error(`“${name}” is reserved; choose another adjective rule name.`);
     const raws = objectValue(rule.endings, `Adjective rule ${name} endings`);
     assertExactKeys(raws, `Adjective rule ${name} endings`, adjectiveForms);
-    const ruleEndings = Object.fromEntries(adjectiveForms.map((form) => [form, String(raws[form] ?? "").normalize("NFC").trim()])) as AdjectiveForms;
+    const ruleEndings = Object.fromEntries(adjectiveForms.map((form) => [form, textField(raws[form], `Adjective rule ${name} ${form} ending`).normalize("NFC").trim()])) as AdjectiveForms;
     return { name, endings: ruleEndings };
   });
   assertUniqueNames(declensionRules, "adjective rule");

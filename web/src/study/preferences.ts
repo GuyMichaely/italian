@@ -3,6 +3,7 @@ import {
   pluralIsPredictable,
   resolvedNounForms,
   singularIsPredictable,
+  textField,
   type NounMorphology,
   type NounFormNumber,
   type NounGender,
@@ -104,7 +105,7 @@ export function normalizeAnswerKeywords(value: unknown): AnswerKeywords {
   const raw = objectValue(value, "Answer keywords");
   assertExactKeys(raw, "Answer keywords", ["masculine", "feminine", "singularOnly", "pluralOnly"]);
   const keywords = Object.fromEntries((Object.keys(defaultAnswerKeywords) as (keyof AnswerKeywords)[]).map((key) => {
-    const keyword = String(raw[key] ?? "").normalize("NFC").trim().toLocaleLowerCase("it-IT");
+    const keyword = textField(raw[key], "An answer keyword").normalize("NFC").trim().toLocaleLowerCase("it-IT");
     if (!keyword || /\s|[|:"'’]/u.test(keyword)) throw new Error("Each answer keyword must be one token without spaces, quotes, or apostrophes.");
     return [key, keyword];
   })) as AnswerKeywords;
@@ -116,7 +117,7 @@ export function normalizeAnswerKeywords(value: unknown): AnswerKeywords {
 function ruleNameList(value: unknown, label: string) {
   if (!Array.isArray(value)) throw new Error(`Study preferences need a ${label} array.`);
   return [...new Set(value.map((name) => {
-    const rule = String(name ?? "").trim();
+    const rule = textField(name, "A full-declension rule name").trim();
     if (!rule) throw new Error("Full-declension rule names must be non-empty.");
     return rule;
   }))];

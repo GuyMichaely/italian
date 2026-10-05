@@ -85,7 +85,14 @@ export default function Home() {
   const refreshRef = useRef<() => void>(() => undefined);
   const cloud = useMemo(() => new CloudSync(syncServerUrl, () => refreshRef.current()), []);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloud.current);
-  const [syncMode, setSyncMode] = useState<SyncMode>(readSyncMode);
+  // An unknown stored mode is shown in Settings, and nothing syncs on its own until one is chosen.
+  const [syncMode, setSyncMode] = useState<SyncMode | Error>(() => {
+    try {
+      return readSyncMode();
+    } catch (error) {
+      return error as Error;
+    }
+  });
   const syncModeRef = useRef(syncMode);
   syncModeRef.current = syncMode;
   const syncOn = syncStatus.state !== "signed-out" && syncStatus.state !== "expired";
@@ -191,7 +198,7 @@ export default function Home() {
   // Syncing on its own (see SyncMode): on opening and on coming back (the network, or the tab);
   // automatically also as other devices change things, through a live connection.
   useEffect(() => {
-    if (!syncOn || syncMode === "manual") return;
+    if (!syncOn || syncMode === "manual" || syncMode instanceof Error) return;
     const sync = () => void cloud.sync();
     const live = syncMode === "automatic" ? new LiveUpdates(syncServerUrl, (version) => { if (version !== cloud.syncedVersion()) sync(); }) : null;
     const whenVisible = () => {
@@ -365,7 +372,7 @@ export default function Home() {
 
   /** After a change here: syncs shortly, unless this device syncs only when asked. */
   function scheduleSync() {
-    if (syncModeRef.current === "manual" || !cloud.signedIn) return;
+    if (syncModeRef.current === "manual" || syncModeRef.current instanceof Error || !cloud.signedIn) return;
     clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => void cloud.sync(), 1500);
   }

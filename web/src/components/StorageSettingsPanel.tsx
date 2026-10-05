@@ -38,7 +38,7 @@ export function StorageSettingsPanel({
 }: {
   storage: CardStorage;
   sync: SyncStatus;
-  mode: SyncMode;
+  mode: SyncMode | Error;
   onMode: (mode: SyncMode) => void;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -154,6 +154,7 @@ export function StorageSettingsPanel({
       </div>
       {signedIn && <fieldset className="radio-cards stacked">
         <legend>When to sync</legend>
+        {mode instanceof Error && <p className="form-error" role="alert">{mode.message}</p>}
         {modes.map((option) => <label key={option.mode} className={mode === option.mode ? "selected" : ""}>
           <input type="radio" name="sync-mode" checked={mode === option.mode} onChange={() => onMode(option.mode)} />
           <span><strong>{option.title}</strong><small>{option.detail}</small></span>

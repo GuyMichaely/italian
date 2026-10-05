@@ -16,22 +16,23 @@ function assertExactKeys(value: Record<string, unknown>, label: string, expected
   }
 }
 
-function stringField(value: unknown) {
-  return String(value ?? "");
+/** A stored text field: it must be text, and non-empty unless `optional`. */
+function stringField(value: unknown, label: string, optional = false) {
+  if (typeof value !== "string" || (!optional && !value.trim())) throw new Error(`${label} must be ${optional ? "text" : "non-empty text"}.`);
+  return value;
 }
 
 function normalizeNounDeclension(value: unknown, id: number): NounDeclension {
   const declension = objectValue(value, `Noun card ${id} declension`);
   if (declension.kind === "rule") {
     assertExactKeys(declension, `Noun card ${id} rule declension`, ["kind", "rule", "base"]);
-    const rule = String(declension.rule ?? "").trim();
-    if (!rule) throw new Error(`Noun card ${id} needs a declension rule name.`);
-    return { kind: "rule", rule, base: String(declension.base ?? "").normalize("NFC") };
+    const rule = stringField(declension.rule, `Noun card ${id}'s declension rule`).trim();
+    return { kind: "rule", rule, base: stringField(declension.base, `Noun card ${id}'s base`, true).normalize("NFC") };
   }
   if (declension.kind === "irregular") {
     assertExactKeys(declension, `Noun card ${id} irregular declension`, ["kind", "singular", "plural"]);
-    const singular = String(declension.singular ?? "").normalize("NFC").trim();
-    const plural = String(declension.plural ?? "").normalize("NFC").trim();
+    const singular = stringField(declension.singular, `Noun card ${id}'s singular`, true).normalize("NFC").trim();
+    const plural = stringField(declension.plural, `Noun card ${id}'s plural`, true).normalize("NFC").trim();
     if (!singular && !plural) throw new Error(`Irregular noun card ${id} needs a singular or plural form.`);
     return { kind: "irregular", singular, plural };
   }
@@ -43,9 +44,7 @@ function normalizeArticleGroupOverrides(value: unknown, id: number): NounArticle
   assertExactKeys(overrides, `Noun card ${id} article groups`, ["singular", "plural"]);
   const group = (raw: unknown) => {
     if (raw === null) return null;
-    const name = String(raw ?? "").trim();
-    if (!name) throw new Error(`Noun card ${id} article group exceptions must be a group name or null.`);
-    return name;
+    return stringField(raw, `Noun card ${id}'s article group exception`).trim();
   };
   return { singular: group(overrides.singular), plural: group(overrides.plural) };
 }
@@ -113,28 +112,23 @@ export function assertNoDuplicateCards(existing: Flashcard[], incoming: Flashcar
 
 export function normalizeCard(value: unknown): Flashcard {
   const raw = objectValue(value, "Card");
-  const id = Number(raw.id);
-  const type = raw.type;
-  const english = String(raw.english ?? "");
-  if (!Number.isFinite(id) || typeof type !== "string" || !cardTypes.includes(type as CardType) || !english) {
+  const { id, type, english, setName, tags, editedAt } = raw;
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0 || typeof type !== "string" || !cardTypes.includes(type as CardType) || typeof english !== "string" || !english.trim()) {
     throw new Error("Storage returned an incomplete or invalid card.");
   }
-
-  const editedAt = typeof raw.editedAt === "string" ? raw.editedAt : "";
-  if (!editedAt || Number.isNaN(Date.parse(editedAt))) throw new Error(`Card ${id} needs the time it was edited (editedAt).`);
-  const common = {
-    id,
-    english,
-    setName: typeof raw.setName === "string" && raw.setName ? raw.setName : null,
-    tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
-    editedAt,
-  };
+  if (typeof editedAt !== "string" || Number.isNaN(Date.parse(editedAt))) throw new Error(`Card ${id} needs the time it was edited (editedAt).`);
+  if (setName !== null && (typeof setName !== "string" || !setName.trim())) throw new Error(`Card ${id}'s set must be a name or null.`);
+  if (!Array.isArray(tags) || tags.some((tag) => typeof tag !== "string" || !tag.trim())) throw new Error(`Card ${id}'s tags must be a list of names.`);
+  if (type === "noun" || type === "adjective") {
+    if (Object.prototype.hasOwnProperty.call(raw, "italian")) throw new Error(`${type === "noun" ? "Noun" : "Adjective"} card ${id} must not store a derived italian field.`);
+    assertExactKeys(raw, `Card ${id}`, ["id", "type", "english", "setName", "tags", "editedAt", "details"]);
+  } else {
+    assertExactKeys(raw, `Card ${id}`, ["id", "type", "english", "italian", "setName", "tags", "editedAt", "details"]);
+  }
+  const common = { id, english, setName: setName as string | null, tags: tags as string[], editedAt };
   const details = objectValue(raw.details, `${type} card ${id} details`);
 
   if (type === "noun") {
-    if (Object.prototype.hasOwnProperty.call(raw, "italian")) {
-      throw new Error(`Noun card ${id} must not store a derived italian field.`);
-    }
     assertExactKeys(details, `Noun card ${id} details`, ["articleGroups", "articleProfile", "declension", "gender", "genderDiffersWithPlurality"]);
     const gender = details.gender;
     if (gender !== "masculine" && gender !== "feminine") throw new Error(`Noun card ${id} has an invalid gender.`);
@@ -153,9 +147,6 @@ export function normalizeCard(value: unknown): Flashcard {
   }
 
   if (type === "adjective") {
-    if (Object.prototype.hasOwnProperty.call(raw, "italian")) {
-      throw new Error(`Adjective card ${id} must not store a derived italian field.`);
-    }
     assertExactKeys(details, `Adjective card ${id} details`, ["declension"]);
     return {
       ...common,
@@ -164,8 +155,8 @@ export function normalizeCard(value: unknown): Flashcard {
     };
   }
 
-  const italian = String(raw.italian ?? "");
-  if (!italian) throw new Error(`Storage returned a ${type} card without an Italian form.`);
+  const italian = raw.italian;
+  if (typeof italian !== "string" || !italian.trim()) throw new Error(`Storage returned a ${type} card without an Italian form.`);
 
   if (type === "verb") {
     assertExactKeys(details, `Verb card ${id} details`, ["io", "tu", "luiLei", "noi", "voi", "loro", "auxiliary", "participle"]);
@@ -176,14 +167,14 @@ export function normalizeCard(value: unknown): Flashcard {
       type: "verb",
       italian,
       details: {
-        io: stringField(details.io),
-        tu: stringField(details.tu),
-        luiLei: stringField(details.luiLei),
-        noi: stringField(details.noi),
-        voi: stringField(details.voi),
-        loro: stringField(details.loro),
+        io: stringField(details.io, `Verb card ${id}'s io`),
+        tu: stringField(details.tu, `Verb card ${id}'s tu`),
+        luiLei: stringField(details.luiLei, `Verb card ${id}'s luiLei`),
+        noi: stringField(details.noi, `Verb card ${id}'s noi`),
+        voi: stringField(details.voi, `Verb card ${id}'s voi`),
+        loro: stringField(details.loro, `Verb card ${id}'s loro`),
         auxiliary,
-        participle: stringField(details.participle),
+        participle: stringField(details.participle, `Verb card ${id}'s participle`),
       },
     };
   }

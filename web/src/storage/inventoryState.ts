@@ -20,7 +20,7 @@ import {
   normalizeStudyPreferences,
   prunedStudyPreferences,
 } from "../study/preferences";
-import { cloneCards, normalizeCard } from "./cardCodec";
+import { assertNoDuplicateCards, cloneCards, normalizeCard } from "./cardCodec";
 import type { InventoryState } from "./types";
 
 /** Throws when a noun or adjective cannot be generated from the morphology (unknown rule, wrong gender, …). */
@@ -68,8 +68,11 @@ export function parseInventoryState(value: unknown, label: string): InventorySta
   if (!payload.nounMorphology) throw new Error(`${label} does not contain nounMorphology.`);
   if (!payload.adjectiveMorphology) throw new Error(`${label} does not contain adjectiveMorphology.`);
   if (!payload.studyPreferences) throw new Error(`${label} does not contain studyPreferences.`);
+  const cards = payload.cards.map(normalizeCard);
+  if (new Set(cards.map((card) => card.id)).size !== cards.length) throw new Error(`${label} has two cards with the same id.`);
+  assertNoDuplicateCards([], cards);
   return assertInventoryState({
-    cards: payload.cards.map(normalizeCard),
+    cards,
     nounMorphology: normalizeNounMorphology(payload.nounMorphology),
     adjectiveMorphology: normalizeAdjectiveMorphology(payload.adjectiveMorphology),
     studyPreferences: normalizeStudyPreferences(payload.studyPreferences),

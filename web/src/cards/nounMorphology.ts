@@ -144,16 +144,22 @@ export function assertExactKeys(value: Record<string, unknown>, label: string, e
 }
 
 export function nonEmptyString(value: unknown, label: string) {
-  const result = String(value ?? "").trim();
+  const result = typeof value === "string" ? value.trim() : "";
   if (!result) throw new Error(`${label} must be a non-empty string.`);
   return result;
+}
+
+/** Text that may be empty, such as a suffix; anything else is an error. */
+export function textField(value: unknown, label: string) {
+  if (typeof value !== "string") throw new Error(`${label} must be text.`);
+  return value;
 }
 
 function normalizedTransform(value: unknown, label: string): NounFormTransform | undefined {
   if (value === undefined || value === null) return undefined;
   const transform = objectValue(value, label);
   assertExactKeys(transform, label, ["suffix"]);
-  return { suffix: String(transform.suffix ?? "").normalize("NFC") };
+  return { suffix: textField(transform.suffix, `${label} suffix`).normalize("NFC") };
 }
 
 export function assertUniqueNames(values: { name: string }[], label: string) {
@@ -488,7 +494,7 @@ function normalizeArticleSet(value: unknown, label: string): NounArticleSet {
 
 function normalizeLetterList(value: unknown, label: string) {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array of letters.`);
-  const letters = [...new Set(value.map((item) => normalizeText(String(item ?? ""))))];
+  const letters = [...new Set(value.map((item) => normalizeText(textField(item, label))))];
   for (const letter of letters) {
     if ([...letter].length !== 1 || !/\p{L}/u.test(letter)) throw new Error(`${label} must contain single letters; “${letter}” is not one.`);
   }
