@@ -20,7 +20,7 @@ try {
     await page.goto(appUrl);
     await page.goto(`${syncUrl}/signin`);
     await page.waitForURL(`${appUrl}#/settings`);
-    await page.getByText("Up to date", { exact: true }).first().waitFor({ timeout: 15000 });
+    await page.locator(".save-indicator", { hasText: "Last sync" }).waitFor({ timeout: 15000 });
     return { name, page };
   }
 
@@ -35,8 +35,9 @@ try {
 
   async function syncNow({ page }) {
     await page.goto(`${appUrl}#/settings`);
+    const before = await page.evaluate(() => localStorage.getItem("italian:sync-at"));
     await page.getByRole("button", { name: "Sync now" }).click();
-    await page.waitForFunction(() => document.querySelector(".sync-status-card strong")?.textContent !== "Syncing…");
+    await page.waitForFunction((before) => localStorage.getItem("italian:sync-at") !== before, before);
     await page.goto(`${appUrl}#/words`);
   }
 

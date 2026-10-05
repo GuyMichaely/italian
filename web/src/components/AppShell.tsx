@@ -11,7 +11,17 @@ const navItems: { route: Route; label: string; icon: IconName }[] = [
   { route: "settings", label: "Settings", icon: "settings" },
 ];
 
-export function AppShell({ route, sync, syncMode, unsynced, saveState, onAdd, children }: { route: Route; sync: SyncStatus; syncMode: SyncMode | Error; unsynced: boolean; saveState: SaveState; onAdd: () => void; children: ReactNode }) {
+export function AppShell({ route, sync, syncMode, live, unsyncedChanges, onSyncNow, saveState, onAdd, children }: {
+  route: Route;
+  sync: SyncStatus;
+  syncMode: SyncMode | Error;
+  live: boolean;
+  unsyncedChanges: number;
+  onSyncNow: () => void;
+  saveState: SaveState;
+  onAdd: () => void;
+  children: ReactNode;
+}) {
   return <div className="app-shell">
     <header className="topbar">
       <div className="topbar-inner">
@@ -20,7 +30,7 @@ export function AppShell({ route, sync, syncMode, unsynced, saveState, onAdd, ch
           {navItems.map((item) => <a key={item.route} href={`#/${item.route}`} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined}><Icon name={item.icon} size={17} />{item.label}</a>)}
         </nav>
         <div className="topbar-actions">
-          <SaveIndicator state={saveState} sync={sync} mode={syncMode} unsynced={unsynced} />
+          <SaveIndicator state={saveState} sync={sync} mode={syncMode} live={live} unsyncedChanges={unsyncedChanges} onSyncNow={onSyncNow} />
           <button type="button" className="primary-button add-button" onClick={onAdd}><Icon name="plus" size={16} /><span>Add words</span></button>
         </div>
       </div>

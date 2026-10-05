@@ -5,33 +5,13 @@ import {
   serializeInventory,
   type CardStorage,
 } from "../storage";
-import { readLastSynced, type SyncMode, type SyncStatus } from "../storage/cloudSync";
-import { syncTime } from "./SaveIndicator";
+import type { SyncMode, SyncStatus } from "../storage/cloudSync";
 
 const modes: { mode: SyncMode; title: string; detail: string }[] = [
   { mode: "automatic", title: "Automatically", detail: "Your changes go up as you make them, and other devices’ changes appear here as they’re made." },
   { mode: "on-edit", title: "When I edit", detail: "Your changes go up as you make them. Other devices’ changes come in then, when you open the app, and when you come back to it." },
   { mode: "manual", title: "Manually", detail: "Only when you press Sync now. Words from your other devices and the extension wait until then, and the longer devices go between syncs, the likelier a clash." },
 ];
-
-function syncSummary(status: SyncStatus, mode: SyncMode | Error, unsynced: boolean): { title: string; detail: string; tone: "local" | "remote" | "pending" | "warning" } {
-  switch (status.state) {
-    case "signed-out": return { title: "Not syncing", detail: "Your words are kept in this browser. Sign in to keep the same words on every device.", tone: "local" };
-    case "expired": return { title: "Sign in again", detail: "Your sign-in has expired, so this device has stopped syncing. Your words are kept here and sync once you sign in again.", tone: "warning" };
-    case "syncing": return { title: "Syncing…", detail: "Merging this browser’s words with the other devices’.", tone: "remote" };
-    case "idle":
-    case "synced": {
-      const at = status.state === "synced" ? status.at : readLastSynced();
-      const last = at ? `Last synced ${syncTime(at)}.` : "Not synced yet.";
-      if (!unsynced) return { title: "Up to date", detail: `${last} Nothing here is waiting to sync.`, tone: "remote" };
-      const next = mode === "manual" ? "Press Sync now to send them." : mode instanceof Error ? "Choose when to sync to send them." : "They’ll sync in a moment.";
-      return { title: "Unsynced changes", detail: `${last} Some changes here haven’t synced yet. ${next}`, tone: "pending" };
-    }
-    case "offline": return { title: "Can’t reach the sync server", detail: status.message, tone: "warning" };
-    case "conflict": return { title: "Waiting for you", detail: `${status.error.conflicts.length} ${status.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with another device. Sync is paused until you pick which to keep.`, tone: "warning" };
-    case "error": return { title: "Sync failed", detail: status.message, tone: "warning" };
-  }
-}
 
 export function StorageSettingsPanel({
   storage,
@@ -42,12 +22,10 @@ export function StorageSettingsPanel({
   onSignOut,
   onSyncNow,
   onResolve,
-  unsynced,
 }: {
   storage: CardStorage;
   sync: SyncStatus;
   mode: SyncMode | Error;
-  unsynced: boolean;
   onMode: (mode: SyncMode) => void;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -60,7 +38,6 @@ export function StorageSettingsPanel({
   const [importText, setImportText] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
   const signedIn = sync.state !== "signed-out";
-  const summary = syncSummary(sync, mode, unsynced);
 
   function currentInventory() {
     return storage.readInventory();
@@ -153,13 +130,7 @@ export function StorageSettingsPanel({
       <div className="settings-section-heading">
         <h2 id="sync-heading">Sync</h2>
       </div>
-      <div className={`sync-status-card ${summary.tone}`}>
-        <span className="status-dot" aria-hidden="true" />
-        <div>
-          <strong>{summary.title}</strong>
-          <p>{summary.detail}</p>
-        </div>
-      </div>
+      {sync.state === "error" && <p className="form-error" role="alert">{sync.message}</p>}
       {signedIn && <fieldset className="radio-cards stacked">
         <legend>When to sync</legend>
         {mode instanceof Error && <p className="form-error" role="alert">{mode.message}</p>}

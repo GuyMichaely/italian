@@ -88,10 +88,20 @@ export function saveSyncMode(mode: SyncMode) {
   window.localStorage.setItem(modeKey, mode);
 }
 
-/** Whether `inventory` has changes this device hasn't synced: true until its first sync. */
-export function hasUnsyncedChanges(inventory: InventoryState) {
-  const base = readBase();
-  return !base || !inventoryStatesEqual(base.inventory, inventory);
+/**
+ * How many changes `inventory` has that this device hasn't synced, against the inventory as it
+ * last synced (or an empty one before its first sync): each word added, changed, or removed, and
+ * each of grammar and study preferences if changed.
+ */
+export function countUnsyncedChanges(inventory: InventoryState) {
+  const base = readBase()?.inventory ?? emptyInventoryState();
+  const synced = new Map(base.cards.map((card) => [card.id, JSON.stringify(card)]));
+  const here = new Set(inventory.cards.map((card) => card.id));
+  const sections = (["nounMorphology", "adjectiveMorphology", "studyPreferences"] as const)
+    .filter((key) => JSON.stringify(base[key]) !== JSON.stringify(inventory[key]));
+  return inventory.cards.filter((card) => synced.get(card.id) !== JSON.stringify(card)).length
+    + base.cards.filter((card) => !here.has(card.id)).length
+    + sections.length;
 }
 
 function readBase(): Base | null {
@@ -262,6 +272,11 @@ export class CloudSync {
     }
   }
 
+  /** The live connection is down, or the network is: says so until a sync gets through. */
+  unreachable() {
+    if (this.status.state === "idle" || this.status.state === "synced" || this.status.state === "syncing") this.set({ state: "offline", message: new SyncOfflineError().message });
+  }
+
   /** The version this browser last synced, to tell whether a live update is news. */
   syncedVersion() {
     return readBase()?.version ?? null;
@@ -269,11 +284,14 @@ export class CloudSync {
 }
 
 const reconnectDelaysMs = [1_000, 2_000, 5_000, 15_000, 30_000];
-const pingEveryMs = 30_000;
+const pingEveryMs = 20_000;
+const pongWithinMs = 10_000;
 
 /**
  * A live connection to the server, which says { version } whenever the inventory changes (and
- * once on connecting). `onVersion` hears each; reconnects after a drop, more slowly each time.
+ * once on connecting). `onVersion` hears each, and `onConnected` whether the connection is up.
+ * Reconnects after a drop, more slowly each time. A connection that stops answering pings counts
+ * as dropped, since a lost network can leave it open for minutes.
  */
 export class LiveUpdates {
   private socket: WebSocket | null = null;
@@ -281,8 +299,13 @@ export class LiveUpdates {
   private attempts = 0;
   private retry: ReturnType<typeof setTimeout> | undefined;
   private ping: ReturnType<typeof setInterval> | undefined;
+  private pong: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly url: string, private readonly onVersion: (version: number) => void) {}
+  constructor(
+    private readonly url: string,
+    private readonly onVersion: (version: number) => void,
+    private readonly onConnected: (connected: boolean) => void,
+  ) {}
 
   start() {
     this.running = true;
@@ -292,9 +315,7 @@ export class LiveUpdates {
   stop() {
     this.running = false;
     clearTimeout(this.retry);
-    clearInterval(this.ping);
-    this.socket?.close();
-    this.socket = null;
+    if (this.socket) this.drop(this.socket);
   }
 
   /** Reconnects now if the connection dropped (phones close it in the background). */
@@ -305,24 +326,45 @@ export class LiveUpdates {
     }
   }
 
+  /** The network went away: drops the connection without waiting for it to notice. */
+  lost() {
+    if (this.socket) this.drop(this.socket, true);
+  }
+
   private connect() {
     if (!this.running || this.socket) return;
     const socket = new WebSocket(`${this.url.replace(/^http/, "ws")}/live`);
+    let opened = false;
     this.socket = socket;
     socket.onopen = () => {
+      opened = true;
       this.attempts = 0;
-      this.ping = setInterval(() => socket.readyState === WebSocket.OPEN && socket.send("ping"), pingEveryMs);
+      this.onConnected(true);
+      this.ping = setInterval(() => {
+        socket.send("ping");
+        this.pong = setTimeout(() => this.drop(socket, true), pongWithinMs);
+      }, pingEveryMs);
     };
     socket.onmessage = (event) => {
-      if (event.data === "pong") return;
+      if (event.data === "pong") return clearTimeout(this.pong);
       this.onVersion((JSON.parse(event.data as string) as { version: number }).version);
     };
-    socket.onclose = () => {
-      clearInterval(this.ping);
-      if (this.socket === socket) this.socket = null;
-      if (!this.running) return;
-      this.retry = setTimeout(() => this.connect(), reconnectDelaysMs[Math.min(this.attempts, reconnectDelaysMs.length - 1)]);
-      this.attempts += 1;
-    };
+    // A connection that closes after opening (a deploy, a phone in the background) just
+    // reconnects; one that can't open says the server is unreachable.
+    socket.onclose = () => this.drop(socket, !opened);
+  }
+
+  private drop(socket: WebSocket, unreachable = false) {
+    if (this.socket !== socket) return;
+    this.socket = null;
+    socket.onclose = null;
+    socket.onmessage = null;
+    socket.close();
+    clearInterval(this.ping);
+    clearTimeout(this.pong);
+    if (!this.running) return;
+    if (unreachable) this.onConnected(false);
+    this.retry = setTimeout(() => this.connect(), reconnectDelaysMs[Math.min(this.attempts, reconnectDelaysMs.length - 1)]);
+    this.attempts += 1;
   }
 }
