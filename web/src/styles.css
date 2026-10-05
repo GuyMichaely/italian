@@ -506,8 +506,9 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .exceptions-box summary:hover { color: var(--text); }
 
 /* ---------- Settings ---------- */
-.settings-view { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 18px; align-items: start; }
-.settings-view > .page-header { grid-column: 1 / -1; margin-bottom: 4px; }
+.settings-view { column-width: 460px; column-gap: 18px; }
+.settings-view > .page-header { column-span: all; }
+.settings-view > .settings-section { break-inside: avoid; margin-bottom: 18px; }
 .settings-section { display: grid; gap: 16px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .settings-section-heading h2 { font-size: 22px; font-weight: 560; }
 .settings-section-heading p { margin-top: 4px; color: var(--muted); font-size: 14px; }

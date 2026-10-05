@@ -143,7 +143,6 @@ export function StorageSettingsPanel({
     <section className="settings-section" aria-labelledby="sync-heading">
       <div className="settings-section-heading">
         <h2 id="sync-heading">Sync</h2>
-        <p>Your words are always kept in this browser, and the app works without sync. Signed in, every device keeps the same words: changes made on each are merged, and anything changed on two devices at once is shown for you to choose. A sign-in lasts about a month.</p>
       </div>
       <div className={`sync-status-card ${summary.tone}`}>
         <span className="status-dot" aria-hidden="true" />
@@ -173,7 +172,6 @@ export function StorageSettingsPanel({
     <section className="settings-section" aria-labelledby="backup-heading">
       <div className="settings-section-heading">
         <h2 id="backup-heading">Backup &amp; restore</h2>
-        <p>Export your words, grammar rules, and study preferences as JSON, or replace everything from a backup.</p>
       </div>
       <div className="button-row start">
         <button type="button" className="neutral-button" onClick={() => void exportInventory()} disabled={transferBusy}>Download backup</button>
