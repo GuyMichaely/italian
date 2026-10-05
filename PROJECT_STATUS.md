@@ -91,7 +91,7 @@ Test files run serially because they share one temporary CommonJS output directo
 
 ## Deployment
 
-- `.github/workflows/deploy.yml` tests and builds the web app and deploys it, with the sync server, as the Cloudflare Worker at `italian.guymichaely.com`.
+- Cloudflare Workers Builds tests and builds the web app on every push to `main` and deploys it, with the sync server, as the Cloudflare Worker at `italian.guymichaely.com` (see `worker/README.md`).
 - Extension release infrastructure is separate.
 
 The former Pages extension compatibility feed/package path has been removed.

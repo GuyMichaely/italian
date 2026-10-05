@@ -25,7 +25,13 @@ Cloudflare Access guards `italian.guymichaely.com/sync`: the Access application 
 
 ## Deploying
 
-`.github/workflows/deploy.yml` builds the app and deploys the Worker on every push to `main` that touches `web/` or `worker/`. It needs the repository secret `CLOUDFLARE_API_TOKEN`, a Cloudflare API token made from the "Edit Cloudflare Workers" template. From a machine where `npx wrangler login` has been run, `npm run deploy` does the same.
+Cloudflare Workers Builds deploys on every push to `main`. It's set up on the Worker (Settings → Builds), connected to this repository through Cloudflare's GitHub app, so GitHub holds no Cloudflare token:
+
+- Root directory: `worker` (Cloudflare installs its dependencies first)
+- Build command: `npm --prefix ../web ci && npm --prefix ../web test && npm --prefix ../web run build`
+- Deploy command: `npx wrangler deploy`
+
+From a machine where `npx wrangler login` has been run, `npm run deploy` does the same by hand.
 
 ## Developing
 

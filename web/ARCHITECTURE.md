@@ -141,7 +141,7 @@ The noun suite covers rule genders and plural prediction, the editable article t
 
 ## Deployment
 
-- `.github/workflows/deploy.yml` tests and builds the web app and deploys it with the sync server as the Cloudflare Worker in `../worker/`.
+- Cloudflare Workers Builds tests and builds the web app on every push to `main` and deploys it with the sync server as the Cloudflare Worker in `../worker/`.
 - `.github/workflows/release-extension.yml` independently validates, signs, and publishes extension release assets through GitHub Releases.
 
 The former Pages extension compatibility path is retired.

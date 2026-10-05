@@ -16,7 +16,7 @@ The public repository is the canonical source for both the web app and extension
 
 `.github/workflows/release-extension.yml` independently validates, signs, and publishes the extension through GitHub Releases. An installed `0.2.4` client successfully updated to `0.2.5` through that feed, so GitHub Pages no longer packages or publishes an extension compatibility feed.
 
-`.github/workflows/deploy.yml` tests and builds the web app and deploys it, with the sync server, as the Worker (see `worker/README.md`).
+Cloudflare Workers Builds tests and builds the web app on every push to `main` and deploys it, with the sync server, as the Worker (see `worker/README.md`).
 
 The frontend always has a local working inventory and works on its own. Signing in to sync (Settings → Sign in with Cloudflare) keeps the same inventory on every device: changes from each are merged, and anything changed on two devices at once is shown to choose from.
 
