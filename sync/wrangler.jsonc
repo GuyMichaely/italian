@@ -12,10 +12,6 @@
   "durable_objects": { "bindings": [{ "name": "INVENTORY", "class_name": "InventoryStore" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InventoryStore"] }],
   "vars": {
-    // Cloudflare Access guards the whole domain; these check the sign-in it passes on.
-    "ACCESS_TEAM_DOMAIN": "rough-credit-5c77.cloudflareaccess.com",
-    "ACCESS_AUD": "cbeed3a3006899636e2c7e1a3f85a360a76994d54d4dce1b6eb6b324f81cf2ac",
-    "ALLOWED_EMAIL": "guymichaely@gmail.com",
     // The app's addresses: where signing in returns to, and the origins allowed to call.
     "APP_URLS": "https://guymichaely.com/italian/ http://localhost:5391/"
   }

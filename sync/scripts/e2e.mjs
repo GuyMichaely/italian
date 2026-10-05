@@ -1,24 +1,21 @@
 // Tries sync end to end with two "devices" (browser contexts) on the web dev server, against
-// `wrangler dev`, with scripts/dev-access.mjs standing in for Cloudflare Access. Start both (see
+// `wrangler dev` (which has no Cloudflare Access in front, so anyone may call it). Start both (see
 // README.md), then:
 //   PLAYWRIGHT=../extension/node_modules/playwright/index.mjs node scripts/e2e.mjs
 import assert from "node:assert/strict";
-import { devAccessJwt, devAppUrl } from "./dev-access.mjs";
+
 
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright");
-const appUrl = devAppUrl;
+const appUrl = "http://localhost:5392/";
 const syncUrl = process.env.SYNC_URL ?? "http://localhost:8787";
-const jwt = await devAccessJwt();
 
-const server = await fetch(`${syncUrl}/inventory`, { headers: { cookie: `CF_Authorization=${jwt}` } }).then((response) => response.json());
+const server = await fetch(`${syncUrl}/inventory`, undefined).then((response) => response.json());
 assert.equal(server.inventory, null, "start from an empty local sync server (stop wrangler dev and delete sync/.wrangler)");
 
 const browser = await chromium.launch();
 try {
   async function device(name) {
     const context = await browser.newContext();
-    // What Access's login leaves behind: its cookie for the sync server.
-    await context.addCookies([{ name: "CF_Authorization", value: jwt, domain: "localhost", path: "/" }]);
     const page = await context.newPage();
     page.on("dialog", (dialog) => void dialog.accept());
     await page.goto(appUrl);
@@ -47,7 +44,7 @@ try {
   /** Waits for the server to have a word: an automatic device uploads a moment after an edit. */
   async function serverHas(english) {
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const stored = await fetch(`${syncUrl}/inventory`, { headers: { cookie: `CF_Authorization=${jwt}` } }).then((response) => response.json());
+      const stored = await fetch(`${syncUrl}/inventory`, undefined).then((response) => response.json());
       if (stored.inventory?.cards.some((card) => card.english === english)) return;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }

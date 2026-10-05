@@ -16,7 +16,7 @@ Each device chooses when it syncs (Settings, kept on the device): **Automaticall
 
 ## Signing in
 
-Cloudflare Access guards all of `sync.guymichaely.com`: the Access application "Italian sync" with the Cloudflare login method and one allow policy for `guymichaely@gmail.com`. A request without its sign-in never reaches the Worker. The Worker checks each request's Access JWT anyway (team keys, `ACCESS_AUD`, `ALLOWED_EMAIL`), as Cloudflare recommends; `workers.dev` and preview addresses are off, so there's no way around Access.
+Cloudflare Access guards all of `sync.guymichaely.com`: the Access application "Italian sync" with the Cloudflare login method and one allow policy for `guymichaely@gmail.com`. A request without that sign-in never reaches the Worker, so the Worker doesn't check who's asking. `workers.dev` and preview addresses are off, so there's no way around Access; keep it that way, and keep the policy to your account.
 
 - Settings → **Sign in with Cloudflare** opens `/signin?return=<the app's address>`. Access signs you in and sets its cookie for `sync.guymichaely.com`; the Worker sends the browser back to the app with `#sync-signed-in`.
 - The app is on `guymichaely.com`, the same site, so its requests and live connection send that cookie (`credentials: "include"`). The Worker allows the app's origins (`APP_URLS`) with credentials, and the live connection only from them.
@@ -28,15 +28,14 @@ Cloudflare Access guards all of `sync.guymichaely.com`: the Access application "
 ```sh
 npm ci
 npm run typecheck
-npm test                 # sign-in checks
+npm test                 # where signing in may return to
 npx wrangler deploy      # needs `npx wrangler login` once
 ```
 
-`scripts/e2e.mjs` tries sync with two browser contexts against `wrangler dev`. `scripts/dev-access.mjs` stands in for Access: a test key (`test/dev-access-key.json`, used nowhere real) signs Access-style JWTs, and `node scripts/dev-access.mjs vars` writes `.dev.vars` so the local Worker trusts it. The test sets the JWT as Access's cookie. Start an empty local server and a web dev server pointed at it:
+`scripts/e2e.mjs` tries sync with two browser contexts against `wrangler dev`, which has no Access in front. Start an empty local server and a web dev server pointed at it:
 
 ```sh
-node scripts/dev-access.mjs vars
-rm -rf .wrangler/state && npx wrangler dev --port 8787
+rm -rf .wrangler/state && npx wrangler dev --port 8787 --var APP_URLS:http://localhost:5392/
 VITE_SYNC_URL=http://localhost:8787 npm --prefix ../web run dev -- --port 5392
 PLAYWRIGHT=../extension/node_modules/playwright/index.mjs node scripts/e2e.mjs
 ```
