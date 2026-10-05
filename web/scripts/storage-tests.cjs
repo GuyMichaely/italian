@@ -228,14 +228,20 @@ test("a save that conflicts writes nothing", async () => {
 
 // ---- Syncing with the server. ----
 
-const { syncOnce, saveSyncToken, SyncSignedOutError } = require(path.join(testDist, "storage", "cloudSync.js"));
+const { syncOnce, markSyncSignedIn, SyncSignedOutError } = require(path.join(testDist, "storage", "cloudSync.js"));
 
 /** A fake sync server with the real one's rules, and devices that each have their own storage. */
 function fakeServer() {
-  const server = { version: 0, inventory: null, beforePut: null };
+  const server = { version: 0, inventory: null, beforePut: null, signedIn: true, downloads: 0 };
   global.fetch = async (url, init = {}) => {
-    if (init.headers?.authorization !== "Bearer token") return new Response("{}", { status: 401 });
-    if ((init.method ?? "GET") === "GET") return Response.json({ version: server.version, inventory: server.inventory });
+    // Access turns a request without its sign-in away with a redirect to its login page.
+    if (!server.signedIn) return { type: "opaqueredirect", status: 0, ok: false };
+    if ((init.method ?? "GET") === "GET") {
+      const since = new URL(url).searchParams.get("since");
+      if (since !== null && Number(since) === server.version) return Response.json({ version: server.version, unchanged: true });
+      server.downloads += 1;
+      return Response.json({ version: server.version, inventory: server.inventory });
+    }
     server.beforePut?.();
     server.beforePut = null;
     const body = JSON.parse(init.body);
@@ -251,11 +257,11 @@ function device(cards) {
   const localStorage = fakeLocalStorage();
   const use = () => { global.window = { localStorage }; };
   use();
-  saveSyncToken("token");
+  markSyncSignedIn();
   if (cards) writeLocalSnapshot({ ...inventory(cards), updatedAt: new Date().toISOString() });
   return {
     use,
-    sync: (choices) => { use(); return syncOnce("https://sync.test", "token", choices); },
+    sync: (choices) => { use(); return syncOnce("https://sync.test", choices); },
     edit: (change) => { use(); const stored = readLocalSnapshot(); writeLocalSnapshot({ ...stored, cards: change(stored.cards).map(normalizeCard), updatedAt: new Date().toISOString() }); },
     words: () => { use(); return readLocalSnapshot().cards.map((card) => card.english).sort(); },
   };
@@ -272,6 +278,20 @@ test("a first sync uploads this device's words, and a new device takes them", as
   assert.equal(server.version, 1, "nothing new to upload");
 });
 
+test("when nothing changed anywhere, a sync downloads nothing", async () => {
+  const server = fakeServer();
+  const laptop = device([adverb(1, "qui", "here")]);
+  await laptop.sync();
+  const downloads = server.downloads;
+  await laptop.sync();
+  await laptop.sync();
+  assert.equal(server.downloads, downloads);
+  assert.equal(server.version, 1);
+  laptop.edit((cards) => [normalizeCard(adverb(2, "là", "there")), ...cards]);
+  await laptop.sync();
+  assert.equal(server.downloads, downloads, "an upload from the version it has needs no download either");
+  assert.equal(server.version, 2);
+});
 test("words added on two devices both end up on both", async () => {
   fakeServer();
   const laptop = device([adverb(1, "qui", "here")]);
@@ -318,9 +338,9 @@ test("a device that synced in between is merged in, not overwritten", async () =
   assert.deepEqual(server.inventory.cards.map((card) => card.english).sort(), ["already", "here", "there"]);
 });
 
-test("a token the server doesn't accept means signing in again", async () => {
-  fakeServer();
+test("an expired sign-in means signing in again", async () => {
+  const server = fakeServer();
   const laptop = device([adverb(1, "qui")]);
-  laptop.use();
-  await assert.rejects(syncOnce("https://sync.test", "wrong"), SyncSignedOutError);
+  server.signedIn = false;
+  await assert.rejects(laptop.sync(), SyncSignedOutError);
 });

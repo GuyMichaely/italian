@@ -3,7 +3,7 @@ import { BrowserStorage, type InventoryState } from "./storage";
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
 import { InventoryConflictError, type MergeChoices } from "./storage/merge";
-import { CloudSync, type SyncStatus } from "./storage/cloudSync";
+import { CloudSync, LiveUpdates, readSyncMode, saveSyncMode, type SyncMode, type SyncStatus } from "./storage/cloudSync";
 import { storageKey } from "./storage/keys";
 import { syncServerUrl } from "./syncServer";
 import { ConflictSheet, type ConflictSource } from "./components/ConflictSheet";
@@ -58,7 +58,7 @@ type PendingConflict = {
   dismiss: () => void;
 };
 
-/** Syncs every few minutes while the app is open, to pick up other devices' changes. */
+/** With live updates, a backstop sync every few minutes while the app is open. */
 const syncIntervalMs = 5 * 60_000;
 const inventoryKey = storageKey("inventory");
 
@@ -85,6 +85,10 @@ export default function Home() {
   const refreshRef = useRef<() => void>(() => undefined);
   const cloud = useMemo(() => new CloudSync(syncServerUrl, () => refreshRef.current()), []);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloud.current);
+  const [syncMode, setSyncMode] = useState<SyncMode>(readSyncMode);
+  const syncModeRef = useRef(syncMode);
+  syncModeRef.current = syncMode;
+  const syncOn = syncStatus.state !== "signed-out" && syncStatus.state !== "expired";
   const savesInFlight = useRef(0);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [adding, setAdding] = useState(false);
@@ -171,30 +175,42 @@ export default function Home() {
     return () => { active = false; };
   }, [storage]);
 
-  // Sync: on opening, when the network or the tab comes back, every few minutes, and after changes
-  // here (this window's saves, or another window's or the extension's, seen as storage events).
+  useEffect(() => cloud.subscribe(setSyncStatus), [cloud]);
+
+  // Another window's save, or the extension's, shows here at once, and syncs unless that's manual.
   useEffect(() => {
-    const unsubscribe = cloud.subscribe(setSyncStatus);
-    const sync = () => void cloud.sync();
-    const whenVisible = () => { if (document.visibilityState === "visible") sync(); };
     const onStorage = (event: StorageEvent) => {
       if (event.key !== inventoryKey) return;
       void refreshFromStorage();
       scheduleSync();
     };
-    sync();
-    const interval = setInterval(whenVisible, syncIntervalMs);
-    window.addEventListener("online", sync);
     window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  });
+
+  // Syncing on its own (see SyncMode): on opening and on coming back (the network, or the tab);
+  // automatically also as other devices change things, through a live connection.
+  useEffect(() => {
+    if (!syncOn || syncMode === "manual") return;
+    const sync = () => void cloud.sync();
+    const live = syncMode === "automatic" ? new LiveUpdates(syncServerUrl, (version) => { if (version !== cloud.syncedVersion()) sync(); }) : null;
+    const whenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      sync();
+      live?.wake();
+    };
+    live?.start();
+    sync();
+    const interval = live ? setInterval(whenVisible, syncIntervalMs) : undefined;
+    window.addEventListener("online", whenVisible);
     document.addEventListener("visibilitychange", whenVisible);
     return () => {
-      unsubscribe();
+      live?.stop();
       clearInterval(interval);
-      window.removeEventListener("online", sync);
-      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("online", whenVisible);
       document.removeEventListener("visibilitychange", whenVisible);
     };
-  }, [cloud]);
+  }, [cloud, syncMode, syncOn]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -347,7 +363,9 @@ export default function Home() {
   }
   refreshRef.current = () => void refreshFromStorage();
 
+  /** After a change here: syncs shortly, unless this device syncs only when asked. */
   function scheduleSync() {
+    if (syncModeRef.current === "manual" || !cloud.signedIn) return;
     clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => void cloud.sync(), 1500);
   }
@@ -630,7 +648,7 @@ export default function Home() {
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
         <SettingsView
-          storageProps={{ storage, sync: syncStatus, onSignIn: signInToSync, onSignOut: () => cloud.signOut(), onSyncNow: () => void cloud.sync(), onResolve: () => setConflictOpen(true) }}
+          storageProps={{ storage, sync: syncStatus, mode: syncMode, onMode: (mode) => { saveSyncMode(mode); setSyncMode(mode); }, onSignIn: signInToSync, onSignOut: () => cloud.signOut(), onSyncNow: () => void cloud.sync(), onResolve: () => setConflictOpen(true) }}
           morphology={nounMorphology}
           adjectiveMorphology={adjectiveMorphology}
           preferences={studyPreferences}

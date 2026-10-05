@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { accessEmail, returnUrl, syncToken, tokenValid } from "../src/auth.ts";
+import { accessEmail, accessJwt, returnUrl } from "../src/auth.ts";
 
 const team = "team.cloudflareaccess.com";
 const audience = "aud-tag";
@@ -28,14 +28,13 @@ test("a genuine, current Access sign-in for this app gives its email", async () 
   const forged = (await sign(good)).replace(/\.[^.]+$/, `.${Buffer.from("nope").toString("base64url")}`);
   assert.equal(await accessEmail(forged, team, audience, keys), null);
   assert.equal(await accessEmail(null, team, audience, keys), null);
+  assert.equal(await accessEmail("not.a.jwt", team, audience, keys), null);
 });
 
-test("the sync token is checked against the secret", async () => {
-  const token = await syncToken("secret");
-  assert.equal(await tokenValid(token, "secret"), true);
-  assert.equal(await tokenValid(token, "rotated"), false);
-  assert.equal(await tokenValid(null, "secret"), false);
-  assert.equal(await tokenValid("v1.x", "secret"), false);
+test("the JWT comes from Access's header, or its cookie", () => {
+  assert.equal(accessJwt(new Request("https://sync.test/", { headers: { "cf-access-jwt-assertion": "a.b.c" } })), "a.b.c");
+  assert.equal(accessJwt(new Request("https://sync.test/", { headers: { cookie: "x=1; CF_Authorization=d.e.f" } })), "d.e.f");
+  assert.equal(accessJwt(new Request("https://sync.test/")), null);
 });
 
 test("signing in only returns to the app", () => {

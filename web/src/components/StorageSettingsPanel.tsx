@@ -5,11 +5,19 @@ import {
   serializeInventory,
   type CardStorage,
 } from "../storage";
-import type { SyncStatus } from "../storage/cloudSync";
+import type { SyncMode, SyncStatus } from "../storage/cloudSync";
+
+const modes: { mode: SyncMode; title: string; detail: string }[] = [
+  { mode: "automatic", title: "Automatically", detail: "Your changes go up as you make them, and other devices’ changes appear here as they’re made." },
+  { mode: "on-edit", title: "When I edit", detail: "Your changes go up as you make them. Other devices’ changes come in then, when you open the app, and when you come back to it." },
+  { mode: "manual", title: "Manually", detail: "Only when you press Sync now. Words from your other devices and the extension wait until then, and the longer devices go between syncs, the likelier a clash." },
+];
 
 function syncSummary(status: SyncStatus): { title: string; detail: string; tone: "local" | "remote" | "warning" } {
   switch (status.state) {
     case "signed-out": return { title: "Not syncing", detail: "Your words are kept in this browser. Sign in to keep the same words on every device.", tone: "local" };
+    case "expired": return { title: "Sign in again", detail: "Your sign-in has expired, so this device has stopped syncing. Your words are kept here and sync once you sign in again.", tone: "warning" };
+    case "idle": return { title: "Signed in", detail: "This device syncs with your other devices.", tone: "remote" };
     case "syncing": return { title: "Syncing…", detail: "Merging this browser’s words with the other devices’.", tone: "remote" };
     case "synced": return { title: "Synced", detail: `Last synced ${new Date(status.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}. Changes sync as you make them.`, tone: "remote" };
     case "offline": return { title: "Can’t reach the sync server", detail: status.message, tone: "warning" };
@@ -21,6 +29,8 @@ function syncSummary(status: SyncStatus): { title: string; detail: string; tone:
 export function StorageSettingsPanel({
   storage,
   sync,
+  mode,
+  onMode,
   onSignIn,
   onSignOut,
   onSyncNow,
@@ -28,6 +38,8 @@ export function StorageSettingsPanel({
 }: {
   storage: CardStorage;
   sync: SyncStatus;
+  mode: SyncMode;
+  onMode: (mode: SyncMode) => void;
   onSignIn: () => void;
   onSignOut: () => void;
   onSyncNow: () => void;
@@ -131,7 +143,7 @@ export function StorageSettingsPanel({
     <section className="settings-section" aria-labelledby="sync-heading">
       <div className="settings-section-heading">
         <h2 id="sync-heading">Sync</h2>
-        <p>Your words are always kept in this browser, and the app works without sync. Signed in, every device keeps the same words: changes made on each are merged, and anything changed on two devices at once is shown for you to choose.</p>
+        <p>Your words are always kept in this browser, and the app works without sync. Signed in, every device keeps the same words: changes made on each are merged, and anything changed on two devices at once is shown for you to choose. A sign-in lasts about a month.</p>
       </div>
       <div className={`sync-status-card ${summary.tone}`}>
         <span className="status-dot" aria-hidden="true" />
@@ -140,10 +152,19 @@ export function StorageSettingsPanel({
           <p>{summary.detail}</p>
         </div>
       </div>
+      {signedIn && <fieldset className="radio-cards stacked">
+        <legend>When to sync</legend>
+        {modes.map((option) => <label key={option.mode} className={mode === option.mode ? "selected" : ""}>
+          <input type="radio" name="sync-mode" checked={mode === option.mode} onChange={() => onMode(option.mode)} />
+          <span><strong>{option.title}</strong><small>{option.detail}</small></span>
+        </label>)}
+        <p className="field-hint">This setting is kept on this device.</p>
+      </fieldset>}
       <div className="button-row start">
         {!signedIn && <button type="button" className="primary-button" onClick={onSignIn}>Sign in with Cloudflare</button>}
+        {sync.state === "expired" && <button type="button" className="primary-button" onClick={onSignIn}>Sign in again</button>}
         {sync.state === "conflict" && <button type="button" className="primary-button" onClick={onResolve}>Resolve</button>}
-        {signedIn && sync.state !== "conflict" && <button type="button" className="neutral-button" onClick={onSyncNow} disabled={sync.state === "syncing"}>Sync now</button>}
+        {signedIn && sync.state !== "conflict" && sync.state !== "expired" && <button type="button" className="neutral-button" onClick={onSyncNow} disabled={sync.state === "syncing"}>Sync now</button>}
         {signedIn && <button type="button" className="text-button" onClick={() => { if (window.confirm("Stop syncing on this device? Your words stay here.")) onSignOut(); }}>Sign out</button>}
       </div>
     </section>

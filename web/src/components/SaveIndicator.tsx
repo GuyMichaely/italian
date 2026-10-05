@@ -15,6 +15,8 @@ export function SaveIndicator({ state, sync }: { state: SaveState; sync: SyncSta
     case "conflict": return indicator("failed", "Sync needs you");
     case "offline": return indicator("idle", "Offline");
     case "error": return indicator("failed", "Sync failed");
-    case "signed-out": return state === "saved" ? indicator("saved", "Saved") : null;
+    case "expired": return indicator("failed", "Sign in again");
+    case "signed-out":
+    case "idle": return state === "saved" ? indicator("saved", "Saved") : null;
   }
 }

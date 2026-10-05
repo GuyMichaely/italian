@@ -26,11 +26,11 @@ Cards and noun morphology form one logical inventory. Browser persistence stores
 
 ## Inventory synchronization
 
-- The app works without sync. Settings → **Sign in with Cloudflare** goes through Cloudflare Access (only the owner's Cloudflare login) to get a sync token that doesn't expire; **Sign out** forgets it on that device.
+- The app works without sync. Cloudflare Access (only the owner's Cloudflare login) guards the whole sync server; Settings → **Sign in with Cloudflare** signs in for about a month, then **Sign in again**. **Sign out** stops syncing on that device.
 - The server (`sync/`, a Worker with one Durable Object) stores the inventory and a version; uploads succeed only against the current version.
 - Each device merges three ways (its last-synced copy, its words now, the server's) with the same card-by-card merge windows use. Words added on different devices are all kept.
 - A word or the rules changed differently on two devices pause sync until the conflict screen settles which version to keep. The same screen settles clashes between windows.
-- Sync runs on opening, after changes, when the network or the tab comes back, and every five minutes while the app is open.
+- Each device picks when it syncs: **Automatically** (as changes are made anywhere, through a live connection), **When I edit** (after its own edits, on opening, and on coming back), or **Manually**.
 - Manual inventory export/import contains `cards`, `nounMorphology`, `adjectiveMorphology`, and `studyPreferences`, without sync metadata.
 
 `web/scripts/storage-tests.cjs` covers the merge and the sync protocol against a fake server; `sync/scripts/e2e.mjs` tries two devices in a browser against `wrangler dev`.
