@@ -104,7 +104,7 @@ try {
   const storageWarning = page.getByText(/Storage unavailable: Noun card 59 must not store a derived italian field\./i);
   await storageWarning.waitFor({ state: "visible" });
 
-  await page.getByRole("link", { name: "Local" }).click();
+  await page.getByRole("link", { name: "Settings" }).first().click();
   await page.getByLabel("Import inventory JSON").fill(JSON.stringify(currentInventory));
 
   page.once("dialog", async (dialog) => {
