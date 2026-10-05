@@ -10,11 +10,7 @@ import { Sheet } from "./Sheet";
 export type ConflictSource = "window" | "device";
 
 function headword(card: Flashcard, state: InventoryState) {
-  try {
-    return italianHeadword(card, state.nounMorphology, state.adjectiveMorphology);
-  } catch {
-    return card.english;
-  }
+  return italianHeadword(card, state.nounMorphology, state.adjectiveMorphology);
 }
 
 type Field = { label: string; value: string };
@@ -43,14 +39,14 @@ function CardSide({ card, other, state, otherState }: { card: Flashcard | null; 
   </dl>;
 }
 
-function named(items: unknown): Map<string, string> {
-  return new Map(Array.isArray(items) ? items.map((item: { name?: string }, index) => [item?.name ?? String(index), JSON.stringify(item)]) : []);
+function named(items: { name: string }[]): Map<string, string> {
+  return new Map(items.map((item) => [item.name, JSON.stringify(item)]));
 }
 
 /** What differs between the two versions of a part, in a line each. */
 function partDifferences(part: InventoryPart, mine: InventoryState, theirs: InventoryState) {
   const lines: string[] = [];
-  const compare = (label: string, mineItems: unknown, theirItems: unknown) => {
+  const compare = (label: string, mineItems: { name: string }[], theirItems: { name: string }[]) => {
     const here = named(mineItems);
     const there = named(theirItems);
     for (const [name, value] of here) {

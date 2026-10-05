@@ -142,17 +142,11 @@ button.chip.selected { background: var(--accent-soft); border-color: var(--accen
 .top-nav a:hover { color: var(--text); background: var(--surface-2); }
 .top-nav a.active { color: var(--text); background: var(--surface-3); }
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.storage-pill { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.storage-pill:hover { color: var(--text); }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--right); flex: none; }
 .status-dot.remote { background: var(--accent); }
-.save-indicator { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
-.save-indicator i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-.save-indicator.saving i { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
-.save-indicator.saved i { background: var(--right); }
+.save-indicator { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
 .save-indicator.failed { color: var(--wrong); }
-.save-indicator.failed i { background: var(--wrong); }
-@keyframes pulse { 50% { opacity: .3; } }
+.save-indicator.failed i { width: 7px; height: 7px; border-radius: 50%; background: var(--wrong); }
 .content-frame { width: calc(100% - 48px); margin: 0 auto; padding: 28px 0 64px; }
 .content-frame.route-study { width: min(1120px, 100% - 48px); }
 .bottom-nav { display: none; }
@@ -375,7 +369,7 @@ input.answer-input:not([type]) { min-height: 54px; padding: 10px 16px; border-ra
 .batch-table-wrap { container-type: inline-size; }
 .dictionary-note { position: sticky; left: 10px; max-width: calc(100cqw - 20px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-right: 28px; color: var(--muted); font-size: 13px; }
 .dictionary-note.missing, .dictionary-note.failed { color: var(--faint); }
-.dictionary-note a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.dictionary-note a { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .dictionary-note a:hover { text-decoration: underline; }
 .dictionary-review { color: var(--caution); }
 .dictionary-choices { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }

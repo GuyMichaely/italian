@@ -59,26 +59,9 @@ export type WriteResult =
   | { ok: true; results: OpResult[] }
   | { ok: false; error: string };
 
-function text(value: unknown) {
-  return String(value ?? "").normalize("NFC").trim();
-}
-
-const headwordPos = new Set(["noun", "verb", "adj", "adv"]);
-
-function readingHeadword(entry: WordEntry): LexiconHeadword {
-  const headword = entry?.reading?.headword as Partial<LexiconHeadword> | undefined;
-  if (!headword || !headwordPos.has(String(headword.pos)) || typeof headword.word !== "string" || !Array.isArray(headword.glosses)) {
-    throw new Error("The word arrived without its dictionary entry.");
-  }
-  return headword as LexiconHeadword;
-}
-
 export function entryCard(entry: WordEntry, cardId: number, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology): Flashcard {
-  const headword = readingHeadword(entry);
-  const suggestions = suggestionsForReading({ headword, via: entry.reading.via ?? null }, { noun: morphology, adjective: adjectiveMorphology });
-  const suggestion = suggestions[Number.isInteger(entry.choice) ? entry.choice : 0] ?? suggestions[0];
-  if (!suggestion) throw new Error("The dictionary entry has nothing to add.");
-  const english = text(entry.english) || suggestion.fields.english;
+  const suggestion = suggestionsForReading(entry.reading, { noun: morphology, adjective: adjectiveMorphology })[entry.choice]!;
+  const english = entry.english.trim() || suggestion.fields.english;
   if (!english) throw new Error("The dictionary gives no English for it.");
   const common = { id: cardId, setName: null, tags: suggestion.review ? [extensionTag, reviewTag] : [extensionTag], editedAt: editedNow() };
   switch (suggestion.type) {
@@ -95,26 +78,22 @@ export function entryCard(entry: WordEntry, cardId: number, morphology: NounMorp
 
 /** “cane / cani, masculine noun”, as the learner's own rules make the forms. */
 export function cardSummary(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
-  try {
-    switch (card.type) {
-      case "noun": {
-        const forms = resolvedNounForms(card, morphology);
-        return `${[forms.singular, forms.plural].filter(Boolean).join(" / ")}, ${card.details.gender} noun`;
-      }
-      case "adjective":
-        return `${resolvedAdjectiveForms(card, adjectiveMorphology).forms.masculineSingular}, adjective`;
-      case "verb":
-        return `${card.italian}, verb with ${card.details.auxiliary}`;
-      case "adverb":
-        return `${card.italian}, adverb`;
+  switch (card.type) {
+    case "noun": {
+      const forms = resolvedNounForms(card, morphology);
+      return `${[forms.singular, forms.plural].filter(Boolean).join(" / ")}, ${card.details.gender} noun`;
     }
-  } catch {
-    return `a ${card.type}`;
+    case "adjective":
+      return `${resolvedAdjectiveForms(card, adjectiveMorphology).forms.masculineSingular}, adjective`;
+    case "verb":
+      return `${card.italian}, verb with ${card.details.auxiliary}`;
+    case "adverb":
+      return `${card.italian}, adverb`;
   }
 }
 
 const sameCard = (left: Flashcard, right: Flashcard) => JSON.stringify(normalizeCard(left)) === JSON.stringify(normalizeCard(right));
-const failure = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+const failure = (error: unknown) => (error as Error).message;
 
 /**
  * Applies the changes to the cards, with the learner's own rules. A change that can't be made is
@@ -167,7 +146,7 @@ export function applyOps(ops: WriteOp[], existing: Flashcard[], morphology: Noun
       else cards = cards.map((other) => other.id === card.id ? card : other);
       results.push({ id: op.id, outcome: "saved", card });
     } catch (error) {
-      results.push({ id: op.id, outcome: "skipped", reason: failure(error, "It couldn't be made into a card.") });
+      results.push({ id: op.id, outcome: "skipped", reason: failure(error) });
     }
   }
   return { cards: [...added, ...cards], results };
@@ -205,6 +184,6 @@ export function writeChanges(ops: WriteOp[]): WriteResult {
     if (JSON.stringify(cards) !== JSON.stringify(snapshot.cards)) writeLocalSnapshot({ ...snapshot, cards, updatedAt: new Date().toISOString() });
     return { ok: true, results };
   } catch (error) {
-    return { ok: false, error: failure(error, "The words couldn't be saved.") };
+    return { ok: false, error: failure(error) };
   }
 }

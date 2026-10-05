@@ -576,7 +576,7 @@ export default function Home() {
   }
 
   return <>
-    <AppShell route={route} sync={syncStatus} saveState={saveState} onAdd={() => setAdding(true)}>
+    <AppShell route={route} sync={syncStatus} syncMode={syncMode} saveState={saveState} onAdd={() => setAdding(true)}>
       {conflict && !conflictOpen && <div className="sync-warning conflict-banner" role="alert">
         <p>{conflict.error.conflicts.length} {conflict.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with {conflict.source === "window" ? "another window" : "another device"}.{conflict.source === "device" ? " Sync is paused until you choose." : ""}</p>
         <button type="button" className="neutral-button" onClick={() => setConflictOpen(true)}>Resolve</button>

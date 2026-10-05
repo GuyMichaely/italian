@@ -22,6 +22,7 @@ import type { InventoryState } from "./types";
 const signedInKey = storageKey("sync-signed-in");
 const baseKey = storageKey("sync-base");
 const modeKey = storageKey("sync-mode");
+const syncedAtKey = storageKey("sync-at");
 
 /**
  * When this device syncs. automatic: after edits, and as other devices change things (a live
@@ -54,16 +55,8 @@ export class SyncOfflineError extends Error {
   }
 }
 
-function read(key: string) {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
 export function readSyncSignedIn() {
-  return read(signedInKey) === "true";
+  return window.localStorage.getItem(signedInKey) === "true";
 }
 
 /** After signing in: sync from a fresh merge. */
@@ -75,6 +68,12 @@ export function markSyncSignedIn() {
 export function forgetSync() {
   window.localStorage.removeItem(signedInKey);
   window.localStorage.removeItem(baseKey);
+  window.localStorage.removeItem(syncedAtKey);
+}
+
+/** When this device last finished a sync, as an ISO time; null if it hasn't. */
+export function readLastSynced() {
+  return window.localStorage.getItem(syncedAtKey);
 }
 
 /** The device's sync mode: Automatically until one is chosen. Throws on a value it doesn't know. */
@@ -90,7 +89,7 @@ export function saveSyncMode(mode: SyncMode) {
 }
 
 function readBase(): Base | null {
-  const stored = read(baseKey);
+  const stored = window.localStorage.getItem(baseKey);
   if (!stored) return null;
   const parsed = JSON.parse(stored) as { version: number; inventory: unknown };
   return { version: parsed.version, inventory: parseInventoryState(parsed.inventory, "The last synced inventory") };
@@ -243,7 +242,9 @@ export class CloudSync {
       const work = () => syncOnce(this.url, choices);
       // One window at a time, so two don't merge against the same base.
       const synced = navigator.locks ? await navigator.locks.request("italian-sync", work) : await work();
-      this.set({ state: "synced", at: new Date().toISOString() });
+      const at = new Date().toISOString();
+      window.localStorage.setItem(syncedAtKey, at);
+      this.set({ state: "synced", at });
       this.onSynced(synced);
       return synced;
     } catch (error) {
@@ -308,8 +309,7 @@ export class LiveUpdates {
     };
     socket.onmessage = (event) => {
       if (event.data === "pong") return;
-      const message = JSON.parse(String(event.data)) as { version?: number };
-      if (typeof message.version === "number") this.onVersion(message.version);
+      this.onVersion((JSON.parse(event.data as string) as { version: number }).version);
     };
     socket.onclose = () => {
       clearInterval(this.ping);

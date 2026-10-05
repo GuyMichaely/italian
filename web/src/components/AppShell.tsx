@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Route } from "../app/useHashRoute";
 import { Icon, type IconName } from "./Icons";
 import { SaveIndicator, type SaveState } from "./SaveIndicator";
-import type { SyncStatus } from "../storage/cloudSync";
+import type { SyncMode, SyncStatus } from "../storage/cloudSync";
 
 const navItems: { route: Route; label: string; icon: IconName }[] = [
   { route: "study", label: "Study", icon: "study" },
@@ -11,8 +11,7 @@ const navItems: { route: Route; label: string; icon: IconName }[] = [
   { route: "settings", label: "Settings", icon: "settings" },
 ];
 
-export function AppShell({ route, sync, saveState, onAdd, children }: { route: Route; sync: SyncStatus; saveState: SaveState; onAdd: () => void; children: ReactNode }) {
-  const syncing = sync.state !== "signed-out";
+export function AppShell({ route, sync, syncMode, saveState, onAdd, children }: { route: Route; sync: SyncStatus; syncMode: SyncMode | Error; saveState: SaveState; onAdd: () => void; children: ReactNode }) {
   return <div className="app-shell">
     <header className="topbar">
       <div className="topbar-inner">
@@ -21,8 +20,7 @@ export function AppShell({ route, sync, saveState, onAdd, children }: { route: R
           {navItems.map((item) => <a key={item.route} href={`#/${item.route}`} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined}><Icon name={item.icon} size={17} />{item.label}</a>)}
         </nav>
         <div className="topbar-actions">
-          <SaveIndicator state={saveState} sync={sync} />
-          <a className="storage-pill" href="#/settings" title={syncing ? "Synced with your other devices" : "Words are kept in this browser"}><span className={`status-dot ${syncing ? "remote" : "local"}`} aria-hidden="true" />{syncing ? "Sync" : "Local"}</a>
+          <SaveIndicator state={saveState} sync={sync} mode={syncMode} />
           <button type="button" className="primary-button add-button" onClick={onAdd}><Icon name="plus" size={16} /><span>Add words</span></button>
         </div>
       </div>

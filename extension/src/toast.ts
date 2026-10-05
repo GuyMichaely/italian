@@ -69,7 +69,6 @@ const styles = `
   }
 
   chrome.runtime.onMessage.addListener((message: ToastMessage) => {
-    if (message?.type !== "italian-toast") return;
     // An update after a save only matters while that word's toast is still up.
     if (message.refresh !== undefined && (message.refresh !== showing || !host.isConnected)) return;
     render(message.toast);

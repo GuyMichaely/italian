@@ -67,7 +67,7 @@ src/
     ├── StorageSettingsPanel.tsx    signing in to sync, and backup and restore
     ├── ConflictSheet.tsx           the conflict screen: changes made both here and elsewhere, side by side
     ├── AnswerKeywordSettings.tsx   noun marker keyword settings
-    ├── SaveIndicator.tsx           saving and sync status
+    ├── SaveIndicator.tsx           top-bar status: a saving or sync problem, else the last sync time
     └── Icons.tsx                   inline SVG icon set
 ```
 

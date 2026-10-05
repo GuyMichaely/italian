@@ -16,7 +16,7 @@ import {
   type AddedWord,
   type AddedWords,
 } from "./added";
-import type { PopupRequest, ToastMessage, WordAction, WordView, WriterResult } from "./messages";
+import type { PopupRequest, ToastMessage, WordAction, WordView, WriterReady, WriterResult } from "./messages";
 import type { WriteOp, WriteResult } from "./words";
 
 declare const DEV_BUILD: boolean;
@@ -346,22 +346,21 @@ async function handlePopup(request: PopupRequest): Promise<AddedWords> {
   }
 }
 
-chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
-  if (message?.type === "italian-writer-ready") {
-    sendResponse(hiddenWrite?.ops ?? null);
-    return;
-  }
-  if (message?.type === "italian-writer-result") {
-    hiddenWrite?.resolve((message as WriterResult).result);
-    return;
-  }
-  if (message?.type === "italian-word-action") {
-    void wordAction(message as WordAction).then(sendResponse);
-    return true;
-  }
-  if (typeof message?.type === "string" && message.type.startsWith("words-")) {
-    void handlePopup(message as PopupRequest).then(sendResponse, (error) => sendResponse({ error: error instanceof Error ? error.message : String(error) }));
-    return true;
+// Only the extension's own pages and scripts can send these.
+chrome.runtime.onMessage.addListener((message: WriterReady | WriterResult | WordAction | PopupRequest, _sender, sendResponse) => {
+  switch (message.type) {
+    case "italian-writer-ready":
+      sendResponse(hiddenWrite?.ops ?? null);
+      return;
+    case "italian-writer-result":
+      hiddenWrite?.resolve(message.result);
+      return;
+    case "italian-word-action":
+      void wordAction(message).then(sendResponse);
+      return true;
+    default:
+      void handlePopup(message).then(sendResponse, (error: Error) => sendResponse({ error: error.message }));
+      return true;
   }
 });
 
