@@ -1,15 +1,14 @@
-// Tries sync end to end with two "devices" (browser contexts) on the web dev server, against
-// `wrangler dev` (which has no Cloudflare Access in front, so anyone may call it). Start both (see
+// Tries sync end to end with two "devices" (browser contexts) on the web dev server, whose /sync
+// goes to `wrangler dev` (no Cloudflare Access in front, so anyone may call it). Start both (see
 // README.md), then:
 //   PLAYWRIGHT=../extension/node_modules/playwright/index.mjs node scripts/e2e.mjs
 import assert from "node:assert/strict";
 
-
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright");
-const appUrl = "http://localhost:5392/";
-const syncUrl = process.env.SYNC_URL ?? "http://localhost:8787";
+const appUrl = "http://localhost:5391/";
+const syncUrl = `${appUrl}sync`;
 
-const server = await fetch(`${syncUrl}/inventory`, undefined).then((response) => response.json());
+const server = await fetch(`${syncUrl}/inventory`).then((response) => response.json());
 assert.equal(server.inventory, null, "start from an empty local sync server (stop wrangler dev and delete sync/.wrangler)");
 
 const browser = await chromium.launch();
@@ -19,7 +18,7 @@ try {
     const page = await context.newPage();
     page.on("dialog", (dialog) => void dialog.accept());
     await page.goto(appUrl);
-    await page.goto(`${syncUrl}/signin?return=${encodeURIComponent(appUrl)}`);
+    await page.goto(`${syncUrl}/signin`);
     await page.waitForURL(`${appUrl}#/settings`);
     await page.getByText("Synced", { exact: true }).first().waitFor({ timeout: 15000 });
     return { name, page };
@@ -44,7 +43,7 @@ try {
   /** Waits for the server to have a word: an automatic device uploads a moment after an edit. */
   async function serverHas(english) {
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const stored = await fetch(`${syncUrl}/inventory`, undefined).then((response) => response.json());
+      const stored = await fetch(`${syncUrl}/inventory`).then((response) => response.json());
       if (stored.inventory?.cards.some((card) => card.english === english)) return;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }

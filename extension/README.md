@@ -46,7 +46,7 @@ The writer reads the inventory, makes the changes (add, change, or remove a card
 npm ci
 npm run typecheck
 npm test
-npm run build                                    # dist/ for https://guymichaely.com/italian/
+npm run build                                    # dist/ for https://italian.guymichaely.com/
 node build.mjs --app http://localhost:5391/      # dist/ for the web dev server
 ```
 

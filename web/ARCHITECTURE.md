@@ -1,6 +1,6 @@
 # Architecture
 
-Italian consists of a static React frontend and an optional sync server (`../sync/`, a Cloudflare Worker). Extension work is separate from the web app.
+Italian consists of a static React frontend and an optional sync server at `/sync`; both are served by one Cloudflare Worker (`../worker/`). Extension work is separate from the web app.
 
 ```text
 Italian web (React + Vite)
@@ -111,7 +111,7 @@ Each card records when it was added or last changed (`editedAt`). Saving stamps 
 
 Other windows' saves, and the extension's, reach an open window as `storage` events; it shows the new inventory at once.
 
-`storage/cloudSync.ts` syncs signed-in devices through the server, which keeps the inventory and a version. A sync merges the inventory as this browser last synced it, the inventory here, and the server's, saves the result here, and uploads it "only if the server is still on the version merged with"; if another device synced in between it merges again. Syncs run one at a time (across windows too, with a Web Lock). When depends on the device's sync mode (`SyncMode`, kept on the device): automatically (after changes, on opening and coming back, and whenever the server's live connection, `LiveUpdates`, says another device changed something), when editing (the same without the live connection), or manually. A sync asks for the server's inventory only if it has moved past the version last synced. Cloudflare Access guards the server; the app's requests carry its sign-in cookie, and an expired sign-in shows Sign in again. See `../sync/README.md`.
+`storage/cloudSync.ts` syncs signed-in devices through the server, which keeps the inventory and a version. A sync merges the inventory as this browser last synced it, the inventory here, and the server's, saves the result here, and uploads it "only if the server is still on the version merged with"; if another device synced in between it merges again. Syncs run one at a time (across windows too, with a Web Lock). When depends on the device's sync mode (`SyncMode`, kept on the device): automatically (after changes, on opening and coming back, and whenever the server's live connection, `LiveUpdates`, says another device changed something), when editing (the same without the live connection), or manually. A sync asks for the server's inventory only if it has moved past the version last synced. The server is `/sync` on the app's own origin, so there's no CORS. Cloudflare Access guards it; the app's requests carry its sign-in cookie, and an expired sign-in shows Sign in again. See `../worker/README.md`.
 
 New cards get random ids (`cards/ids.ts`) when they are made, so cards added in two places at once can't share an id. Older cards keep their small sequential ids.
 
@@ -135,14 +135,13 @@ This boundary is not a migration layer.
 
 `npm test` compiles parser, preview, synchronization, and import-validation modules into temporary CommonJS test output and runs deterministic Node tests against the real source modules. Test files run serially so their shared temporary CommonJS package marker cannot race.
 
-The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (optional articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article and combined checking in any order, study item modes, prompt gender hints, and study-preference validation and pruning. Storage tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected, and cover the three-way merge with its conflicts and choices, saving over changes made in another window, and syncing two devices against a fake server (first sign-in, words added on both, a conflict settled by a choice, another device syncing in between, a rejected token). `../sync/scripts/e2e.mjs` tries the same in a browser against `wrangler dev`.
+The noun suite covers rule genders and plural prediction, the editable article table, irregular nouns, article-group exceptions, word-mode checking (optional articles, both-form requirements, singular-/plural-only and gender markers, article profiles), article and combined checking in any order, study item modes, prompt gender hints, and study-preference validation and pruning. Storage tests verify that current canonical cards are accepted while retired noun shapes, stored noun Italian, unknown card types, and noun/morphology mismatches are rejected, and cover the three-way merge with its conflicts and choices, saving over changes made in another window, and syncing two devices against a fake server (first sign-in, words added on both, a conflict settled by a choice, another device syncing in between, an expired sign-in). `../worker/scripts/e2e.mjs` tries the same in a browser against `wrangler dev`.
 
 `.github/workflows/validate.yml` runs `npm ci`, `npm test`, the production web build, the sync server's typecheck and tests, migration-script syntax, and the extension's typecheck, tests, and build on relevant pull requests and pushes to `main`.
 
 ## Deployment
 
-- `.github/workflows/deploy-pages.yml` tests, builds, and deploys only the web app to GitHub Pages.
+- `.github/workflows/deploy.yml` tests and builds the web app and deploys it with the sync server as the Cloudflare Worker in `../worker/`.
 - `.github/workflows/release-extension.yml` independently validates, signs, and publishes extension release assets through GitHub Releases.
-- The sync server is deployed from `../sync/` with `npx wrangler deploy`.
 
 The former Pages extension compatibility path is retired.

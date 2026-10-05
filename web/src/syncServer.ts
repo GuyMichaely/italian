@@ -1,2 +1,2 @@
-/** The sync server (sync/ in this repo). VITE_SYNC_URL points a dev build at `wrangler dev`. */
-export const syncServerUrl = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env.VITE_SYNC_URL || "https://sync.guymichaely.com";
+/** The sync server: /sync on the app's own origin (worker/ in this repo; in development, Vite forwards it to `wrangler dev`). */
+export const syncServerUrl = new URL("sync", document.baseURI).href;

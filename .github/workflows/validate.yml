@@ -5,14 +5,14 @@ on:
     branches: [main]
     paths:
       - "web/**"
-      - "sync/**"
+      - "worker/**"
       - "extension/**"
       - "scripts/**"
       - ".github/workflows/validate.yml"
   pull_request:
     paths:
       - "web/**"
-      - "sync/**"
+      - "worker/**"
       - "extension/**"
       - "scripts/**"
       - ".github/workflows/validate.yml"
@@ -59,12 +59,11 @@ jobs:
           node --check scripts/migrate-gender-plurality.mjs
           node --check scripts/migrate-adjective-declensions.mjs
 
-      - name: Check and test the sync server
-        working-directory: sync
+      - name: Check the Worker
+        working-directory: worker
         run: |
           npm ci
           npm run typecheck
-          npm test
 
       - name: Check, test, and build the extension
         working-directory: extension

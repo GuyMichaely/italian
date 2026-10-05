@@ -1,5 +1,5 @@
 // Builds the extension into dist/. The app it adds words to (and fetches the dictionary from) is
-// https://guymichaely.com/italian/ unless --app gives another, e.g. --app http://localhost:5391/
+// https://italian.guymichaely.com/ unless --app gives another, e.g. --app http://localhost:5391/
 // for trying it against the dev server. --tests bundles tests/ into .test-dist/ instead.
 import { build } from "esbuild";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const appFlag = args.indexOf("--app");
-const appUrl = appFlag >= 0 ? new URL(args[appFlag + 1]).href : "https://guymichaely.com/italian/";
-const production = appUrl === "https://guymichaely.com/italian/";
+const appUrl = appFlag >= 0 ? new URL(args[appFlag + 1]).href : "https://italian.guymichaely.com/";
+const production = appUrl === "https://italian.guymichaely.com/";
 const define = { APP_URL: JSON.stringify(appUrl), DEV_BUILD: JSON.stringify(!production) };
 
 if (args.includes("--tests")) {

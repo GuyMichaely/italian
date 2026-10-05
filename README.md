@@ -4,19 +4,19 @@ Italian is a flashcard suite for learning Italian with three independently under
 
 - `web/` — static React/Vite frontend.
 - `extension/` — Chrome extension: select a word on any page, right-click, and it's added to Italian, filled in from the dictionary.
-- `sync/` — the sync server, a Cloudflare Worker at `https://sync.guymichaely.com` that keeps one copy of the inventory for every signed-in device.
+- `worker/` — the Cloudflare Worker at `https://italian.guymichaely.com`: it serves the app, and its sync server at `/sync`.
 
 ## Production
 
 The public repository is the canonical source for both the web app and extension release.
 
-- Web app: `https://guymichaely.com/italian/`
+- Web app: `https://italian.guymichaely.com/`
 - Extension update feed: `https://github.com/GuyMichaely/italian/releases/latest/download/updates.xml`
 - Signed extension CRX: `https://github.com/GuyMichaely/italian/releases/latest/download/italian.crx`
 
 `.github/workflows/release-extension.yml` independently validates, signs, and publishes the extension through GitHub Releases. An installed `0.2.4` client successfully updated to `0.2.5` through that feed, so GitHub Pages no longer packages or publishes an extension compatibility feed.
 
-`.github/workflows/deploy-pages.yml` builds, tests, and deploys only the web app. The sync server is deployed with `npx wrangler deploy` from `sync/` (see `sync/README.md`).
+`.github/workflows/deploy.yml` tests and builds the web app and deploys it, with the sync server, as the Worker (see `worker/README.md`).
 
 The frontend always has a local working inventory and works on its own. Signing in to sync (Settings → Sign in with Cloudflare) keeps the same inventory on every device: changes from each are merged, and anything changed on two devices at once is shown to choose from.
 

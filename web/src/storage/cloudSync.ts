@@ -5,9 +5,9 @@ import { storageKey } from "./keys";
 import type { InventoryState } from "./types";
 
 /**
- * Sync with the server at sync.guymichaely.com (sync/ in this repo), which keeps one copy of the
- * inventory and a version number that goes up with every change. Cloudflare Access guards the
- * server: signing in sets its cookie, which every request sends, and which expires after a while.
+ * Sync with the server at /sync on the app's own origin (worker/ in this repo), which keeps one copy
+ * of the inventory and a version number that goes up with every change. Cloudflare Access guards
+ * it: signing in sets its cookie, which every request sends, and which expires after a while.
  *
  * A sync is a three-way merge, the same one windows use: the inventory as this browser last
  * synced it (the base), the inventory here now, and the server's. The merge is checked as a whole
@@ -110,8 +110,7 @@ class CloudClient {
     try {
       response = await fetch(`${this.url}${path}`, {
         ...init,
-        // Access's cookie proves the sign-in; without it Access redirects to its login page.
-        credentials: "include",
+        // Without Access's sign-in cookie, Access redirects to its login page.
         redirect: "manual",
         headers: init?.body ? { "content-type": "application/json" } : undefined,
       });
@@ -213,7 +212,8 @@ export class CloudSync {
   signOut() {
     forgetSync();
     this.set({ state: "signed-out" });
-    void fetch(`${this.url}/cdn-cgi/access/logout`, { credentials: "include", mode: "no-cors" }).catch(() => undefined);
+    // Offline, the sign-in simply stays until it expires.
+    void fetch(new URL("/cdn-cgi/access/logout", this.url), { redirect: "manual" }).catch(() => undefined);
   }
 
   /**

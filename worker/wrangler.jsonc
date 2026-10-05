@@ -1,0 +1,17 @@
+{
+  // The Italian app at italian.guymichaely.com: its built files, and the sync server under /sync.
+  // The name stays italian-sync so the stored inventory (its Durable Object) carries over. See README.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "italian-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "account_id": "33fbeec446845ec831132810ae18aab5",
+  "routes": [{ "pattern": "italian.guymichaely.com", "custom_domain": true }],
+  // Access guards the custom domain only, so the workers.dev address stays off.
+  "workers_dev": false,
+  "preview_urls": false,
+  // Everything is the app's files (web/dist, built first) except /sync, which runs the Worker.
+  "assets": { "directory": "../web/dist", "run_worker_first": ["/sync/*"] },
+  "durable_objects": { "bindings": [{ "name": "INVENTORY", "class_name": "InventoryStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InventoryStore"] }]
+}

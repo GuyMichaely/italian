@@ -1,18 +1,18 @@
-// The Italian sync server. It keeps one copy of the inventory with a version number; devices merge
-// (web/src/storage/cloudSync.ts) and upload "only if you're still on version N". Cloudflare Access
-// guards every path (only its policy's account gets through), so nothing here checks who's asking.
+// The Italian app's server at italian.guymichaely.com. The app's files are served as static assets;
+// this runs only for /sync, the sync server. It keeps one copy of the inventory with a version
+// number; devices merge (web/src/storage/cloudSync.ts) and upload "only if you're still on version
+// N". Cloudflare Access guards /sync (only its policy's account gets through), so nothing here checks
+// who's asking. The app and /sync share one origin, so there's no CORS.
 //
-//   GET  /signin?return=<app url>  after Access signs you in, sends the browser back to the app
-//   GET  /inventory[?since=N]      { version, inventory }, or { version, unchanged: true } if still N
-//   PUT  /inventory                { baseVersion, inventory } → { version }, or 409 with what's there
-//   GET  /live                     a WebSocket that's sent { version } whenever the inventory changes
+//   GET  /sync/signin                after Access signs you in, sends the browser back to the app
+//   GET  /sync/inventory[?since=N]   { version, inventory }, or { version, unchanged: true } if still N
+//   PUT  /sync/inventory             { baseVersion, inventory } → { version }, or 409 with what's there
+//   GET  /sync/live                  a WebSocket that's sent { version } whenever the inventory changes
 import { DurableObject } from "cloudflare:workers";
-import { appOrigins, returnUrl } from "./appUrls.ts";
 import { parseInventoryState } from "../../web/src/storage/inventoryState";
 
 export interface Env {
   INVENTORY: DurableObjectNamespace<InventoryStore>;
-  APP_URLS: string;
 }
 
 export class InventoryStore extends DurableObject<Env> {
@@ -55,18 +55,6 @@ export class InventoryStore extends DurableObject<Env> {
   }
 }
 
-function cors(request: Request, env: Env, response: Response) {
-  const origin = request.headers.get("origin");
-  if (origin && appOrigins(env.APP_URLS).includes(origin)) {
-    const headers = new Headers(response.headers);
-    headers.set("access-control-allow-origin", origin);
-    headers.set("access-control-allow-credentials", "true");
-    headers.set("vary", "origin");
-    return new Response(response.body, { status: response.status, headers });
-  }
-  return response;
-}
-
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
@@ -96,24 +84,16 @@ async function handleInventory(request: Request, env: Env, url: URL) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // Access lets preflight requests through (they never carry its cookie); they only say what's allowed.
-    if (request.method === "OPTIONS") {
-      return cors(request, env, new Response(null, {
-        status: 204,
-        headers: { "access-control-allow-methods": "GET, PUT", "access-control-allow-headers": "content-type", "access-control-max-age": "86400" },
-      }));
+    switch (url.pathname) {
+      case "/sync/signin":
+        // A relative address, so it's the app on whichever origin this was reached from.
+        return new Response(null, { status: 302, headers: { location: "/#sync-signed-in" } });
+      case "/sync/live":
+        return store(env).fetch(request);
+      case "/sync/inventory":
+        return handleInventory(request, env, url);
+      default:
+        return new Response(null, { status: 404 });
     }
-    if (url.pathname === "/signin") {
-      // Only back to the app, so signing in can't be used to send someone elsewhere.
-      const back = returnUrl(url.searchParams.get("return")!, env.APP_URLS);
-      return back ? Response.redirect(`${back}#sync-signed-in`, 302) : new Response(null, { status: 403 });
-    }
-    if (url.pathname === "/live") {
-      // Only the app's pages may open one, so another site can't ride on the Access cookie.
-      if (!appOrigins(env.APP_URLS).includes(request.headers.get("origin")!)) return new Response(null, { status: 403 });
-      return store(env).fetch(request);
-    }
-    if (url.pathname === "/inventory") return cors(request, env, await handleInventory(request, env, url));
-    return new Response(null, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

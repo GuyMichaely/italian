@@ -12,15 +12,15 @@ The app is intentionally small and hosting-provider agnostic:
 - No Next.js.
 - No application server required for local-only use.
 - Browser `localStorage` for optional persistent local inventory state.
-- Optional sync between devices through the Cloudflare Worker in `../sync/`.
+- Optional sync between devices through `/sync`, served by the Cloudflare Worker in `../worker/`.
 
 A production build is just static files in `dist/`. The build uses relative asset URLs, so the same `dist/` can be served at `/`, `/italian/`, or another directory without rebuilding.
 
-The canonical production deployment is `https://guymichaely.com/italian/`.
+The canonical production deployment is `https://italian.guymichaely.com/`.
 
 ## Storage and sync
 
-The app always has a local working inventory and works on its own. Settings → **Sign in with Cloudflare** turns on sync with `https://sync.guymichaely.com` (`../sync/`): every signed-in device keeps the same words, changes from each are merged, and anything changed on two devices at once waits on the conflict screen for you to choose. `VITE_SYNC_URL` points a dev build at `wrangler dev`.
+The app always has a local working inventory and works on its own. Settings → **Sign in with Cloudflare** turns on sync with `/sync` on the app's own address (`../worker/`): every signed-in device keeps the same words, changes from each are merged, and anything changed on two devices at once waits on the conflict screen for you to choose. The dev server forwards `/sync` to `wrangler dev` (`vite.config.ts`).
 
 ## Noun morphology
 

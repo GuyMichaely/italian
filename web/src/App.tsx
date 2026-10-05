@@ -572,7 +572,7 @@ export default function Home() {
   }
 
   function signInToSync() {
-    window.location.href = `${syncServerUrl}/signin?return=${encodeURIComponent(window.location.origin + window.location.pathname)}`;
+    window.location.href = `${syncServerUrl}/signin`;
   }
 
   return <>

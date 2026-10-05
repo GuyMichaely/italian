@@ -18,7 +18,7 @@ Treat each release as if it were a fresh 1.0. Keep one canonical data model. Whe
 
 ## Current architecture
 
-The web app is a static React/Vite application served at `https://guymichaely.com/italian/`. It is local-first, and signed-in devices sync through the Cloudflare Worker in `sync/`.
+The web app is a static React/Vite application served at `https://italian.guymichaely.com/`. It is local-first, and signed-in devices sync through `/sync`. One Cloudflare Worker (`worker/`) serves both.
 
 Cards and noun morphology form one logical inventory. Browser persistence stores one `italian:inventory` JSON value containing cards, noun morphology, and an internal `updatedAt` timestamp.
 
@@ -27,13 +27,13 @@ Cards and noun morphology form one logical inventory. Browser persistence stores
 ## Inventory synchronization
 
 - The app works without sync. Cloudflare Access (only the owner's Cloudflare login) guards the whole sync server; Settings → **Sign in with Cloudflare** signs in for about a month, then **Sign in again**. **Sign out** stops syncing on that device.
-- The server (`sync/`, a Worker with one Durable Object) stores the inventory and a version; uploads succeed only against the current version.
+- The server (`/sync` in the Worker in `worker/`, with one Durable Object) stores the inventory and a version; uploads succeed only against the current version.
 - Each device merges three ways (its last-synced copy, its words now, the server's) with the same card-by-card merge windows use. Words added on different devices are all kept.
 - A word or the rules changed differently on two devices pause sync until the conflict screen settles which version to keep. The same screen settles clashes between windows.
 - Each device picks when it syncs: **Automatically** (as changes are made anywhere, through a live connection), **When I edit** (after its own edits, on opening, and on coming back), or **Manually**.
 - Manual inventory export/import contains `cards`, `nounMorphology`, `adjectiveMorphology`, and `studyPreferences`, without sync metadata.
 
-`web/scripts/storage-tests.cjs` covers the merge and the sync protocol against a fake server; `sync/scripts/e2e.mjs` tries two devices in a browser against `wrangler dev`.
+`web/scripts/storage-tests.cjs` covers the merge and the sync protocol against a fake server; `worker/scripts/e2e.mjs` tries two devices in a browser against `wrangler dev`.
 
 ## Inventory and editing
 
@@ -91,9 +91,8 @@ Test files run serially because they share one temporary CommonJS output directo
 
 ## Deployment
 
-- `.github/workflows/deploy-pages.yml` tests, builds, and deploys only the web app to GitHub Pages.
-- The sync server is deployed from `sync/` with `npx wrangler deploy`.
-- Extension release infrastructure is separate from Pages.
+- `.github/workflows/deploy.yml` tests and builds the web app and deploys it, with the sync server, as the Cloudflare Worker at `italian.guymichaely.com`.
+- Extension release infrastructure is separate.
 
 The former Pages extension compatibility feed/package path has been removed.
 
