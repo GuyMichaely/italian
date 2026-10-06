@@ -64,10 +64,9 @@ src/
     ├── CardAnswer.tsx              answers, typed-answer form, noun diagnostics
     ├── AnswerParsePreview.tsx      structural live answer preview
     ├── NounMorphologyPanel.tsx     declension and article-table editing
-    ├── StorageSettingsPanel.tsx    signing in to sync, and backup and restore
+    ├── StorageSettingsPanel.tsx    the Sync section (from @guymichaely/app-sync) with Italian's wording, and backup and restore
     ├── ConflictSheet.tsx           the conflict screen: changes made both here and elsewhere, side by side
     ├── AnswerKeywordSettings.tsx   noun marker keyword settings
-    ├── SaveIndicator.tsx           top-bar status: a saving or sync problem, else the last sync time
     └── Icons.tsx                   inline SVG icon set
 ```
 
@@ -111,7 +110,7 @@ Each card records when it was added or last changed (`editedAt`). Saving stamps 
 
 Other windows' saves, and the extension's, reach an open window as `storage` events; it shows the new inventory at once.
 
-`storage/cloudSync.ts` syncs signed-in devices through the server, which keeps the inventory and a version. A sync merges the inventory as this browser last synced it, the inventory here, and the server's, saves the result here, and uploads it "only if the server is still on the version merged with"; if another device synced in between it merges again. Syncs run one at a time (across windows too, with a Web Lock). When depends on the device's sync mode (`SyncMode`, kept on the device): automatically (after changes, on opening and coming back, and whenever the server's live connection, `LiveUpdates`, says another device changed something), when editing (the same without the live connection), or manually. A sync asks for the server's inventory only if it has moved past the version last synced. The server is `/sync` on the app's own origin, so there's no CORS. Cloudflare Access guards it; the app's requests carry its sign-in cookie, and an expired sign-in shows Sign in again. See `../worker/README.md`.
+`storage/cloudSync.ts` syncs signed-in devices through the server, which keeps the inventory and a version. A sync merges the inventory as this browser last synced it, the inventory here, and the server's, saves the result here, and uploads it "only if the server is still on the version merged with"; if another device synced in between it merges again. When it syncs is `@guymichaely/app-sync`, a package shared with the user's other apps: its `SyncController` (made in `App.tsx`) runs `cloudEngine`'s syncs one at a time (across windows too, with a Web Lock), and its views are the top bar's status and the Settings Sync section. When depends on the device's sync mode (kept on the device): automatically (after changes, on opening and coming back, and whenever the server's live connection says another device changed something), when editing (the same without the live connection), or manually. While the server can't be reached it retries, more slowly each time. A sync asks for the server's inventory only if it has moved past the version last synced. The server is `/sync` on the app's own origin, so there's no CORS. Cloudflare Access guards it; the app's requests carry its sign-in cookie, and an expired sign-in shows Sign in again. See `../worker/README.md`.
 
 New cards get random ids (`cards/ids.ts`) when they are made, so cards added in two places at once can't share an id. Older cards keep their small sequential ids.
 

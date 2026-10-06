@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import type { Route } from "../app/useHashRoute";
 import { Icon, type IconName } from "./Icons";
-import { SaveIndicator, type SaveState } from "./SaveIndicator";
-import type { SyncMode, SyncStatus } from "../storage/cloudSync";
+import type { SyncSnapshot } from "@guymichaely/app-sync";
+import { SyncIndicator } from "@guymichaely/app-sync/react";
+
+export type SaveState = "idle" | "saving" | "saved" | "failed";
 
 const navItems: { route: Route; label: string; icon: IconName }[] = [
   { route: "study", label: "Study", icon: "study" },
@@ -11,11 +13,9 @@ const navItems: { route: Route; label: string; icon: IconName }[] = [
   { route: "settings", label: "Settings", icon: "settings" },
 ];
 
-export function AppShell({ route, sync, syncMode, live, unsyncedChanges, onSyncNow, saveState, onAdd, children }: {
+export function AppShell({ route, sync, unsyncedChanges, onSyncNow, saveState, onAdd, children }: {
   route: Route;
-  sync: SyncStatus;
-  syncMode: SyncMode | Error;
-  live: boolean;
+  sync: SyncSnapshot<unknown>;
   unsyncedChanges: number;
   onSyncNow: () => void;
   saveState: SaveState;
@@ -30,7 +30,7 @@ export function AppShell({ route, sync, syncMode, live, unsyncedChanges, onSyncN
           {navItems.map((item) => <a key={item.route} href={`#/${item.route}`} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined}><Icon name={item.icon} size={17} />{item.label}</a>)}
         </nav>
         <div className="topbar-actions">
-          <SaveIndicator state={saveState} sync={sync} mode={syncMode} live={live} unsyncedChanges={unsyncedChanges} onSyncNow={onSyncNow} />
+          <SyncIndicator sync={sync} unsynced={unsyncedChanges} problem={saveState === "failed" ? "Save failed" : undefined} settingsHref="#/settings" onSyncNow={onSyncNow} />
           <button type="button" className="primary-button add-button" onClick={onAdd}><Icon name="plus" size={16} /><span>Add words</span></button>
         </div>
       </div>

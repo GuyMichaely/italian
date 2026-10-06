@@ -3,7 +3,9 @@ import { BrowserStorage, type InventoryState } from "./storage";
 import type { Flashcard } from "./cards/types";
 import { cardDuplicateKey } from "./storage/cardCodec";
 import { InventoryConflictError, type MergeChoices } from "./storage/merge";
-import { CloudSync, countUnsyncedChanges, LiveUpdates, readSyncMode, saveSyncMode, type SyncMode, type SyncStatus } from "./storage/cloudSync";
+import { SyncController } from "@guymichaely/app-sync";
+import { useSync } from "@guymichaely/app-sync/react";
+import { cloudEngine, countUnsyncedChanges, readSyncSettings, saveSyncSettings, syncedVersion } from "./storage/cloudSync";
 import { storageKey } from "./storage/keys";
 import { syncServerUrl } from "./syncServer";
 import { ConflictSheet, type ConflictSource } from "./components/ConflictSheet";
@@ -18,7 +20,7 @@ import { cloneAdjectiveMorphology, defaultAdjectiveMorphology, resolvedAdjective
 import { cardTypes, typeLabels } from "./cardTypes";
 import { useHashRoute } from "./app/useHashRoute";
 import { AppShell } from "./components/AppShell";
-import type { SaveState } from "./components/SaveIndicator";
+import type { SaveState } from "./components/AppShell";
 import { AddWordsSheet, WordDrawer, localDateStamp } from "./components/CardEditors";
 import {
   buildStudyItems,
@@ -58,8 +60,6 @@ type PendingConflict = {
   dismiss: () => void;
 };
 
-/** With live updates, a backstop sync every few minutes while the app is open. */
-const syncIntervalMs = 5 * 60_000;
 const inventoryKey = storageKey("inventory");
 
 function cardSearchText(card: Flashcard, morphology: NounMorphology, adjectiveMorphology: AdjectiveMorphology) {
@@ -83,21 +83,18 @@ export default function Home() {
   const storage = useMemo(() => new BrowserStorage(), []);
   // After a sync changed the words here, show them; refreshRef always holds the current function.
   const refreshRef = useRef<() => void>(() => undefined);
-  const cloud = useMemo(() => new CloudSync(syncServerUrl, () => refreshRef.current()), []);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloud.current);
-  // An unknown stored mode is shown in Settings, and nothing syncs on its own until one is chosen.
-  const [syncMode, setSyncMode] = useState<SyncMode | Error>(() => {
-    try {
-      return readSyncMode();
-    } catch (error) {
-      return error as Error;
-    }
-  });
-  const syncModeRef = useRef(syncMode);
-  syncModeRef.current = syncMode;
-  const syncOn = syncStatus.state !== "signed-out" && syncStatus.state !== "expired";
+  const sync = useMemo(() => new SyncController<MergeChoices, InventoryConflictError>({
+    engine: cloudEngine(syncServerUrl, () => refreshRef.current()),
+    save: saveSyncSettings,
+    signInUrl: `${syncServerUrl}/signin`,
+    // The server says { version } on connecting and whenever the inventory changes.
+    live: { url: `${syncServerUrl.replace(/^http/, "ws")}/live`, onMessage: (message) => (message as { version: number }).version !== syncedVersion() },
+    // One window at a time, so two don't merge against the same base.
+    lock: "italian-sync",
+  }), []);
+  const syncSnapshot = useSync(sync);
+  const syncOn = syncSnapshot.settings?.enabled === true;
   const savesInFlight = useRef(0);
-  const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [adding, setAdding] = useState(false);
   const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
   const [setup, setSetup] = useState<StudySetup>(readStudySetup);
@@ -124,12 +121,11 @@ export default function Home() {
   const [createdMistakeTagName, setCreatedMistakeTagName] = useState("");
   const [windowConflict, setWindowConflict] = useState<PendingConflict | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
-  // Counted again after every sync (syncStatus changes) as well as every change here.
+  // Counted again after every sync (the snapshot changes) as well as every change here.
   const unsyncedChanges = useMemo(
-    () => syncStatus.state === "signed-out" || loadingCards ? 0 : countUnsyncedChanges({ cards, nounMorphology, adjectiveMorphology, studyPreferences }),
-    [syncStatus, loadingCards, cards, nounMorphology, adjectiveMorphology, studyPreferences],
+    () => !syncOn || loadingCards ? 0 : countUnsyncedChanges({ cards, nounMorphology, adjectiveMorphology, studyPreferences }),
+    [syncSnapshot, syncOn, loadingCards, cards, nounMorphology, adjectiveMorphology, studyPreferences],
   );
-  const [liveConnected, setLiveConnected] = useState(false);
 
   const { promptMode, typeToVerify, oneDirectionPerWord, englishFirstWhenBoth } = setup;
   const setNames = useMemo(() => Array.from(new Set(cards.map((card) => card.setName).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b)), [cards]);
@@ -188,54 +184,22 @@ export default function Home() {
     return () => { active = false; };
   }, [storage]);
 
-  useEffect(() => cloud.subscribe(setSyncStatus), [cloud]);
+  useEffect(() => {
+    sync.configure(readSyncSettings());
+    sync.start();
+    return () => sync.stop();
+  }, [sync]);
 
   // Another window's save, or the extension's, shows here at once, and syncs unless that's manual.
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== inventoryKey) return;
       void refreshFromStorage();
-      scheduleSync();
+      sync.changed();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   });
-
-  // Syncing on its own (see SyncMode): on opening and on coming back (the network, or the tab);
-  // automatically also as other devices change things, through a live connection.
-  useEffect(() => {
-    if (!syncOn || syncMode === "manual" || syncMode instanceof Error) return;
-    const sync = () => void cloud.sync();
-    const live = syncMode === "automatic" ? new LiveUpdates(
-      syncServerUrl,
-      (version) => { if (version !== cloud.syncedVersion()) sync(); },
-      (connected) => {
-        setLiveConnected(connected);
-        if (!connected) cloud.unreachable();
-        else if (cloud.current.state === "offline") sync();
-      },
-    ) : null;
-    const lost = () => live?.lost();
-    const whenVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      sync();
-      live?.wake();
-    };
-    live?.start();
-    sync();
-    const interval = live ? setInterval(whenVisible, syncIntervalMs) : undefined;
-    window.addEventListener("online", whenVisible);
-    window.addEventListener("offline", lost);
-    document.addEventListener("visibilitychange", whenVisible);
-    return () => {
-      live?.stop();
-      setLiveConnected(false);
-      window.removeEventListener("offline", lost);
-      clearInterval(interval);
-      window.removeEventListener("online", whenVisible);
-      document.removeEventListener("visibilitychange", whenVisible);
-    };
-  }, [cloud, syncMode, syncOn]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -388,13 +352,6 @@ export default function Home() {
   }
   refreshRef.current = () => void refreshFromStorage();
 
-  /** After a change here: syncs shortly, unless this device syncs only when asked. */
-  function scheduleSync() {
-    if (syncModeRef.current === "manual" || syncModeRef.current instanceof Error || !cloud.signedIn) return;
-    clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(() => void cloud.sync(), 1500);
-  }
-
   /**
    * Shows `next` straight away and saves it, merged with anything changed in another window since
    * this one last read or saved. If the save fails the previous inventory comes back; if it
@@ -410,7 +367,7 @@ export default function Home() {
     try {
       showInventory(await storage.saveInventory(next));
       setSaveState("saved");
-      scheduleSync();
+      sync.changed();
     } catch (error) {
       showInventory(previous);
       setSaveState("failed");
@@ -432,7 +389,7 @@ export default function Home() {
           setWindowConflict(null);
           setConflictOpen(false);
           setSaveState("saved");
-          scheduleSync();
+          sync.changed();
         } catch (caught) {
           if (caught instanceof InventoryConflictError) showWindowConflict(caught, next);
           else throw caught;
@@ -447,14 +404,13 @@ export default function Home() {
     setConflictOpen(true);
   }
 
-  const syncConflict: PendingConflict | null = syncStatus.state === "conflict" ? {
-    error: syncStatus.error,
+  const syncConflict: PendingConflict | null = syncSnapshot.state.kind === "conflict" ? {
+    error: syncSnapshot.state.conflict,
     source: "device",
     resolve: async (choices) => {
-      await cloud.sync(choices);
-      const after = cloud.current;
-      if (after.state === "synced") setConflictOpen(false);
-      else if (after.state !== "conflict") throw new Error("message" in after ? after.message : "Sync didn't finish.");
+      const after = await sync.resolve(choices);
+      if (after.kind === "synced") setConflictOpen(false);
+      else if (after.kind !== "conflict") throw new Error("message" in after ? after.message : "Sync didn't finish.");
     },
     dismiss: () => setConflictOpen(false),
   } : null;
@@ -589,12 +545,8 @@ export default function Home() {
     );
   }
 
-  function signInToSync() {
-    window.location.href = `${syncServerUrl}/signin`;
-  }
-
   return <>
-    <AppShell route={route} sync={syncStatus} syncMode={syncMode} live={liveConnected} unsyncedChanges={unsyncedChanges} onSyncNow={() => void cloud.sync()} saveState={saveState} onAdd={() => setAdding(true)}>
+    <AppShell route={route} sync={syncSnapshot} unsyncedChanges={unsyncedChanges} onSyncNow={() => void sync.syncNow()} saveState={saveState} onAdd={() => setAdding(true)}>
       {conflict && !conflictOpen && <div className="sync-warning conflict-banner" role="alert">
         <p>{conflict.error.conflicts.length} {conflict.error.conflicts.length === 1 ? "change clashes" : "changes clash"} with {conflict.source === "window" ? "another window" : "another device"}.{conflict.source === "device" ? " Sync is paused until you choose." : ""}</p>
         <button type="button" className="neutral-button" onClick={() => setConflictOpen(true)}>Resolve</button>
@@ -673,7 +625,7 @@ export default function Home() {
       {route === "settings" && <>
         {syncWarning && <p className="sync-warning" role="status">{syncWarning}</p>}
         <SettingsView
-          storageProps={{ storage, sync: syncStatus, mode: syncMode, onMode: (mode) => { saveSyncMode(mode); setSyncMode(mode); }, onSignIn: signInToSync, onSignOut: () => cloud.signOut(), onSyncNow: () => void cloud.sync(), onResolve: () => setConflictOpen(true) }}
+          storageProps={{ storage, sync, signedIn: syncOn, onResolve: () => setConflictOpen(true) }}
           morphology={nounMorphology}
           adjectiveMorphology={adjectiveMorphology}
           preferences={studyPreferences}

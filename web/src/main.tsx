@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import Home from "./App";
 import { markSyncSignedIn } from "./storage/cloudSync";
+import "@guymichaely/app-sync/sync.css";
 import "./styles.css";
 
 // Signing in to sync comes back here marked in the address; note it and tidy the address.

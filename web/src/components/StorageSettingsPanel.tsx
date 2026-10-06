@@ -5,9 +5,11 @@ import {
   serializeInventory,
   type CardStorage,
 } from "../storage";
-import type { SyncMode, SyncStatus } from "../storage/cloudSync";
+import type { MergeChoices, InventoryConflictError } from "../storage/merge";
+import type { SyncController } from "@guymichaely/app-sync";
+import { SyncSettings, type SyncModeOption } from "@guymichaely/app-sync/react";
 
-const modes: { mode: SyncMode; title: string; detail: string }[] = [
+const modes: SyncModeOption[] = [
   { mode: "automatic", title: "Automatically", detail: "Your changes go up as you make them, and other devices’ changes appear here as they’re made." },
   { mode: "on-edit", title: "When I edit", detail: "Your changes go up as you make them. Other devices’ changes come in then, when you open the app, and when you come back to it." },
   { mode: "manual", title: "Manually", detail: "Only when you press Sync now. Words from your other devices and the extension wait until then, and the longer devices go between syncs, the likelier a clash." },
@@ -16,20 +18,12 @@ const modes: { mode: SyncMode; title: string; detail: string }[] = [
 export function StorageSettingsPanel({
   storage,
   sync,
-  mode,
-  onMode,
-  onSignIn,
-  onSignOut,
-  onSyncNow,
+  signedIn,
   onResolve,
 }: {
   storage: CardStorage;
-  sync: SyncStatus;
-  mode: SyncMode | Error;
-  onMode: (mode: SyncMode) => void;
-  onSignIn: () => void;
-  onSignOut: () => void;
-  onSyncNow: () => void;
+  sync: SyncController<MergeChoices, InventoryConflictError>;
+  signedIn: boolean;
   onResolve: () => void;
 }) {
   const [transferBusy, setTransferBusy] = useState(false);
@@ -37,7 +31,6 @@ export function StorageSettingsPanel({
   const [transferError, setTransferError] = useState("");
   const [importText, setImportText] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
-  const signedIn = sync.state !== "signed-out";
 
   function currentInventory() {
     return storage.readInventory();
@@ -126,27 +119,7 @@ export function StorageSettingsPanel({
   }
 
   return <>
-    <section className="settings-section" aria-labelledby="sync-heading">
-      <div className="settings-section-heading">
-        <h2 id="sync-heading">Sync</h2>
-      </div>
-      {sync.state === "error" && <p className="form-error" role="alert">{sync.message}</p>}
-      {signedIn && <fieldset className="radio-cards stacked">
-        <legend>When to sync</legend>
-        {mode instanceof Error && <p className="form-error" role="alert">{mode.message}</p>}
-        {modes.map((option) => <label key={option.mode} className={mode === option.mode ? "selected" : ""}>
-          <input type="radio" name="sync-mode" checked={mode === option.mode} onChange={() => onMode(option.mode)} />
-          <span><strong>{option.title}</strong><small>{option.detail}</small></span>
-        </label>)}
-      </fieldset>}
-      <div className="button-row start">
-        {!signedIn && <button type="button" className="primary-button" onClick={onSignIn}>Sign in with Cloudflare</button>}
-        {sync.state === "expired" && <button type="button" className="primary-button" onClick={onSignIn}>Sign in again</button>}
-        {sync.state === "conflict" && <button type="button" className="primary-button" onClick={onResolve}>Resolve</button>}
-        {signedIn && sync.state !== "conflict" && sync.state !== "expired" && <button type="button" className="neutral-button" onClick={onSyncNow} disabled={sync.state === "syncing"}>Sync now</button>}
-        {signedIn && <button type="button" className="text-button" onClick={() => { if (window.confirm("Stop syncing on this device? Your words stay here.")) onSignOut(); }}>Sign out</button>}
-      </div>
-    </section>
+    <SyncSettings controller={sync} className="settings-section" modes={modes} onResolve={onResolve} />
 
     <section className="settings-section" aria-labelledby="backup-heading">
       <div className="settings-section-heading">

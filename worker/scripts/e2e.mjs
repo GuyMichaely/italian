@@ -20,7 +20,7 @@ try {
     await page.goto(appUrl);
     await page.goto(`${syncUrl}/signin`);
     await page.waitForURL(`${appUrl}#/settings`);
-    await page.locator(".save-indicator", { hasText: "Last sync" }).waitFor({ timeout: 15000 });
+    await page.locator(".sync-indicator", { hasText: "Last sync" }).waitFor({ timeout: 15000 });
     return { name, page };
   }
 

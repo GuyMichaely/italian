@@ -250,7 +250,8 @@ test("a save that conflicts writes nothing", async () => {
 
 // ---- Syncing with the server. ----
 
-const { syncOnce, markSyncSignedIn, SyncSignedOutError } = require(path.join(testDist, "storage", "cloudSync.js"));
+const { syncOnce, markSyncSignedIn } = require(path.join(testDist, "storage", "cloudSync.js"));
+const { SyncSignedOut } = require("@guymichaely/app-sync");
 
 /** A fake sync server with the real one's rules, and devices that each have their own storage. */
 function fakeServer() {
@@ -364,5 +365,5 @@ test("an expired sign-in means signing in again", async () => {
   const server = fakeServer();
   const laptop = device([adverb(1, "qui")]);
   server.signedIn = false;
-  await assert.rejects(laptop.sync(), SyncSignedOutError);
+  await assert.rejects(laptop.sync(), SyncSignedOut);
 });
