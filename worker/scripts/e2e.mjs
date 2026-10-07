@@ -17,15 +17,15 @@ try {
     const context = await browser.newContext();
     const page = await context.newPage();
     page.on("dialog", (dialog) => void dialog.accept());
-    await page.goto(appUrl);
-    await page.goto(`${syncUrl}/signin`);
-    await page.waitForURL(`${appUrl}#/settings`);
+    await page.goto(`${appUrl}#/settings`);
+    await page.getByRole("button", { name: "Sign in with Cloudflare" }).click();
+    await page.waitForURL(appUrl);
     await page.locator(".sync-indicator", { hasText: "Last sync" }).waitFor({ timeout: 15000 });
     return { name, page };
   }
 
   async function addAdverb({ page }, english, italian) {
-    await page.getByRole("button", { name: "Add words" }).click();
+    await page.getByRole("banner").getByRole("button", { name: "Add words" }).click();
     await page.getByRole("tab", { name: "Adverbs" }).click();
     await page.getByLabel("Row 1 English").fill(english);
     await page.getByLabel("Row 1 adverb").fill(italian);

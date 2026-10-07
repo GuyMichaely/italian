@@ -250,7 +250,7 @@ test("a save that conflicts writes nothing", async () => {
 
 // ---- Syncing with the server. ----
 
-const { syncOnce, markSyncSignedIn } = require(path.join(testDist, "storage", "cloudSync.js"));
+const { syncOnce, saveSyncSettings } = require(path.join(testDist, "storage", "cloudSync.js"));
 const { SyncSignedOut } = require("@guymichaely/app-sync");
 
 /** A fake sync server with the real one's rules, and devices that each have their own storage. */
@@ -280,7 +280,7 @@ function device(cards) {
   const localStorage = fakeLocalStorage();
   const use = () => { global.window = { localStorage }; };
   use();
-  markSyncSignedIn();
+  saveSyncSettings({ enabled: true, mode: "automatic" });
   if (cards) writeLocalSnapshot({ ...inventory(cards), updatedAt: new Date().toISOString() });
   return {
     use,

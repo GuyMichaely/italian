@@ -27,12 +27,6 @@ const syncedAtKey = storageKey("sync-at");
 
 type Base = { version: number; inventory: InventoryState };
 
-/** After signing in: sync from a fresh merge. */
-export function markSyncSignedIn() {
-  window.localStorage.setItem(signedInKey, "true");
-  window.localStorage.removeItem(baseKey);
-}
-
 export function forgetSync() {
   window.localStorage.removeItem(signedInKey);
   window.localStorage.removeItem(baseKey);

@@ -20,7 +20,7 @@ Each device chooses when it syncs (Settings, kept on the device): **Automaticall
 
 Cloudflare Access guards `italian.guymichaely.com/sync`: the Access application "Italian sync" with the Cloudflare login method and one allow policy for `guymichaely@gmail.com`. A request without that sign-in never reaches the Worker, so the Worker doesn't check who's asking. `workers.dev` and preview addresses are off, so there's no way around Access; keep it that way, and keep the policy to your account. The app itself is public.
 
-- Settings → **Sign in with Cloudflare** opens `/sync/signin`. Access signs you in and sets its cookie; the Worker sends the browser back to the app with `#sync-signed-in`.
+- Settings → **Sign in with Cloudflare** turns syncing on and opens `/sync/signin`. Access signs you in and sets its cookie; the Worker answers with a page that sends the browser back to the app, which syncs on opening. If you back out of signing in, the app shows **Sign in again**.
 - Sign-ins last 730 hours (about a month), set on the Access application. When one expires, requests are redirected to the login page; the app shows **Sign in again**. To sign every device out at once, revoke the sessions in Zero Trust (My Team → Users).
 
 ## Deploying

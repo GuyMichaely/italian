@@ -81,13 +81,18 @@ async function handleInventory(request: Request, env: Env, url: URL) {
   return written.ok ? json({ version: written.version }) : json(show(written), 409);
 }
 
+// Back to the app from signing in (on whichever origin this was reached from), by a page rather than
+// a redirect: an app in a WebView (Capacitor) loads pages itself and follows redirects without
+// moving the address, which would stay here. The app turned syncing on before it came here, so it
+// just syncs on opening.
+const signedIn = `<!doctype html><meta charset="utf-8"><title>Signed in</title><script>location.replace("/")</script>`;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     switch (url.pathname) {
       case "/sync/signin":
-        // A relative address, so it's the app on whichever origin this was reached from.
-        return new Response(null, { status: 302, headers: { location: "/#sync-signed-in" } });
+        return new Response(signedIn, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
       case "/sync/live":
         return store(env).fetch(request);
       case "/sync/inventory":
